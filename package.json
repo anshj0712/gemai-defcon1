@@ -1,0 +1,48 @@
+{
+  "name": "churn-preventer",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.6.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b && tsc -p tsconfig.tests.json && pnpm --filter @cp/demo-shop --filter @cp/dashboard typecheck",
+    "test": "vitest run",
+    "dev": "tsx scripts/dev.ts",
+    "dev:collector": "tsx watch --conditions=source apps/collector/src/index.ts",
+    "dev:processor": "tsx watch --conditions=source apps/processor/src/index.ts",
+    "smoke": "tsx --conditions=source scripts/smoke.ts",
+    "logs:tail": "tsx --conditions=source scripts/logs-tail.ts",
+    "infra:up": "tsx --conditions=source infra/src/up.ts",
+    "deploy:collector": "tsx --conditions=source scripts/deploy.ts collector",
+    "deploy:processor": "tsx --conditions=source scripts/deploy.ts processor",
+    "deploy:clusterer": "tsx --conditions=source scripts/deploy.ts clusterer",
+    "clean": "tsx scripts/clean.ts",
+    "dev:backend": "tsx scripts/dev.ts --backend",
+    "dev:shop": "pnpm --filter @cp/demo-shop dev",
+    "dev:dashboard": "pnpm --filter @cp/dashboard dev",
+    "dev:api": "tsx watch --conditions=source apps/api/src/index.ts",
+    "dev:clusterer": "tsx watch --conditions=source apps/clusterer/src/index.ts",
+    "build:sdk": "pnpm --filter @cp/sdk bundle",
+    "e2e": "tsx --conditions=source sim/src/e2e-replay.ts",
+    "sim": "tsx --conditions=source sim/src/sim.ts",
+    "sim:check": "tsx --conditions=source sim/src/check.ts"
+  },
+  "devDependencies": {
+    "@cp/logger": "workspace:*",
+    "@cp/platform": "workspace:*",
+    "@cp/schema": "workspace:*",
+    "@cp/testkit": "workspace:*",
+    "@cp/infra": "workspace:*",
+    "@google-cloud/logging": "^12.1.0",
+    "@types/node": "^22.20.4",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1",
+    "@google-cloud/bigquery": "^9.1.0",
+    "@cp/sim": "workspace:*",
+    "playwright": "^1.63.0"
+  }
+}

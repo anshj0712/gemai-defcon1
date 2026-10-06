@@ -1,0 +1,22 @@
+# dependencies and build output
+node_modules/
+dist/
+bundle/
+sim/out/
+*.tsbuildinfo
+
+# local-mode data (synthetic sessions, local "BigQuery", "Pub/Sub", "Firestore")
+.data/
+
+# secrets: never commit these (AGENTS.md guardrails)
+.env
+.env.*
+!.env.example
+*-key.json
+*service-account*.json
+credentials*.json
+
+# tooling
+coverage/
+*.log
+.DS_Store

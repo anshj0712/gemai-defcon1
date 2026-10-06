@@ -1,0 +1,22 @@
+{
+  "name": "@cp/sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": { "source": "./src/index.ts", "types": "./dist/index.d.ts", "default": "./dist/index.js" }
+  },
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "bundle": "vite build",
+    "test": "vitest run --root ../.. --project @cp/sdk"
+  },
+  "dependencies": {
+    "@rrweb/record": "^2.1.6"
+  },
+  "devDependencies": {
+    "@cp/schema": "workspace:*",
+    "vite": "^8.3.1"
+  }
+}

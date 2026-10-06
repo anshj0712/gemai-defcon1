@@ -1,0 +1,11 @@
+packages:
+  - apps/*
+  - packages/*
+  - infra
+  - sim
+
+# pnpm 12 refuses unreviewed install scripts. esbuild (used by tsx and vitest) needs its
+# postinstall; protobufjs's postinstall only prints a version notice, so it stays off.
+allowBuilds:
+  esbuild: true
+  protobufjs: false

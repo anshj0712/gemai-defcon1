@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>STRIDE (synthetic demo store)</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23111'/%3E%3Ctext x='16' y='23' font-family='Arial' font-weight='900' font-style='italic' font-size='20' fill='%23fff' text-anchor='middle'%3ES%3C/text%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <div class="utility">
+      <span>Synthetic demo store: no real orders, no real shoppers</span>
+      <nav>
+        <a href="/help" data-link>Help</a>
+        <span class="sep" aria-hidden="true">|</span>
+        <a href="/favourites" data-link>Favourites</a>
+      </nav>
+    </div>
+
+    <header class="header">
+      <a href="/" data-link class="logo" aria-label="STRIDE home" data-testid="nav-home"><span class="logo-mark">STRIDE</span></a>
+      <nav class="main-nav" id="main-nav" aria-label="Categories">
+        <a href="/" data-link>New &amp; Featured</a>
+        <a href="/men" data-link>Men</a>
+        <a href="/women" data-link>Women</a>
+        <a href="/running" data-link>Running</a>
+        <a href="/sale" data-link>Sale</a>
+      </nav>
+      <div class="header-actions">
+        <label class="search" for="search">
+          <span id="search-icon"></span>
+          <input id="search" type="search" placeholder="Search" autocomplete="off" />
+        </label>
+        <a href="/favourites" data-link class="icon-btn" aria-label="Favourites" data-testid="nav-favourites" id="nav-fav"></a>
+        <a href="/cart" data-link class="icon-btn bag-link" aria-label="Bag" data-testid="nav-cart">
+          <span id="bag-icon"></span>
+          <span id="cart-count" class="bag-count">0</span>
+        </a>
+      </div>
+    </header>
+
+    <div class="promo-strip">
+      <p>Members save 10% with code <strong>SAVE10</strong> &middot; Free delivery on every order</p>
+    </div>
+
+    <main id="app"></main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        <div>
+          <span class="logo-mark light">STRIDE</span>
+          <p>STRIDE is a fictional brand. This store exists to demo Churn Preventer on synthetic sessions.</p>
+        </div>
+        <nav class="footer-links" aria-label="Footer">
+          <a href="/help" data-link>Help</a>
+          <a href="/favourites" data-link>Favourites</a>
+          <a href="/cart" data-link>Bag</a>
+        </nav>
+      </div>
+      <p class="footer-base">&copy; 2026 STRIDE (fictional) &middot; All data is synthetic</p>
+    </footer>
+
+    <div id="toast" class="toast" role="status" hidden></div>
+
+    <div id="consent" class="consent" hidden>
+      <div>
+        <strong>We record this demo session</strong>
+        <p>Inputs are masked and payment fields are never captured. Recordings are synthetic and used to find checkout bugs.</p>
+      </div>
+      <div class="consent-actions">
+        <button id="consent-decline" type="button" class="pill outline">Decline</button>
+        <button id="consent-accept" type="button" class="pill dark">Accept</button>
+      </div>
+    </div>
+
+    <!-- Tester tooling, not part of the store: data-cp-block keeps it out of recordings. -->
+    <div class="demo-dock" data-cp-block>
+      <div id="demo-panel" class="demo-panel" hidden>
+        <div class="demo-head">
+          <strong>Demo controls</strong>
+          <span>Not part of the store &middot; never recorded</span>
+        </div>
+        <div id="session-link" class="demo-session"></div>
+        <fieldset class="demo-bugs">
+          <legend>Bugs to switch on</legend>
+          <label><input type="checkbox" data-bug="dead_button" /> <span><b>dead_button</b> Apply Coupon stops responding after the 5th click</span></label>
+          <label><input type="checkbox" data-bug="cart_total" /> <span><b>cart_total</b> with SAVE10, the total ignores the first item's quantity</span></label>
+          <label><input type="checkbox" data-bug="checkout_error" /> <span><b>checkout_error</b> region Northeast fails at payment</span></label>
+        </fieldset>
+      </div>
+      <button id="demo-toggle" type="button" class="demo-toggle">Demo controls</button>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

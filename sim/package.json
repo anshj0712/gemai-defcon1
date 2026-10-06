@@ -1,0 +1,17 @@
+{
+  "name": "@cp/sim",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "e2e": "tsx --conditions=source src/e2e-replay.ts",
+    "sim": "tsx --conditions=source src/sim.ts",
+    "sim:check": "tsx --conditions=source src/check.ts",
+    "test": "vitest run --root .. --project @cp/sim"
+  },
+  "dependencies": {
+    "@cp/platform": "workspace:*",
+    "@cp/schema": "workspace:*",
+    "playwright": "^1.63.0"
+  }
+}

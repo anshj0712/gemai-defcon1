@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "rootDir": "."
+  },
+  "include": [
+    "packages/*/test",
+    "apps/collector/test",
+    "apps/processor/test",
+    "apps/clusterer/test",
+    "apps/api/test",
+    "infra/test",
+    "scripts",
+    "sim/src",
+    "sim/test",
+    "vitest.config.ts"
+  ]
+}

@@ -1,0 +1,16 @@
+# Files not uploaded to Cloud Build by `gcloud builds submit` (same list as .dockerignore).
+node_modules
+**/node_modules
+**/dist
+.data
+.env
+.env.*
+*-key.json
+*service-account*.json
+credentials*.json
+.git
+.claude
+claude-setup
+docs
+*.pdf
+coverage

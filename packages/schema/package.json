@@ -1,0 +1,29 @@
+{
+  "name": "@cp/schema",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./tags": {
+      "source": "./src/tags.ts",
+      "types": "./dist/tags.d.ts",
+      "default": "./dist/tags.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --root ../.. --project @cp/schema"
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
+  }
+}

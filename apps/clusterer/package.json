@@ -1,0 +1,20 @@
+{
+  "name": "@cp/clusterer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc -b",
+    "start": "node dist/index.js",
+    "dev": "tsx watch --conditions=source src/index.ts",
+    "test": "vitest run --root ../.. --project @cp/clusterer"
+  },
+  "dependencies": {
+    "@cp/logger": "workspace:*",
+    "@cp/platform": "workspace:*",
+    "@cp/schema": "workspace:*",
+    "fastify": "^5.12.5",
+    "zod": "^4.6.5"
+  }
+}

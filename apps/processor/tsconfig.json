@@ -1,0 +1,28 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../../packages/schema"
+    },
+    {
+      "path": "../../packages/logger"
+    },
+    {
+      "path": "../../packages/platform"
+    },
+    {
+      "path": "../../packages/normalizer"
+    },
+    {
+      "path": "../../packages/detectors"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "name": "@cp/normalizer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --root ../.. --project @cp/normalizer"
+  },
+  "dependencies": {
+    "@cp/schema": "workspace:*",
+    "@rrweb/types": "^2.1.6"
+  },
+  "devDependencies": {
+    "@cp/testkit": "workspace:*"
+  }
+}

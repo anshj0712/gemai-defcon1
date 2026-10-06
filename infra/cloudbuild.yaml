@@ -1,0 +1,9 @@
+# Builds one service image. Used by scripts/deploy.ts:
+#   gcloud builds submit --config=infra/cloudbuild.yaml --substitutions=_SERVICE=collector,_IMAGE=<registry path> .
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ['build', '--build-arg', 'SERVICE=${_SERVICE}', '-t', '${_IMAGE}', '.']
+images:
+  - '${_IMAGE}'
+options:
+  logging: CLOUD_LOGGING_ONLY

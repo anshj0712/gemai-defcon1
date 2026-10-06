@@ -1,0 +1,41 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "packages/schema"
+    },
+    {
+      "path": "packages/logger"
+    },
+    {
+      "path": "packages/platform"
+    },
+    {
+      "path": "packages/normalizer"
+    },
+    {
+      "path": "packages/detectors"
+    },
+    {
+      "path": "packages/testkit"
+    },
+    {
+      "path": "apps/collector"
+    },
+    {
+      "path": "apps/processor"
+    },
+    {
+      "path": "infra"
+    },
+    {
+      "path": "apps/api"
+    },
+    {
+      "path": "apps/sdk"
+    },
+    {
+      "path": "apps/clusterer"
+    }
+  ]
+}
