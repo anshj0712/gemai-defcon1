@@ -1,0 +1,24 @@
+{
+  "name": "@cp/agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc -b",
+    "start": "node dist/index.js",
+    "dev": "tsx watch --conditions=source src/index.ts",
+    "test": "vitest run --root ../.. --project @cp/agent"
+  },
+  "dependencies": {
+    "@cp/logger": "workspace:*",
+    "@cp/platform": "workspace:*",
+    "@cp/schema": "workspace:*",
+    "@google/adk": "2.2.1",
+    "@google/genai": "^2.27.0",
+    "@rrweb/replay": "2.1.6",
+    "fastify": "^5.12.5",
+    "playwright": "^1.63.0",
+    "zod": "^4.6.5"
+  }
+}

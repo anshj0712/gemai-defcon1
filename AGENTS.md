@@ -59,7 +59,7 @@ docs/             ARCHITECTURE.md
 
 ## Commands (keep this list current)
 
-Available: `pnpm install`, `pnpm build`, `pnpm typecheck`, `pnpm test` (one package: `pnpm --filter @cp/detectors test`), `pnpm dev` (collector, processor, clusterer, api, demo shop, dashboard; merged logs), `pnpm dev:backend`, `pnpm dev:shop`, `pnpm dev:dashboard`, `pnpm smoke` (Phase 1 exit test on a synthetic session), `pnpm e2e` (real Chrome drives the demo shop and checks the replay and its issue), `pnpm sim -- --sessions 300 --seed 42 --concurrency 8` (synthetic shoppers with ground truth), `pnpm sim:check` (Phase 2 exit test), `pnpm build:sdk` (one-tag bundle), `pnpm infra:up` (`-- --dry-run` to preview), `pnpm deploy:collector`, `pnpm deploy:processor`, `pnpm deploy:clusterer`, `pnpm logs:tail`, `pnpm clean`.
+Available: `pnpm install`, `pnpm build`, `pnpm typecheck`, `pnpm test` (one package: `pnpm --filter @cp/detectors test`), `pnpm dev` (collector, processor, clusterer, agent, api, demo shop, dashboard; merged logs), `pnpm dev:backend`, `pnpm dev:shop`, `pnpm dev:dashboard`, `pnpm smoke` (Phase 1 exit test on a synthetic session), `pnpm e2e` (real Chrome drives the demo shop and checks the replay and its issue), `pnpm sim -- --sessions 300 --seed 42 --concurrency 8` (synthetic shoppers with ground truth), `pnpm sim:check` (Phase 2 and 3 exit tests), `pnpm build:sdk` (one-tag bundle), `pnpm infra:up` (`-- --dry-run` to preview), `pnpm deploy:collector`, `pnpm deploy:processor`, `pnpm deploy:clusterer`, `pnpm deploy:agent`, `pnpm dev:agent`, `pnpm logs:tail`, `pnpm clean`.
 
 Runtime mode is one switch: `CP_MODE=local` (default; `.data/` stands in for GCP, no credentials) or `CP_MODE=gcp`. Every setting is documented in `.env.example`.
 
@@ -67,12 +67,12 @@ Runtime mode is one switch: `CP_MODE=local` (default; `.data/` stands in for GCP
 
 | Agent | Model config key | Input | Output |
 | --- | --- | --- | --- |
-| triage | `GEMINI_MODEL_BULK` | Cluster summary: fingerprint, count, route, top selectors, release, 3 to 5 evidence items | JSON: title, category, confidence, likely cause, repro steps |
-| root-cause | `GEMINI_MODEL_REASONING` | Triage output plus tools: session samples, DOM diff at time t, error context, screenshot at t, release diff | JSON: cause hypothesis, visual confirmation, cited evidence ids |
+| triage | `GEMINI_MODEL_BULK` | Evidence pack: issue facts, up to 5 signals, error signatures, releases, impact numbers | JSON: title, category, confidence, summary, likely cause, repro steps (built) |
+| root-cause | `GEMINI_MODEL_REASONING` | Triage output plus the evidence pack and a screenshot of the masked replay at the flag (gathered by code before the call, not via tool calls) | JSON: hypothesis, visual check, notes, where to look first (built) |
 | rule-author | `GEMINI_MODEL_REASONING` | A merchant sentence in plain English | Rule JSON (probes and invariant), dry-run precision, then human approval |
-| ranker | deterministic core, bounded LLM step | Enriched finding and the priority rule set | Score, tier, and the priority rule ids applied (the LLM may move a finding at most one tier, and only with a cited rule id) |
+| ranker | deterministic core, bounded LLM step | Enriched finding and the priority rule set | Score, tier, and the priority rule ids applied (the LLM may move a finding at most one tier, and only with a cited rule id) (built) |
 
-Every LLM claim must cite evidence ids we supplied; a validator rejects unknown ids. Each finding stores prompt hash, model id, and rule version.
+Every LLM claim must cite evidence ids we supplied; a validator rejects unknown ids. Each finding stores prompt hash, model id, and rule version. Without `GOOGLE_API_KEY` the agents run an offline stand-in (templated, labelled as such); see section 5 of the architecture doc.
 
 ## Definition of done
 

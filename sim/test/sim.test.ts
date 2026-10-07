@@ -93,3 +93,27 @@ describe('evaluate', () => {
     expect(r).toMatchObject({ pass: true, scored_sessions: 5, failed_sessions: 1 });
   });
 });
+
+describe('Phase 3 exit test (findings)', async () => {
+  const { evaluateFindings } = await import('../src/truth.js');
+  const bug = (b: Bug, cluster_id: string | null) => ({ bug: b, affected: 3, clusters: 1, cluster_id, title: 't', recall: 1, precision: 1 });
+  const finding = (over: object = {}) => ({
+    finding_id: 'c1', cluster_id: 'c1', title: 'Coupon', tier: 'P2', status: 'open', model_version: 'offline-stand-in',
+    triage: { summary: { text: 's' }, repro_steps: [{ step: 'a' }, { step: 'b' }] },
+    revenue: { status: 'ok', revenue_at_risk_minor: 100, currency: 'INR', abandonment_affected: 0.6, abandonment_baseline: 0.25 },
+    evidence: [{ id: 'E2', kind: 'signal', session_id: 's1', signal_id: 'g1' }],
+    ...over,
+  });
+
+  it('passes a finding with a summary, two steps, and a replay link', () => {
+    const r = evaluateFindings([bug('dead_button', 'c1')], new Map([['c1', finding()]]));
+    expect(r.failures).toEqual([]);
+    expect(r.scores[0]).toMatchObject({ tier: 'P2', repro_steps: 2, replay_link: { session_id: 's1', signal_id: 'g1' } });
+  });
+
+  it('fails a missing finding, a missing analysis, and a finding without replay evidence', () => {
+    expect(evaluateFindings([bug('dead_button', 'c1')], new Map()).failures[0]).toMatch(/no finding/);
+    expect(evaluateFindings([bug('dead_button', 'c1')], new Map([['c1', finding({ triage: null })]])).failures).toHaveLength(2);
+    expect(evaluateFindings([bug('dead_button', 'c1')], new Map([['c1', finding({ evidence: [] })]])).failures[0]).toMatch(/replay/);
+  });
+});

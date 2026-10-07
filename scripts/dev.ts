@@ -6,9 +6,9 @@ import { findRepoRoot, loadDotEnv } from '@cp/platform';
 
 /**
  * `pnpm dev`: the whole local stack in one terminal.
- *   collector :8080  processor :8081  api :8082  clusterer :8083   (tsx watch; lines tagged by their logger)
+ *   collector :8080  processor :8081  api :8082  clusterer :8083  agent :8084   (tsx watch; lines tagged by their logger)
  *   shop      :5173  dashboard :5174                                (Vite; lines prefixed here)
- * `pnpm dev -- --backend` runs only the four Node services.
+ * `pnpm dev -- --backend` runs only the five Node services.
  */
 
 const root = findRepoRoot();
@@ -34,6 +34,7 @@ const services: Service[] = [
   { name: 'processor', args: node(join(root, 'apps', 'processor', 'src', 'index.ts')), cwd: root, env: { PORT: process.env.PROCESSOR_PORT ?? '8081' } },
   { name: 'api', args: node(join(root, 'apps', 'api', 'src', 'index.ts')), cwd: root },
   { name: 'clusterer', args: node(join(root, 'apps', 'clusterer', 'src', 'index.ts')), cwd: root, env: { PORT: process.env.CLUSTERER_PORT ?? '8083' } },
+  { name: 'agent', args: node(join(root, 'apps', 'agent', 'src', 'index.ts')), cwd: root },
   ...(backendOnly
     ? []
     : [
@@ -47,12 +48,13 @@ process.stdout.write(
     '',
     `  Churn Preventer local stack (CP_MODE=${process.env.CP_MODE ?? 'local'}; all data synthetic)`,
     '  ingest     POST http://localhost:8080/v1/ingest',
-    '  api        http://localhost:8082/v1/clusters   (issues)   /v1/signals',
+    '  api        http://localhost:8082/v1/findings   (ranked findings)   /v1/clusters   /v1/signals',
+    `  agent      http://localhost:8084/healthz       (${process.env.GOOGLE_API_KEY ? 'Gemini' : 'offline stand-in: set GOOGLE_API_KEY for Gemini'})`,
     ...(backendOnly
       ? []
       : [
           '  shop       http://localhost:5173/?bugs=dead_button   (click Apply Coupon 6+ times)',
-          '  dashboard  http://localhost:5174                     (live issues, signals, session replay)',
+          '  dashboard  http://localhost:5174                     (ranked findings, issues, signals, session replay)',
           '  simulate   pnpm sim -- --sessions 100, then pnpm sim:check',
         ]),
     ...(process.env.LOG_TO_CLOUD === 'true' ? ['  logs are also shipped to Cloud Logging (LOG_TO_CLOUD=true)'] : []),

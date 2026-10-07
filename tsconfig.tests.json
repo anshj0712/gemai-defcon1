@@ -5,7 +5,8 @@
     "composite": false,
     "declaration": false,
     "declarationMap": false,
-    "rootDir": "."
+    "rootDir": ".",
+    "lib": ["ES2023", "DOM"]
   },
   "include": [
     "packages/*/test",
@@ -13,6 +14,7 @@
     "apps/processor/test",
     "apps/clusterer/test",
     "apps/api/test",
+    "apps/agent/test",
     "infra/test",
     "scripts",
     "sim/src",

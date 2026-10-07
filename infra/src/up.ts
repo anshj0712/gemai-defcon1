@@ -2,7 +2,7 @@ import { BigQuery } from '@google-cloud/bigquery';
 import { PubSub } from '@google-cloud/pubsub';
 import { Storage } from '@google-cloud/storage';
 import { logsExplorerUrl, serviceLogFilter } from '@cp/logger';
-import { CLUSTERED_COLLECTION, CLUSTERS_COLLECTION, loadDotEnv, PROCESSED_COLLECTION, TAILS_COLLECTION } from '@cp/platform';
+import { CLUSTERED_COLLECTION, CLUSTERS_COLLECTION, FINDINGS_COLLECTION, loadDotEnv, PROCESSED_COLLECTION, TAILS_COLLECTION } from '@cp/platform';
 import { BQ_TABLES } from '@cp/schema';
 import { loadInfraConfig, type InfraConfig } from './config.js';
 import { describe, hasGcloud, run, type CmdResult } from './gcloud.js';
@@ -11,6 +11,7 @@ import {
   bucketSpec,
   clustersIndexArgs,
   eventsRawSubscriptionSpec,
+  findingsIndexArgs,
   lifecycleRule,
   projectBindings,
   resourceBindings,
@@ -87,6 +88,7 @@ function serviceAccounts(): void {
     [cfg.serviceAccounts.collector, 'Churn Preventer collector'],
     [cfg.serviceAccounts.processor, 'Churn Preventer processor'],
     [cfg.serviceAccounts.clusterer, 'Churn Preventer clusterer'],
+    [cfg.serviceAccounts.agent, 'Churn Preventer agent service'],
     [cfg.serviceAccounts.pubsubPush, 'Pub/Sub push to the processor and clusterer'],
   ];
   for (const [email, display] of accounts) {
@@ -116,6 +118,10 @@ function firestore(): void {
   if (index.ok) ok(`index on ${CLUSTERS_COLLECTION} (tenant_id, last_seen desc), building in the background`);
   else if (/ALREADY_EXISTS|already exists/i.test(index.stderr)) skip(`index on ${CLUSTERS_COLLECTION} exists`);
   else warn(`index on ${CLUSTERS_COLLECTION}: ${index.stderr.split('\n')[0]}`);
+  const findingsIndex = gcloud(findingsIndexArgs(cfg, FINDINGS_COLLECTION), { allowFail: true });
+  if (findingsIndex.ok) ok(`index on ${FINDINGS_COLLECTION} (tenant_id, score desc), building in the background`);
+  else if (/ALREADY_EXISTS|already exists/i.test(findingsIndex.stderr)) skip(`index on ${FINDINGS_COLLECTION} exists`);
+  else warn(`index on ${FINDINGS_COLLECTION}: ${findingsIndex.stderr.split('\n')[0]}`);
 }
 
 async function pubsub(): Promise<void> {
@@ -195,7 +201,7 @@ async function bigquery(): Promise<void> {
     out(`  would ensure dataset ${cfg.dataset} in ${cfg.region}`);
     for (const t of Object.values(BQ_TABLES)) out(`  would ensure table ${t.name} (partition DAY(${t.partitionField}), cluster ${t.clusterFields.join(', ')})`);
     for (const v of views) out(`  would ensure view ${v.name}`);
-    out(`  would grant WRITER on ${cfg.dataset} to ${cfg.serviceAccounts.processor}`);
+    out(`  would grant WRITER on ${cfg.dataset} to ${cfg.serviceAccounts.processor} and ${cfg.serviceAccounts.agent}`);
     return;
   }
   const bq = new BigQuery({ projectId: cfg.projectId, location: cfg.region });
@@ -239,13 +245,15 @@ async function bigquery(): Promise<void> {
     }
   }
 
-  const [dsMeta] = await ds.getMetadata();
-  const access: { role?: string; userByEmail?: string }[] = dsMeta.access ?? [];
-  const email = cfg.serviceAccounts.processor;
-  if (access.some((a) => a.role === 'WRITER' && a.userByEmail === email)) skip(`processor can write to ${cfg.dataset}`);
-  else {
-    await ds.setMetadata({ access: [...access, { role: 'WRITER', userByEmail: email }] });
-    ok(`WRITER on ${cfg.dataset} for ${email}`);
+  // The processor writes signals; the agent reads outcomes and signals and writes findings and rules.
+  for (const email of [cfg.serviceAccounts.processor, cfg.serviceAccounts.agent]) {
+    const [dsMeta] = await ds.getMetadata();
+    const access: { role?: string; userByEmail?: string }[] = dsMeta.access ?? [];
+    if (access.some((a) => a.role === 'WRITER' && a.userByEmail === email)) skip(`${email.split('@')[0]} can write to ${cfg.dataset}`);
+    else {
+      await ds.setMetadata({ access: [...access, { role: 'WRITER', userByEmail: email }] });
+      ok(`WRITER on ${cfg.dataset} for ${email}`);
+    }
   }
 }
 
@@ -273,7 +281,7 @@ function secrets(): void {
   upsertSecret(cfg.secrets.siteKeys, normalized);
   const gemini = process.env.GOOGLE_API_KEY;
   if (gemini) upsertSecret(cfg.secrets.geminiApiKey, gemini);
-  else skip(`${cfg.secrets.geminiApiKey}: GOOGLE_API_KEY not set (needed from Phase 3)`);
+  else skip(`${cfg.secrets.geminiApiKey}: GOOGLE_API_KEY not set (the agent falls back to its offline stand-in)`);
 }
 
 function iam(projectNumber: string): void {
@@ -283,7 +291,8 @@ function iam(projectNumber: string): void {
     ok(`${b.role} -> ${b.member.split(':')[1]}`);
   }
   const agent = `service-${projectNumber}@gcp-sa-pubsub.iam.gserviceaccount.com`;
-  for (const b of resourceBindings(cfg, agent)) {
+  const geminiSecret = Boolean(process.env.GOOGLE_API_KEY) || exists(['secrets', 'describe', cfg.secrets.geminiApiKey]);
+  for (const b of resourceBindings(cfg, agent, { geminiSecret })) {
     gcloud([...bindingArgs(b), '--format=none']);
     ok(`${b.role} on ${b.resource} -> ${b.member.split(':')[1]}`);
   }
@@ -304,7 +313,7 @@ async function main(): Promise<void> {
   iam(projectNumber);
 
   step(dryRun ? 'Dry run complete' : 'Done');
-  out(`  Next: pnpm deploy:collector && pnpm deploy:processor && pnpm deploy:clusterer`);
+  out(`  Next: pnpm deploy:collector && pnpm deploy:processor && pnpm deploy:clusterer && pnpm deploy:agent`);
   out(`  Or run locally against GCP: set CP_MODE=gcp, PROCESSOR_PULL=true and CLUSTERER_PULL=true in .env, then pnpm dev`);
   out(`  Logs: ${logsExplorerUrl(cfg.projectId, serviceLogFilter(cfg.projectId))}`);
 }

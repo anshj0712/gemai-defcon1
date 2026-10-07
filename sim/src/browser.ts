@@ -1,3 +1,4 @@
+import { isAbsolute } from 'node:path';
 import { chromium, type Browser, type Page } from 'playwright';
 
 /** Shared Playwright helpers for the e2e check and the session simulator. All shoppers are synthetic. */
@@ -17,13 +18,14 @@ export const arg = (name: string): string | undefined => {
 };
 
 /**
- * Launch the installed browser (throwaway profile). When Chrome has an update staged, the first launch
+ * Launch the installed browser (throwaway profile). `channel` is chrome or msedge, or a path to a
+ * Chromium executable (for machines without Chrome, such as CI containers). When Chrome has an update staged, the first launch
  * applies it and exits straight away ("Target page, context or browser has been closed"); a retry works.
  */
 export async function launchBrowser(channel: string, headed: boolean): Promise<Browser> {
   for (let attempt = 1; ; attempt++) {
     try {
-      return await chromium.launch({ channel, headless: !headed });
+      return await chromium.launch({ ...(isAbsolute(channel) ? { executablePath: channel } : { channel }), headless: !headed });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (attempt >= 3 || !/has been closed|exited|Process failed to launch/i.test(message)) {

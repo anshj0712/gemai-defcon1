@@ -14,6 +14,7 @@ import { BigQueryWarehouse, BigQueryWarehouseReader, LocalWarehouse, LocalWareho
 export * from './blob.js';
 export * from './config.js';
 export * from './publisher.js';
+export * from './replay.js';
 export * from './state.js';
 export * from './subscriber.js';
 export * from './warehouse.js';

@@ -1,0 +1,6 @@
+{
+  "hypothesis": { "text": "A counter or guard in the Apply Coupon click handler disables the action after five uses without updating the UI.", "evidence_ids": ["E2", "E3"] },
+  "visual_check": "not_checked",
+  "visual_notes": { "text": "No screenshot was supplied for this run.", "evidence_ids": ["E1"] },
+  "suggested_fix_area": "The Apply Coupon click handler on /cart"
+}

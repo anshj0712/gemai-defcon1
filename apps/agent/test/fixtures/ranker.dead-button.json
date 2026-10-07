@@ -1,0 +1,6 @@
+{
+  "rule_ids": ["checkout_friction", "browse_friction"],
+  "tier_move": "up",
+  "move_rule_id": "checkout_friction",
+  "reason": { "text": "A coupon that silently fails in the bag drives abandonment well above baseline.", "evidence_ids": ["E8"] }
+}

@@ -1,9 +1,9 @@
 import { existsSync } from 'node:fs';
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import type { Firestore } from '@google-cloud/firestore';
-import type { Cluster, SessionTail } from '@cp/schema';
+import type { Cluster, Finding, SessionTail } from '@cp/schema';
 
 /** Result of applying one signal to a cluster. */
 export interface ClusterUpdate {
@@ -31,17 +31,28 @@ export interface StateStore {
   /** Most recently active first. */
   listClusters(tenantId: string, limit: number): Promise<Cluster[]>;
   countClusters(tenantId: string): Promise<number>;
+
+  /**
+   * Findings: the latest version of each, a hot copy of the bitemporal `findings` table for the feed.
+   * Written by the agent service only; overwriting here is fine because BigQuery keeps every version.
+   */
+  putFinding(finding: Finding): Promise<void>;
+  getFinding(tenantId: string, findingId: string): Promise<Finding | null>;
+  /** Highest score first. */
+  listFindings(tenantId: string, limit: number): Promise<Finding[]>;
 }
 
 export const TAILS_COLLECTION = 'session_tails';
 export const PROCESSED_COLLECTION = 'processed_chunks';
 export const CLUSTERS_COLLECTION = 'clusters';
 export const CLUSTERED_COLLECTION = 'clustered_signals';
+export const FINDINGS_COLLECTION = 'findings';
 
 const tailId = (tenantId: string, sessionId: string) => `${tenantId}__${sessionId}`;
 const processedId = (tenantId: string, sessionId: string, seq: number) => `${tenantId}__${sessionId}__${seq}`;
 const clusterDocId = (tenantId: string, clusterId: string) => `${tenantId}__${clusterId}`;
 const clusteredId = (tenantId: string, signalId: string) => `${tenantId}__${signalId}`;
+const findingDocId = (tenantId: string, findingId: string) => `${tenantId}__${findingId}`;
 
 /**
  * Firestore layout. The tail itself is stored as one gzipped JSON bytes field: it keeps the document
@@ -139,12 +150,44 @@ export class FirestoreStateStore implements StateStore {
     const agg = await this.db.collection(CLUSTERS_COLLECTION).where('tenant_id', '==', tenantId).count().get();
     return agg.data().count;
   }
+
+  async putFinding(f: Finding): Promise<void> {
+    await this.db
+      .collection(FINDINGS_COLLECTION)
+      .doc(findingDocId(f.tenant_id, f.finding_id))
+      .set({
+        tenant_id: f.tenant_id,
+        finding_id: f.finding_id,
+        cluster_id: f.cluster_id,
+        tier: f.tier,
+        score: f.score,
+        version: f.version,
+        updated_at: new Date(f.updated_at),
+        payload: gzipSync(JSON.stringify(f)),
+      });
+  }
+
+  private decodeFinding(payload: unknown): Finding | null {
+    return payload instanceof Uint8Array ? (JSON.parse(gunzipSync(payload).toString('utf8')) as Finding) : null;
+  }
+
+  async getFinding(tenantId: string, findingId: string): Promise<Finding | null> {
+    const snap = await this.db.collection(FINDINGS_COLLECTION).doc(findingDocId(tenantId, findingId)).get();
+    return snap.exists ? this.decodeFinding(snap.get('payload')) : null;
+  }
+
+  async listFindings(tenantId: string, limit: number): Promise<Finding[]> {
+    // Needs the composite index (tenant_id ASC, score DESC) created by `pnpm infra:up`.
+    const q = await this.db.collection(FINDINGS_COLLECTION).where('tenant_id', '==', tenantId).orderBy('score', 'desc').limit(limit).get();
+    return q.docs.map((d) => this.decodeFinding(d.get('payload'))).filter((f): f is Finding => f !== null);
+  }
 }
 
 /** local mode: one JSON file per document under `<dir>/<collection>/`. No TTL; `pnpm clean` wipes it. */
 export class LocalStateStore implements StateStore {
   /** Serializes read-modify-write per cluster within this process (the local stand-in for a transaction). */
   private readonly clusterChains = new Map<string, Promise<unknown>>();
+  private writes = 0;
 
   constructor(private readonly dir: string) {}
 
@@ -154,7 +197,11 @@ export class LocalStateStore implements StateStore {
 
   private async write(collection: string, id: string, doc: unknown): Promise<void> {
     await mkdir(join(this.dir, collection), { recursive: true });
-    await writeFile(this.path(collection, id), JSON.stringify(doc));
+    // Write then rename, so a concurrent reader (the API) never sees a half-written document.
+    const file = this.path(collection, id);
+    const tmp = `${file}.${process.pid}.${++this.writes}.tmp`;
+    await writeFile(tmp, JSON.stringify(doc));
+    await rename(tmp, file);
   }
 
   async getTail(tenantId: string, sessionId: string): Promise<SessionTail | null> {
@@ -222,5 +269,24 @@ export class LocalStateStore implements StateStore {
 
   async countClusters(tenantId: string): Promise<number> {
     return (await this.allClusters(tenantId)).length;
+  }
+
+  async putFinding(f: Finding): Promise<void> {
+    await this.write(FINDINGS_COLLECTION, findingDocId(f.tenant_id, f.finding_id), f);
+  }
+
+  async getFinding(tenantId: string, findingId: string): Promise<Finding | null> {
+    const file = this.path(FINDINGS_COLLECTION, findingDocId(tenantId, findingId));
+    if (!existsSync(file)) return null;
+    return JSON.parse(await readFile(file, 'utf8')) as Finding;
+  }
+
+  async listFindings(tenantId: string, limit: number): Promise<Finding[]> {
+    const dir = join(this.dir, FINDINGS_COLLECTION);
+    if (!existsSync(dir)) return [];
+    const prefix = `${tenantId}__`;
+    const files = (await readdir(dir)).filter((f) => f.startsWith(prefix) && f.endsWith('.json'));
+    const all = await Promise.all(files.map(async (f) => JSON.parse(await readFile(join(dir, f), 'utf8')) as Finding));
+    return all.sort((a, b) => b.score - a.score || b.last_seen - a.last_seen).slice(0, limit);
   }
 }

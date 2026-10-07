@@ -33,6 +33,7 @@ export default defineConfig({
       project('@cp/processor', 'apps/processor'),
       project('@cp/clusterer', 'apps/clusterer'),
       project('@cp/api', 'apps/api'),
+      project('@cp/agent', 'apps/agent'),
       project('@cp/sdk', 'apps/sdk'),
       project('@cp/dashboard', 'apps/dashboard'),
       project('@cp/infra', 'infra'),
