@@ -95,3 +95,25 @@ describe('parseRoute', () => {
     expect(parseRoute('#/issues/not-an-id')).toEqual({ page: 'issues' });
   });
 });
+
+describe('findings in the dashboard', async () => {
+  const { rankIssues } = await import('../src/IssuesPage');
+  const { formulaLine, money } = await import('../src/format');
+
+  it('puts scored issues first in finding order, then unscored ones', () => {
+    const c = (id: string) => ({ cluster_id: id, title: id }) as never;
+    const f = (id: string) => ({ cluster_id: id, finding_id: id }) as never;
+    expect(rankIssues([c('a'), c('b'), c('c')], [f('c'), f('a'), f('gone')]).map((x) => [x.cluster.cluster_id as string, x.finding !== null])).toEqual([
+      ['c', true],
+      ['a', true],
+      ['b', false],
+    ]);
+  });
+
+  it('spells out revenue at risk with its numbers (synthetic)', () => {
+    expect(money(3_500_000, 'INR')).toBe('₹35,000');
+    expect(formulaLine({ affected_with_cart: 10, avg_cart_value_minor: 1_000_000, abandonment_affected: 0.6, abandonment_baseline: 0.25, revenue_at_risk_minor: 3_500_000, currency: 'INR' })).toBe(
+      '10 sessions × ₹10,000 × (60% − 25%) = ₹35,000',
+    );
+  });
+});

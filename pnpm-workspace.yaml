@@ -6,6 +6,15 @@ packages:
 
 # pnpm 12 refuses unreviewed install scripts. esbuild (used by tsx and vitest) needs its
 # postinstall; protobufjs's postinstall only prints a version notice, so it stays off.
+# The agent's ADK dependencies bring more: @google/genai's postinstall is optional, and ssh2 and
+# cpu-features (pulled in by ADK's container code executor, which we do not use) build native add-ons.
 allowBuilds:
+  '@google/genai': false
+  cpu-features: false
   esbuild: true
   protobufjs: false
+  ssh2: false
+
+# ADK 2.2.1 is newer than pnpm's default minimum release age; it is pinned exactly in apps/agent.
+minimumReleaseAgeExclude:
+  - '@google/adk@2.2.1'

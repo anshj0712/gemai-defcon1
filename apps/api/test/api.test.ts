@@ -5,7 +5,7 @@ import { gzipSync } from 'node:zlib';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createLogger } from '@cp/logger';
 import { LocalBlobStore, LocalStateStore, LocalWarehouse, LocalWarehouseReader } from '@cp/platform';
-import type { Cluster, RawChunkRow, SignalRow, StoredChunk } from '@cp/schema';
+import type { Cluster, Finding, FindingRow, RawChunkRow, SignalRow, StoredChunk } from '@cp/schema';
 import { applyCouponScenario, toEnvelopes } from '@cp/testkit';
 import { describe as caption, formatMoney, skewBySeq, stitchEvents, toMarkers } from '../src/replay.js';
 import { buildApi } from '../src/server.js';
@@ -189,6 +189,62 @@ describe('GET /v1/clusters', () => {
     expect((await api().inject({ method: 'GET', url: '/v1/clusters/ffffffffffffffffffff' })).statusCode).toBe(404);
     expect((await api().inject({ method: 'GET', url: '/v1/clusters/not-a-cluster-id' })).statusCode).toBe(400);
     expect((await api().inject({ method: 'GET', url: '/v1/clusters/..%2F..%2Fsecret' })).statusCode).toBe(400);
+  });
+});
+
+const finding = (over: Partial<Finding> = {}): Finding =>
+  ({
+    v: 1, tenant_id: 'demo', finding_id: 'aaaaaaaaaaaaaaaaaaaa', cluster_id: 'aaaaaaaaaaaaaaaaaaaa', version: 1, kind: 'element',
+    title: 'Apply Coupon stops responding on /cart', cluster_title: 'Unresponsive button#apply-coupon on /cart', route: '/cart', anchor: 'button#apply-coupon',
+    status: 'open', tier: 'P2', score: 100, priority: {}, revenue: { revenue_at_risk_minor: 20000, currency: 'INR', status: 'ok' },
+    triage: null, root_cause: null, ranker: null, evidence: [{ id: 'E1', kind: 'issue', text: 'x' }], screenshot: null, runs: [],
+    llm_key: 'k', input_hash: 'h', affected_sessions: 3, signal_count: 4, detectors: { dead_click: 4 }, releases: ['r'],
+    first_seen: T0, last_seen: T0 + 1000, model_version: 'offline-stand-in', prompt_hash: 'p', rule_version: 'prs', created_at: T0, updated_at: T0, synthetic: true,
+    ...over,
+  }) as Finding;
+
+describe('GET /v1/findings', () => {
+  it('ranks by tier, then score, without evidence packs; scoped to the tenant', async () => {
+    await state.putFinding(finding());
+    await state.putFinding(finding({ finding_id: 'bbbbbbbbbbbbbbbbbbbb', cluster_id: 'bbbbbbbbbbbbbbbbbbbb', tier: 'P0', score: 5 }));
+    await state.putFinding(finding({ finding_id: 'cccccccccccccccccccc', cluster_id: 'cccccccccccccccccccc', tier: 'P2', score: 900 }));
+    await state.putFinding(finding({ tenant_id: 'acme', finding_id: 'dddddddddddddddddddd', tier: 'P0', score: 1e9 }));
+    const res = await api().inject({ method: 'GET', url: '/v1/findings' });
+    const body = res.json() as { findings: Finding[]; synthetic: boolean };
+    expect(body.synthetic).toBe(true);
+    expect(body.findings.map((f) => f.finding_id)).toEqual(['bbbbbbbbbbbbbbbbbbbb', 'cccccccccccccccccccc', 'aaaaaaaaaaaaaaaaaaaa']);
+    expect(body.findings[0]).not.toHaveProperty('evidence');
+    expect(res.headers['cache-control']).toBe('no-store');
+  });
+
+  it('returns one finding with its evidence and version history; 404s other tenants', async () => {
+    await state.putFinding(finding());
+    const row = (recorded_from: number, version: number): FindingRow => ({
+      tenant_id: 'demo', finding_id: 'aaaaaaaaaaaaaaaaaaaa', fingerprint: 'aaaaaaaaaaaaaaaaaaaa', severity: 'P2', revenue_at_risk_minor: 100 * version, currency: 'INR',
+      affected_sessions: version, summary: 's', evidence_refs: {}, rule_version: 'prs', model_version: 'm', prompt_hash: 'p', cluster_id: 'aaaaaaaaaaaaaaaaaaaa', title: 't',
+      status: 'open', score: version, input_hash: `h${version}`, details: { version }, valid_from: T0, valid_to: null, recorded_from, recorded_to: null,
+    });
+    await warehouse.insert('findings', [{ insertId: 'v2', row: row(T0 + 20_000, 2) }, { insertId: 'v1', row: row(T0 + 10_000, 1) }]);
+    const res = await api().inject({ method: 'GET', url: '/v1/findings/aaaaaaaaaaaaaaaaaaaa' });
+    const body = res.json() as { finding: Finding; versions: { version: number; recorded_from: number; recorded_to: number | null }[] };
+    expect(body.finding.evidence).toHaveLength(1);
+    expect(body.versions).toEqual([
+      expect.objectContaining({ version: 1, recorded_from: T0 + 10_000, recorded_to: T0 + 20_000 }),
+      expect.objectContaining({ version: 2, recorded_from: T0 + 20_000, recorded_to: null }),
+    ]);
+    expect((await api().inject({ method: 'GET', url: '/v1/findings/aaaaaaaaaaaaaaaaaaaa?tenant=acme' })).statusCode).toBe(404);
+    expect((await api().inject({ method: 'GET', url: '/v1/findings/..%2Fx' })).statusCode).toBe(400);
+  });
+
+  it('serves the screenshot only from the finding’s own tenant prefix', async () => {
+    const { uri } = await blob.putIfAbsent('screenshots/demo/aaaaaaaaaaaaaaaaaaaa/sig-1.png', Buffer.from('89504e47', 'hex'), 'image/png');
+    await state.putFinding(finding({ screenshot: { evidence_id: 'E9', signal_id: 'sig-1', session_id: 's', uri, offset_ms: 1, captured_at: T0 } }));
+    const ok = await api().inject({ method: 'GET', url: '/v1/findings/aaaaaaaaaaaaaaaaaaaa/screenshot' });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.headers['content-type']).toBe('image/png');
+    const { uri: other } = await blob.putIfAbsent('raw/demo/s/00000000.json.gz', Buffer.from('x'), 'application/gzip');
+    await state.putFinding(finding({ screenshot: { evidence_id: 'E9', signal_id: 'sig-1', session_id: 's', uri: other, offset_ms: 1, captured_at: T0 } }));
+    expect((await api().inject({ method: 'GET', url: '/v1/findings/aaaaaaaaaaaaaaaaaaaa/screenshot' })).statusCode).toBe(404);
   });
 });
 

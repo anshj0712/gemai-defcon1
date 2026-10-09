@@ -59,7 +59,8 @@ A team of two can fold these together: one person takes capture, pipeline, and d
 
 ## Open decisions (update this list as they are settled)
 
-- Agent service language: assumed TypeScript with ADK 2.0. If the team prefers Python, change the conventions in AGENTS.md and the `add-adk-agent` skill.
+- Agent service language: TypeScript with ADK 2.2.1 (`apps/agent`, built 8 Oct).
+- Agent fixtures are hand-written in Gemini's response shape; record real ones once a Gemini key is available.
 - Gemini access: AI Studio API key from Secret Manager is the default for speed; Google's agent platform with service-account auth is the production posture.
 - Team size decides how the tracks are split (see the subagent table).
 - Cup registration date (4 Oct or 11 Oct) and team eligibility (ages 21 and over, working professionals, entrepreneurs, or startups; students ineligible) must be confirmed on the official pages.

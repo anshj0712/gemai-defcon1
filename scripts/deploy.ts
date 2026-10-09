@@ -4,9 +4,11 @@ import { describe, loadInfraConfig, quoteForCmd, SERVICE_NAMES, type InfraConfig
 import { findRepoRoot, loadDotEnv } from '@cp/platform';
 
 /**
- * `pnpm deploy:collector` / `deploy:processor` / `deploy:clusterer`: build, test, build the image with
- * Cloud Build, deploy to Cloud Run with its own service account, and (processor, clusterer) point
- * their subscription (events.raw.processor, signals.clusterer) at it as an authenticated push endpoint.
+ * `pnpm deploy:collector` / `deploy:processor` / `deploy:clusterer` / `deploy:agent`: build, test, build
+ * the image with Cloud Build, deploy to Cloud Run with its own service account, and (processor,
+ * clusterer) point their subscription (events.raw.processor, signals.clusterer) at it as an
+ * authenticated push endpoint. The agent is private and polls the issues itself: one instance, CPU
+ * always allocated, at least one instance warm.
  *
  *   pnpm deploy:processor [-- --min 1] [--skip-tests] [--dry-run]
  *
@@ -109,6 +111,27 @@ async function main(): Promise<void> {
   ];
   if (service === 'collector') {
     gcloud([...common, '--allow-unauthenticated', '--concurrency=80', '--timeout=30', `--set-secrets=SITE_KEYS=${cfg.secrets.siteKeys}:latest`]);
+  } else if (service === 'agent') {
+    // The slim image has no Chromium, so the deployed agent skips screenshots (the visual check runs
+    // locally, or from an image with a browser: set VISUAL_CHECK and SCREENSHOT_BROWSER).
+    const agentEnv = [
+      `AGENT_TENANTS=${process.env.AGENT_TENANTS ?? 'demo'}`,
+      `GEMINI_MODEL_BULK=${process.env.GEMINI_MODEL_BULK ?? 'gemini-3.5-flash-lite'}`,
+      `GEMINI_MODEL_REASONING=${process.env.GEMINI_MODEL_REASONING ?? 'gemini-3.8-flash'}`,
+      `VISUAL_CHECK=${process.env.AGENT_DEPLOY_VISUAL_CHECK ?? 'false'}`,
+    ];
+    const hasKey = dryRun || spawnSync(process.platform === 'win32' ? 'gcloud.cmd' : 'gcloud', ['secrets', 'describe', cfg.secrets.geminiApiKey, `--project=${cfg.projectId}`], { stdio: 'ignore', shell: process.platform === 'win32' }).status === 0;
+    if (!hasKey) say(`note: secret ${cfg.secrets.geminiApiKey} not found; the agent runs its offline stand-in. Set GOOGLE_API_KEY in .env and rerun pnpm infra:up.`);
+    const warm = String(Math.max(1, Number(minInstances)));
+    gcloud([
+      ...common.map((a) => (a.startsWith('--min-instances=') ? `--min-instances=${warm}` : a.startsWith('--max-instances=') ? '--max-instances=1' : a.startsWith('--memory=') ? '--memory=1Gi' : a)),
+      '--no-allow-unauthenticated',
+      '--no-cpu-throttling',
+      '--concurrency=10',
+      '--timeout=300',
+      `--update-env-vars=${agentEnv.join(',')}`,
+      ...(hasKey ? [`--set-secrets=GOOGLE_API_KEY=${cfg.secrets.geminiApiKey}:latest`] : []),
+    ]);
   } else {
     gcloud([...common, '--no-allow-unauthenticated', '--concurrency=20', '--timeout=120']);
   }

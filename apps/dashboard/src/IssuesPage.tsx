@@ -1,15 +1,27 @@
 import { useEffect, useRef, useState } from 'react';
-import { fetchClusters, type ClusterSummary } from './api';
-import { ago, symptomColor, symptomName } from './format';
+import type { FindingSummary } from '@cp/schema';
+import { fetchClusters, fetchFindings, type ClusterSummary } from './api';
+import { ago, money, symptomColor, symptomName, TIER_NAMES, tierColor } from './format';
+
+/** Scored issues first in finding order (tier, then score); issues the agent has not scored yet after them, newest first. */
+export function rankIssues(clusters: readonly ClusterSummary[], findings: readonly FindingSummary[]): { cluster: ClusterSummary; finding: FindingSummary | null }[] {
+  const byCluster = new Map(clusters.map((c) => [c.cluster_id, c]));
+  const scored = findings.filter((f) => byCluster.has(f.cluster_id)).map((f) => ({ cluster: byCluster.get(f.cluster_id)!, finding: f }));
+  const seen = new Set(scored.map((s) => s.cluster.cluster_id));
+  const unscored = clusters.filter((c) => !seen.has(c.cluster_id)).map((c) => ({ cluster: c, finding: null }));
+  return [...scored, ...unscored];
+}
 
 const REFRESH_MS = 3000;
 
 /**
- * The live issues feed: one card per cluster (one broken thing across every affected session),
- * most recently active first. Refreshes every 3 s; a card flashes when it gains signals.
+ * The live feed: one card per issue (one broken thing across every affected session), ranked by the
+ * agent's findings (tier, then revenue at risk), with issues not yet scored at the end. Refreshes
+ * every 3 s; a card flashes when it gains signals.
  */
 export function IssuesPage() {
   const [clusters, setClusters] = useState<ClusterSummary[] | null>(null);
+  const [findings, setFindings] = useState<FindingSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const [bumped, setBumped] = useState<Set<string>>(new Set());
@@ -19,8 +31,8 @@ export function IssuesPage() {
   useEffect(() => {
     let alive = true;
     const load = () =>
-      fetchClusters().then(
-        (r) => {
+      Promise.all([fetchClusters(), fetchFindings().catch(() => ({ findings: [] as FindingSummary[] }))]).then(
+        ([r, f]) => {
           if (!alive) return;
           const changed = new Set<string>();
           for (const c of r.clusters) {
@@ -29,6 +41,7 @@ export function IssuesPage() {
             lastCounts.current.set(c.cluster_id, c.signal_count);
           }
           setClusters(r.clusters);
+          setFindings(f.findings);
           setBumped(changed);
           setUpdatedAt(Date.now());
           setError(null);
@@ -50,6 +63,10 @@ export function IssuesPage() {
 
   const sessions = clusters.reduce((n, c) => n + c.session_count, 0);
   const signals = clusters.reduce((n, c) => n + c.signal_count, 0);
+  const ranked = rankIssues(clusters, findings);
+  const estimated = findings.filter((f) => f.revenue.status === 'ok' && f.revenue.currency);
+  const currency = estimated[0]?.revenue.currency ?? null;
+  const atRisk = estimated.filter((f) => f.revenue.currency === currency).reduce((n, f) => n + f.revenue.revenue_at_risk_minor, 0);
 
   return (
     <>
@@ -72,6 +89,10 @@ export function IssuesPage() {
           <b>{signals}</b>
           <span>signals grouped</span>
         </div>
+        <div className="stat money">
+          <b>{estimated.length ? money(atRisk, currency) : '-'}</b>
+          <span>revenue at risk (synthetic)</span>
+        </div>
       </div>
 
       {clusters.length === 0 ? (
@@ -84,11 +105,20 @@ export function IssuesPage() {
         </div>
       ) : (
         <div className="issues">
-          {clusters.map((c) => (
+          {ranked.map(({ cluster: c, finding: f }) => (
             <a key={c.cluster_id} href={`#/issues/${c.cluster_id}`} className={`issue ${bumped.has(c.cluster_id) ? 'bump' : ''}`}>
               <div className="issue-main">
+                {f ? (
+                  <span className="tier" style={{ background: tierColor(f.tier) }}>
+                    {TIER_NAMES[f.tier] ?? f.tier}
+                  </span>
+                ) : (
+                  <span className="tier pending">scoring…</span>
+                )}{' '}
                 <span className={`kind ${c.kind}`}>{c.kind === 'invariant' ? 'Data rule' : 'Element'}</span>
-                <h3>{c.title}</h3>
+                {f?.status === 'suspect' && <span className="suspect">Needs review</span>}
+                <h3>{f?.title ?? c.title}</h3>
+                {f && f.title !== c.title && <p className="muted small detected">{c.title}</p>}
                 <div className="chips">
                   {Object.entries(c.detectors)
                     .sort((a, b) => b[1] - a[1])
@@ -109,6 +139,10 @@ export function IssuesPage() {
                 )}
               </div>
               <div className="issue-stats">
+                <div className="rar-cell">
+                  <b>{f ? (f.revenue.status === 'ok' ? money(f.revenue.revenue_at_risk_minor, f.revenue.currency) : '…') : '-'}</b>
+                  <span>at risk</span>
+                </div>
                 <div>
                   <b>{c.session_count}</b>
                   <span>sessions</span>

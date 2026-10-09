@@ -23,3 +23,40 @@ export function ago(ms: number, now: number = Date.now()): string {
 }
 
 export const time = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+/** Money in minor units, for example ₹35,000. Whole units unless the amount is small. */
+export function money(minor: number | null | undefined, currency: string | null | undefined): string {
+  if (typeof minor !== 'number') return '-';
+  const code = currency && /^[A-Z]{3}$/.test(currency) ? currency : undefined;
+  const digits = Math.abs(minor) < 100_00 ? 2 : 0;
+  return code
+    ? new Intl.NumberFormat('en-IN', { style: 'currency', currency: code, maximumFractionDigits: digits, minimumFractionDigits: 0 }).format(minor / 100)
+    : (minor / 100).toLocaleString('en-IN', { maximumFractionDigits: digits });
+}
+
+export const pct = (x: number | null | undefined) => (typeof x === 'number' ? `${Math.round(x * 100)}%` : '-');
+
+export const TIER_COLORS: Record<string, string> = { P0: '#dc2626', P1: '#ea580c', P2: '#ca8a04', P3: '#64748b' };
+export const TIER_NAMES: Record<string, string> = { P0: 'P0 · blocker', P1: 'P1 · pricing', P2: 'P2 · friction', P3: 'P3 · minor' };
+export const tierColor = (t: string) => TIER_COLORS[t] ?? '#64748b';
+
+export const CATEGORY_NAMES: Record<string, string> = {
+  checkout_blocker: 'Checkout blocker',
+  pricing_error: 'Pricing error',
+  broken_control: 'Broken control',
+  error_spike: 'Error spike',
+  other: 'Other',
+};
+
+/** The revenue-at-risk formula with this finding's numbers, as one line of text. */
+export function formulaLine(r: {
+  affected_with_cart: number;
+  avg_cart_value_minor: number | null;
+  abandonment_affected: number | null;
+  abandonment_baseline: number | null;
+  revenue_at_risk_minor: number;
+  currency: string | null;
+}): string {
+  const n = Number.isInteger(r.affected_with_cart) ? String(r.affected_with_cart) : r.affected_with_cart.toFixed(1);
+  return `${n} sessions × ${money(r.avg_cart_value_minor, r.currency)} × (${pct(r.abandonment_affected)} − ${pct(r.abandonment_baseline)}) = ${money(r.revenue_at_risk_minor, r.currency)}`;
+}

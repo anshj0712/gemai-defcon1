@@ -1,10 +1,8 @@
-import { gunzipSync } from 'node:zlib';
 import Fastify, { LogController, type FastifyBaseLogger, type FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { Logger } from '@cp/logger';
-import type { BlobStore, StateStore, WarehouseReader } from '@cp/platform';
-import { SAFE_ID, StoredChunk, TENANT_ID } from '@cp/schema';
-import { skewBySeq, stitchEvents, toMarkers, type ReplayPayload } from './replay.js';
+import { loadReplay, SessionTooLongError, type BlobStore, type ReplayPayload, type StateStore, type WarehouseReader } from '@cp/platform';
+import { compareFindings, SAFE_ID, TENANT_ID, type Finding, type FindingSummary } from '@cp/schema';
 
 export interface ApiDeps {
   logger: Logger;
@@ -33,6 +31,17 @@ const ClustersQuery = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });
 const ClusterParams = z.object({ id: z.string().regex(/^[0-9a-f]{20}$/) });
+const FindingsQuery = z.object({
+  tenant: z.string().regex(TENANT_ID).optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(100),
+});
+const TenantQuery = z.object({ tenant: z.string().regex(TENANT_ID).optional() });
+
+/** The feed leaves out the evidence pack and the run log; the detail endpoint has both. */
+function summarize(f: Finding): FindingSummary {
+  const { evidence: _e, runs: _r, ...rest } = f;
+  return rest;
+}
 const ClusterQuery = z.object({
   tenant: z.string().regex(TENANT_ID).optional(),
   /** How many affected sessions to list, newest first (the cluster keeps up to 5000). */
@@ -93,6 +102,56 @@ export function buildApi(deps: ApiDeps): FastifyInstance {
     return reply.header('cache-control', 'no-store').send({ cluster: { ...cluster, sessions }, synthetic: true });
   });
 
+  // Ranked findings (the agent service's hot copy): most urgent tier first, then score.
+  app.get('/v1/findings', async (req, reply) => {
+    const q = FindingsQuery.safeParse(req.query);
+    if (!q.success) return reply.code(400).send({ error: 'invalid_query' });
+    const tenant = q.data.tenant ?? deps.defaultTenant;
+    const findings = (await deps.state.listFindings(tenant, 200)).sort(compareFindings).slice(0, q.data.limit);
+    return reply.header('cache-control', 'no-store').send({ tenant, findings: findings.map(summarize), synthetic: true });
+  });
+
+  // One finding with its evidence pack, agent runs, and every stored version (bitemporal history).
+  app.get('/v1/findings/:id', async (req, reply) => {
+    const p = ClusterParams.safeParse(req.params);
+    const q = TenantQuery.safeParse(req.query);
+    if (!p.success || !q.success) return reply.code(400).send({ error: 'invalid_request' });
+    const tenant = q.data.tenant ?? deps.defaultTenant;
+    const finding = await deps.state.getFinding(tenant, p.data.id);
+    if (!finding) return reply.code(404).send({ error: 'finding_not_found' });
+    const rows = await deps.reader.findingVersions(tenant, p.data.id, Math.min(finding.first_seen, now() - deps.replayLookbackMs));
+    const versions = rows.map((r) => ({
+      version: typeof r.details?.version === 'number' ? r.details.version : null,
+      recorded_from: r.recorded_from,
+      recorded_to: r.recorded_to,
+      tier: r.severity,
+      status: r.status,
+      score: r.score,
+      revenue_at_risk_minor: r.revenue_at_risk_minor,
+      currency: r.currency,
+      affected_sessions: r.affected_sessions,
+      title: r.title,
+      model_version: r.model_version,
+      prompt_hash: r.prompt_hash,
+      rule_version: r.rule_version,
+    }));
+    return reply.header('cache-control', 'no-store').send({ finding, versions, synthetic: true });
+  });
+
+  // The frame the visual check looked at, rendered from the masked replay.
+  app.get('/v1/findings/:id/screenshot', async (req, reply) => {
+    const p = ClusterParams.safeParse(req.params);
+    const q = TenantQuery.safeParse(req.query);
+    if (!p.success || !q.success) return reply.code(400).send({ error: 'invalid_request' });
+    const tenant = q.data.tenant ?? deps.defaultTenant;
+    const finding = await deps.state.getFinding(tenant, p.data.id);
+    const uri = finding?.screenshot?.uri;
+    if (!uri) return reply.code(404).send({ error: 'screenshot_not_found' });
+    if (!uri.includes(`/screenshots/${tenant}/${p.data.id}/`)) return reply.code(404).send({ error: 'screenshot_not_found' });
+    const png = await deps.blob.get(uri);
+    return reply.header('cache-control', 'no-store').type('image/png').send(png);
+  });
+
   app.get('/v1/sessions/:id/replay', async (req, reply) => {
     const p = ReplayParams.safeParse(req.params);
     const q = ReplayQuery.safeParse(req.query);
@@ -101,35 +160,16 @@ export function buildApi(deps: ApiDeps): FastifyInstance {
     const sessionId = p.data.id;
     const started = now();
 
-    const rows = await deps.reader.rawChunks(tenant, sessionId, now() - deps.replayLookbackMs);
-    if (rows.length === 0) return reply.code(404).send({ error: 'session_not_found' });
-    if (rows.length > deps.maxReplayChunks) return reply.code(413).send({ error: 'session_too_long', chunks: rows.length });
-
-    const chunks = await Promise.all(
-      rows.map(async (r) => {
-        const stored = StoredChunk.parse(JSON.parse(gunzipSync(await deps.blob.get(r.gcs_uri)).toString('utf8')));
-        if (stored.tenant_id !== tenant) throw new Error('stored chunk belongs to another tenant');
-        return { seq: r.seq, stored };
-      }),
-    );
-    const signals = await deps.reader.signals({ tenantId: tenant, sessionId, sinceMs: now() - deps.replayLookbackMs, limit: 500 });
-    const first = rows[0]!;
-    const last = rows.at(-1)!;
-    const payload: ReplayPayload = {
-      session: {
-        session_id: sessionId,
-        tenant_id: tenant,
-        chunks: rows.length,
-        release: last.release,
-        route: last.route,
-        started_at: first.event_time_start,
-        ended_at: last.event_time_end,
-      },
-      events: stitchEvents(chunks),
-      markers: toMarkers(signals, skewBySeq(rows)),
-    };
+    let payload: ReplayPayload | null;
+    try {
+      payload = await loadReplay(deps, tenant, sessionId, { sinceMs: now() - deps.replayLookbackMs, maxChunks: deps.maxReplayChunks });
+    } catch (err) {
+      if (err instanceof SessionTooLongError) return reply.code(413).send({ error: 'session_too_long', chunks: err.chunks });
+      throw err;
+    }
+    if (!payload) return reply.code(404).send({ error: 'session_not_found' });
     req.log.info(
-      { tenant_id: tenant, session_id: sessionId, chunks: rows.length, event_count: payload.events.length, markers: payload.markers.length, ms: now() - started },
+      { tenant_id: tenant, session_id: sessionId, chunks: payload.session.chunks, event_count: payload.events.length, markers: payload.markers.length, ms: now() - started },
       'replay served',
     );
     // Replays hold (scrubbed) session content: never cache them.

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { BQ_TABLES } from '@cp/schema';
 import { loadInfraConfig } from '../src/config.js';
 import { describe as describeCmd, quoteForCmd } from '../src/gcloud.js';
-import { bindingArgs, bucketSpec, clustersIndexArgs, eventsRawSubscriptionSpec, projectBindings, resourceBindings, signalsSubscriptionSpec, tableSpec, viewSpecs } from '../src/resources.js';
+import { bindingArgs, bucketSpec, clustersIndexArgs, eventsRawSubscriptionSpec, findingsIndexArgs, projectBindings, resourceBindings, signalsSubscriptionSpec, tableSpec, viewSpecs } from '../src/resources.js';
 
 const cfg = loadInfraConfig({ GCP_PROJECT_ID: 'cp-test-proj', RAW_RETENTION_DAYS: '14' });
 
@@ -31,7 +31,7 @@ describe('resource specs', () => {
     expect(bucketSpec(cfg)).toMatchObject({
       location: 'asia-south1',
       iamConfiguration: { uniformBucketLevelAccess: { enabled: true }, publicAccessPrevention: 'enforced' },
-      lifecycle: { rule: [{ action: { type: 'Delete' }, condition: { age: 14, matchesPrefix: ['raw/'] } }] },
+      lifecycle: { rule: [{ action: { type: 'Delete' }, condition: { age: 14, matchesPrefix: ['raw/', 'screenshots/'] } }] },
     });
   });
 
@@ -129,6 +129,25 @@ describe('IAM', () => {
       '--role=roles/pubsub.publisher',
       '--quiet',
     ]);
+  });
+});
+
+describe('agent service IAM', () => {
+  const pubsubAgent = 'service-123@gcp-sa-pubsub.iam.gserviceaccount.com';
+  const agentRoles = (geminiSecret: boolean) =>
+    resourceBindings(cfg, pubsubAgent, { geminiSecret })
+      .filter((b) => b.member.includes('cp-agent'))
+      .map((b) => `${b.role} ${b.resource}`)
+      .sort();
+
+  it('reads raw chunks, writes screenshots, and reads the Gemini key only once it exists', () => {
+    expect(agentRoles(false)).toEqual(['roles/storage.objectCreator gs://cp-test-proj-cp-raw', 'roles/storage.objectViewer gs://cp-test-proj-cp-raw']);
+    expect(agentRoles(true)).toContain('roles/secretmanager.secretAccessor gemini-api-key');
+    expect(projectBindings(cfg).filter((b) => b.member.includes('cp-agent')).map((b) => b.role).sort()).toEqual(['roles/bigquery.jobUser', 'roles/datastore.user', 'roles/logging.logWriter']);
+  });
+
+  it('indexes findings by tenant, highest score first', () => {
+    expect(findingsIndexArgs(cfg, 'findings')).toContain('--field-config=field-path=score,order=descending');
   });
 });
 

@@ -81,6 +81,15 @@ export const FindingRow = z.object({
   rule_version: z.string(),
   model_version: z.string().nullable(),
   prompt_hash: z.string().nullable(),
+  /** Phase 3 additions (nullable, so infra can add them to an existing table in place). */
+  cluster_id: z.string().nullable(),
+  title: z.string().nullable(),
+  /** open | suspect (the visual check did not show the defect). */
+  status: z.string().nullable(),
+  score: z.number().nullable(),
+  input_hash: z.string().nullable(),
+  /** The agent outputs, priority decision, revenue inputs and run log for this version. */
+  details: json.nullable(),
   valid_from: ms,
   valid_to: ms.nullable(),
   recorded_from: ms,

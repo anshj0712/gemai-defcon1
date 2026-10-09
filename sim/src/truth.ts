@@ -130,3 +130,63 @@ export function evaluate(truth: GroundTruth, clusters: readonly ClusterLike[], m
 }
 
 export const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
+
+/** The parts of a finding the Phase 3 exit test reads (GET /v1/findings/:id). */
+export interface FindingLike {
+  finding_id: string;
+  cluster_id: string;
+  title: string;
+  tier: string;
+  status: string;
+  model_version: string;
+  triage: { summary: { text: string }; repro_steps: { step: string }[] } | null;
+  revenue: { status: string; revenue_at_risk_minor: number; currency: string | null; abandonment_affected: number | null; abandonment_baseline: number | null };
+  evidence: { id: string; kind: string; signal_id?: string; session_id?: string }[];
+}
+
+export interface FindingScore {
+  bug: Bug;
+  finding_id: string | null;
+  title: string | null;
+  tier: string | null;
+  summary: boolean;
+  repro_steps: number;
+  /** A signal evidence item whose session replay holds that signal's flag (checked by the caller). */
+  replay_link: { session_id: string; signal_id: string } | null;
+  revenue_status: string | null;
+  revenue_at_risk_minor: number | null;
+  currency: string | null;
+}
+
+/**
+ * Phase 3 exit test, per bug: its issue has a finding with an agent summary, at least two repro
+ * steps, and a signal evidence item that can open the replay at the flagged moment.
+ */
+export function evaluateFindings(bugs: readonly BugScore[], findings: ReadonlyMap<string, FindingLike>): { scores: FindingScore[]; failures: string[] } {
+  const failures: string[] = [];
+  const scores = bugs.map((b): FindingScore => {
+    const f = b.cluster_id ? findings.get(b.cluster_id) : undefined;
+    const link = f?.evidence.find((e) => e.kind === 'signal' && e.session_id && e.signal_id);
+    const score: FindingScore = {
+      bug: b.bug,
+      finding_id: f?.finding_id ?? null,
+      title: f?.title ?? null,
+      tier: f?.tier ?? null,
+      summary: Boolean(f?.triage?.summary.text),
+      repro_steps: f?.triage?.repro_steps.length ?? 0,
+      replay_link: link ? { session_id: link.session_id!, signal_id: link.signal_id! } : null,
+      revenue_status: f?.revenue.status ?? null,
+      revenue_at_risk_minor: f?.revenue.revenue_at_risk_minor ?? null,
+      currency: f?.revenue.currency ?? null,
+    };
+    if (!b.cluster_id) return score; // already a Phase 2 failure
+    if (!f) failures.push(`${b.bug}: its issue has no finding yet (is the agent service running?)`);
+    else {
+      if (!score.summary) failures.push(`${b.bug}: the finding has no agent summary`);
+      if (score.repro_steps < 2) failures.push(`${b.bug}: the finding has ${score.repro_steps} repro steps (want 2 or more)`);
+      if (!score.replay_link) failures.push(`${b.bug}: no evidence item links to a replay`);
+    }
+    return score;
+  });
+  return { scores, failures };
+}

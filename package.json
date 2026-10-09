@@ -28,7 +28,9 @@
     "build:sdk": "pnpm --filter @cp/sdk bundle",
     "e2e": "tsx --conditions=source sim/src/e2e-replay.ts",
     "sim": "tsx --conditions=source sim/src/sim.ts",
-    "sim:check": "tsx --conditions=source sim/src/check.ts"
+    "sim:check": "tsx --conditions=source sim/src/check.ts",
+    "deploy:agent": "tsx --conditions=source scripts/deploy.ts agent",
+    "dev:agent": "tsx watch --conditions=source apps/agent/src/index.ts"
   },
   "devDependencies": {
     "@cp/logger": "workspace:*",

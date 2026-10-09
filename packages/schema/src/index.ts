@@ -6,3 +6,4 @@ export * from './rows.js';
 export * from './bigquery.js';
 export * from './rules.js';
 export * from './clusters.js';
+export * from './findings.js';

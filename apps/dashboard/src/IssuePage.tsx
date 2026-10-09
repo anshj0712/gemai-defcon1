@@ -1,18 +1,24 @@
 import { useEffect, useState } from 'react';
-import type { Cluster } from '@cp/schema';
-import { fetchCluster } from './api';
+import type { Cluster, Finding } from '@cp/schema';
+import { fetchCluster, fetchFinding, type FindingVersionView } from './api';
+import { FindingPanel } from './FindingPanel';
 import { ago, symptomColor, symptomName, time } from './format';
 
-/** One issue: its symptoms, errors, and the affected sessions, each a click away from its replay. */
+/**
+ * One issue: its finding (revenue at risk, tier, the agents' analysis and visual check, each claim
+ * linked to its evidence) on top, then its symptoms, errors, and affected sessions, each a click away
+ * from its replay.
+ */
 export function IssuePage({ clusterId }: { clusterId: string }) {
   const [cluster, setCluster] = useState<Cluster | null>(null);
+  const [finding, setFinding] = useState<{ finding: Finding; versions: FindingVersionView[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
     const load = () =>
-      fetchCluster(clusterId).then(
-        (r) => alive && (setCluster(r.cluster), setError(null)),
+      Promise.all([fetchCluster(clusterId), fetchFinding(clusterId)]).then(
+        ([c, f]) => alive && (setCluster(c.cluster), setFinding(f), setError(null)),
         (e: Error) => alive && setError(e.message),
       );
     void load();
@@ -34,8 +40,14 @@ export function IssuePage({ clusterId }: { clusterId: string }) {
       <p>
         <a href="#/">← Issues</a>
       </p>
+      {finding ? (
+        <FindingPanel finding={finding.finding} versions={finding.versions} />
+      ) : (
+        <p className="notice">The agent service has not scored this issue yet. It does within a few seconds of the issue opening when <code>pnpm dev</code> is running.</p>
+      )}
+      <h2 className="section-title">Issue details</h2>
       <span className={`kind ${cluster.kind}`}>{cluster.kind === 'invariant' ? 'Data rule' : 'Element'}</span>
-      <h1 className="issue-title">{cluster.title}</h1>
+      <h3 className="issue-subtitle">{cluster.title}</h3>
       <p className="muted">
         <code>{cluster.anchor}</code> · {cluster.route} · first seen {time(cluster.first_seen)} · last seen {ago(cluster.last_seen)}
       </p>

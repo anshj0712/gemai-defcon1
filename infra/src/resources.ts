@@ -15,9 +15,12 @@ export function bucketSpec(cfg: InfraConfig): CreateBucketRequest {
   };
 }
 
-/** Raw chunks expire after the retention period (30 days by default, RAW_RETENTION_DAYS). */
+/**
+ * Raw chunks expire after the retention period (30 days by default, RAW_RETENTION_DAYS), and so do the
+ * screenshots the agent renders from them (they show the same, already masked, session content).
+ */
 export function lifecycleRule(cfg: InfraConfig) {
-  return { action: { type: 'Delete' as const }, condition: { age: cfg.retentionDays, matchesPrefix: ['raw/'] } };
+  return { action: { type: 'Delete' as const }, condition: { age: cfg.retentionDays, matchesPrefix: ['raw/', 'screenshots/'] } };
 }
 
 export function eventsRawSubscriptionSpec(cfg: InfraConfig): CreateSubscriptionOptions {
@@ -42,6 +45,15 @@ export function signalsSubscriptionSpec(cfg: InfraConfig): CreateSubscriptionOpt
 
 /** The issues feed query (tenant_id ==, order by last_seen desc) needs this composite index. */
 export function clustersIndexArgs(cfg: InfraConfig, collection: string): string[] {
+  return firestoreIndexArgs(cfg, collection, 'last_seen');
+}
+
+/** The findings feed query (tenant_id ==, order by score desc) needs this composite index. */
+export function findingsIndexArgs(cfg: InfraConfig, collection: string): string[] {
+  return firestoreIndexArgs(cfg, collection, 'score');
+}
+
+function firestoreIndexArgs(cfg: InfraConfig, collection: string, orderField: string): string[] {
   return [
     'firestore',
     'indexes',
@@ -50,7 +62,7 @@ export function clustersIndexArgs(cfg: InfraConfig, collection: string): string[
     `--collection-group=${collection}`,
     '--query-scope=COLLECTION',
     '--field-config=field-path=tenant_id,order=ascending',
-    '--field-config=field-path=last_seen,order=descending',
+    `--field-config=field-path=${orderField},order=descending`,
     `--database=${cfg.platform.firestoreDatabase}`,
     '--async',
   ];
@@ -71,8 +83,9 @@ export function viewSpecs(cfg: InfraConfig): { name: string; query: string }[] {
 }
 
 /** Least-privilege bindings on individual resources (gcloud arguments after the resource name). */
-export function resourceBindings(cfg: InfraConfig, pubsubAgent: string) {
+export function resourceBindings(cfg: InfraConfig, pubsubAgent: string, opts: { geminiSecret?: boolean } = {}) {
   const sa = (email: string) => `serviceAccount:${email}`;
+  const agent = sa(cfg.serviceAccounts.agent);
   return [
     { kind: 'topic', resource: cfg.topics.eventsRaw, member: sa(cfg.serviceAccounts.collector), role: 'roles/pubsub.publisher' },
     { kind: 'topic', resource: cfg.topics.signals, member: sa(cfg.serviceAccounts.processor), role: 'roles/pubsub.publisher' },
@@ -88,6 +101,11 @@ export function resourceBindings(cfg: InfraConfig, pubsubAgent: string) {
     { kind: 'secret', resource: cfg.secrets.siteKeys, member: sa(cfg.serviceAccounts.collector), role: 'roles/secretmanager.secretAccessor' },
     // Lets Pub/Sub mint OIDC tokens as the push identity when calling the private processor and clusterer.
     { kind: 'service-account', resource: cfg.serviceAccounts.pubsubPush, member: sa(pubsubAgent), role: 'roles/iam.serviceAccountTokenCreator' },
+    // The agent reads raw chunks to render the flagged moment and writes the screenshot next to them.
+    { kind: 'bucket', resource: `gs://${cfg.bucket}`, member: agent, role: 'roles/storage.objectViewer' },
+    { kind: 'bucket', resource: `gs://${cfg.bucket}`, member: agent, role: 'roles/storage.objectCreator' },
+    // Only once the Gemini key exists (it is optional until Phase 3 runs against Gemini).
+    ...(opts.geminiSecret ? [{ kind: 'secret' as const, resource: cfg.secrets.geminiApiKey, member: agent, role: 'roles/secretmanager.secretAccessor' as const }] : []),
   ] as const;
 }
 
@@ -100,6 +118,9 @@ export function projectBindings(cfg: InfraConfig) {
     { member: sa(cfg.serviceAccounts.processor), role: 'roles/datastore.user' },
     { member: sa(cfg.serviceAccounts.clusterer), role: 'roles/logging.logWriter' },
     { member: sa(cfg.serviceAccounts.clusterer), role: 'roles/datastore.user' },
+    { member: sa(cfg.serviceAccounts.agent), role: 'roles/logging.logWriter' },
+    { member: sa(cfg.serviceAccounts.agent), role: 'roles/bigquery.jobUser' },
+    { member: sa(cfg.serviceAccounts.agent), role: 'roles/datastore.user' },
   ];
 }
 

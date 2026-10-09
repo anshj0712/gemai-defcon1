@@ -239,6 +239,35 @@ Grounding and guardrails:
 - The visual check is the false-positive filter: render the frame from the replay at the signal time and ask Gemini whether the on-screen state actually shows the defect.
 - Each finding stores prompt hash, model id, and rule version so any verdict can be reproduced later.
 
+### Implemented (8 Oct, Phase 3): the agent service
+
+`apps/agent` is a Cloud Run service (local port 8084) that turns issues into versioned, ranked findings. Each pass, per tenant (`AGENT_TENANTS`), it reads the live issues, picks the ones due (new, or not re-scored for `AGENT_RESCORE_MS`; new and biggest first, at most `AGENT_MAX_PER_PASS`), and runs this pipeline (`src/pipeline.ts`):
+
+| Step | Kind | What it does |
+| --- | --- | --- |
+| Revenue at risk | code (`src/scoring/revenue.ts`) | Formula above, weighted by 1 / `sample_rate`, scaled past the cluster's session-list cap. A session counts once it has been idle `ABANDON_AFTER_IDLE_MS` (ordered or not, so early rates are not biased toward zero). Baseline: unaffected sessions with a cart that visited the issue's route, widened to all routes below `BASELINE_MIN_SESSIONS`. Never negative; `insufficient_data` until `RAR_MIN_AFFECTED` affected sessions have finished. |
+| Base tier | code (`src/scoring/priority.ts`) | The most urgent matching rule in the priority rule set (below). |
+| Evidence pack | code (`src/evidence.ts`) | E1 issue facts, E2.. up to five signals (detector facts, selector, release, primitive detector values), up to three error signatures, releases, impact numbers; for root cause, the screenshot. No session or signal ids, no node ids, no events, no HTML. |
+| Triage | ADK `LlmAgent`, `GEMINI_MODEL_BULK` | Title, category, confidence, summary, likely cause, repro steps. |
+| Screenshot | Playwright + rrweb replayer (`src/visual/screenshot.ts`) | Renders the stored, masked replay 600 ms after the flag, flagged element outlined in red, in a sandboxed iframe with the network off. Stored at `screenshots/{tenant}/{cluster}/{signal}.png` (same lifecycle rule as `raw/`). |
+| Root cause | ADK `LlmAgent`, `GEMINI_MODEL_REASONING`, image attached | Hypothesis, visual check (`confirmed`, `not_confirmed`, `unclear`, `not_checked`), notes, where to look first. `not_confirmed` marks the finding `suspect` (shown as "Needs review"); it is not dropped. |
+| Ranker | ADK `LlmAgent`, `GEMINI_MODEL_BULK` | Cites the priority rules that apply and may propose a one-tier move with a cited rule. |
+| Final tier and score | code | The move is applied only if the cited rule is known, cited, and its own tier supports the target. Score = revenue at risk (major units) x tier weight (P0 1, P1 0.75, P2 0.5, P3 0.25) x 1.5 for a release regression. The feed sorts by tier, then score. |
+
+How the agents run (`src/llm/run-agent.ts`): one `LlmAgent` per call with an `outputSchema` (zod, converted by ADK to Gemini structured output), `includeContents: 'none'`, no transfers, temperature 0, and the instruction passed as a function (ADK would otherwise read braces as state placeholders). The evidence is gathered by deterministic code before the call rather than through tool calls, which keeps the inputs auditable and the prompt hash meaningful. Every output passes the zod parse and the grounding validator (`src/grounding.ts`: unknown evidence ids, unknown priority rules, a visual verdict that does not cite the screenshot, a move without a cited rule); a rejected output is retried once with the validator's message, then the step fails closed and the finding keeps its deterministic title, tier and score. Rate limits and transient errors back off exponentially without spending the retry.
+
+Caching: the agents re-run only when the issue's `llm_key` changes: symptoms, error signatures, releases, fingerprints, the session count's power of two (1, 2, 4, 8, ...), the rule set, the models, or `PROMPT_VERSION`. Otherwise the previous analysis and the exact evidence pack it cites are kept, and only the scores are recomputed.
+
+Priority rule set (v1, `DEFAULT_PRIORITY_RULES`, override with `PRIORITY_RULES`): `checkout_blocker` P0 (element on /checkout or /payment with errors), `pricing_error` P1 (any data rule), `checkout_friction` P2 (element on /cart, /bag, /checkout, /payment), `browse_friction` P3 (everything else), `release_regression` (x1.5 when the issue's releases first appeared shortly before it and an older release exists). The service records the rules in the `rules` table (kind `builtin`, `definition.type = priority`) at startup; every finding carries the rule set's content hash.
+
+Without `GOOGLE_API_KEY` (`AGENT_LLM=auto`) both model tiers are an offline stand-in (`src/llm/offline.ts`): an ADK `BaseLlm` that composes grounded, templated answers from the evidence and never claims a visual check. Findings record its model id (`offline-stand-in`), and the dashboard says the text is templated. `AGENT_LLM=vertex` uses Gemini on Vertex AI with application default credentials.
+
+Storage: a finding is one per issue (`finding_id` = `cluster_id`). A new version row goes to the `findings` table only when the version hash changes (analysis, tier, score, status, priority decision, revenue, affected sessions); `valid_from` is the issue's first signal, `recorded_from` the pass time, and `recorded_to` comes from the `findings_versions` view. Phase 3 added nullable columns: `cluster_id`, `title`, `status`, `score`, `input_hash`, `details` (JSON: agent outputs, priority decision, revenue inputs, run log, evidence pack). The latest version also goes to Firestore `findings/{tenant}__{finding_id}` (gzipped payload, index tenant_id + score desc) for the feed.
+
+Triggering: a timer every `AGENT_POLL_MS` (default 5 s), or `POST /run`. On Cloud Run the agent is private, has one instance with CPU always allocated, and skips screenshots by default because the slim image has no browser (`pnpm deploy:agent`; set `AGENT_DEPLOY_VISUAL_CHECK=true` with an image that has Chromium). `src/agent.ts` exports `rootAgent` (the triage agent) for ADK's own tools.
+
+Tests use hand-written fixtures in Gemini's response shape (`apps/agent/test/fixtures`) and the offline stand-in; nothing calls Gemini. They have not been recorded from live Gemini yet, because no key was available when this was built. The screenshot test needs a browser: `CP_BROWSER_TESTS=chrome pnpm --filter @cp/agent test`.
+
 ## 6. Bitemporal search and retroactive re-scan
 
 Retroactive re-scan is the feature to demo: change or add a rule, re-run it over the past 30 days, and see which users were already hurt, without overwriting what the system believed at the time.
@@ -345,6 +374,29 @@ It refreshes every 3 s, and a card flashes when it gains signals. An issue page 
 | `GET /v1/clusters?tenant=&limit=` | Issues, newest activity first, without session lists |
 | `GET /v1/clusters/{id}?tenant=&sessions=` | One issue with up to `sessions` (default 200, max 5,000) session ids, newest first |
 
+**Findings (implemented 8 Oct, Phase 3).**
+
+| Endpoint | Returns |
+| --- | --- |
+| `GET /v1/findings?tenant=&limit=` | Latest finding per issue, most urgent tier first, then score, without evidence packs or run logs |
+| `GET /v1/findings/{id}?tenant=` | One finding with its evidence pack and agent runs, plus every stored version (`recorded_from`, derived `recorded_to`) |
+| `GET /v1/findings/{id}/screenshot?tenant=` | The PNG the visual check used. It is served only from that finding's own `screenshots/{tenant}/{id}/` prefix, with `no-store`. |
+
+The Issues feed is now ranked by finding: a tier badge, the agent's title, revenue at risk, and a "Needs review" flag for suspect findings. A total revenue-at-risk tile is labelled synthetic, and issues not yet scored come last.
+
+The issue page opens with the finding. It shows:
+
+- revenue at risk with the formula filled in;
+- the base tier, the rules behind it, and the ranker's reason;
+- the summary, repro steps, likely cause, and root-cause hypothesis;
+- the visual check with its screenshot;
+- the evidence list;
+- a reproducibility table (model, prompt hash, attempts, rule set) and the version history.
+
+Each claim carries evidence chips, and signal and screenshot chips open the replay at that moment. Offline stand-in output is labelled as templated.
+
+`pnpm sim:check` also runs the Phase 3 exit test. Each bug's issue must have a finding with an agent summary and at least two repro steps, and a signal evidence item whose replay contains that flag.
+
 Replay captions now cover every detector, for example "Rage clicks on button#place-order: 5 clicks in 2.2 s, 5 failed" or "Cart total doesn't match its line items: shows ₹9,715.50, expected ₹29,146.50" (from a synthetic sim session). Invariant markers outline the probe element (`[data-cp-probe="cart_total"]`).
 
 **Route per click.** A batch can span a navigation, so the normalizer tracks the current route (Meta loads and `cp.nav`) and stamps it on each click. dead_click (v1.2.0) fingerprints on the click's own route, not the route of the batch that decided it. The e2e check caught this: before the fix, the last clicks before navigating away got a different fingerprint.
@@ -396,11 +448,11 @@ Everything runs on Cloud Run plus managed data services, which satisfies the Cup
 
 | Need | GCP service | Notes |
 | --- | --- | --- |
-| Collector, processor, clusterer, agent, API | Cloud Run | One service each; the agent deploys with `npx adk deploy cloud_run` |
+| Collector, processor, clusterer, agent, API | Cloud Run | One service each; the agent deploys with `pnpm deploy:agent` (same image as the others) |
 | Event fan-out | Pub/Sub | Topics: events.raw (ordering key = session_id) and signals; subscriptions events.raw.processor and signals.clusterer, each with a dead-letter topic |
 | Raw chunks and Parquet cache | Cloud Storage | Per-tenant prefix, lifecycle rule for retention |
 | Signals, findings, rules, business events | BigQuery | Partitioned by event date, clustered by tenant_id and session_id |
-| Hot session tail, live issues, latest findings | Firestore | Session tail and markers with a TTL; `clusters` behind the live issues feed (composite index tenant_id, last_seen desc) |
+| Hot session tail, live issues, latest findings | Firestore | Session tail and markers with a TTL; `clusters` behind the live issues feed (composite index tenant_id, last_seen desc); `findings` (composite index tenant_id, score desc) |
 | Re-scan and rebuild work | Cloud Run Jobs | Started by the API; capped per run |
 | Dashboard hosting | Firebase Hosting | React and Vite build |
 | API keys and site keys | Secret Manager | Gemini key held here per the ADK Cloud Run docs |
@@ -466,7 +518,7 @@ The Cup's home page lists the building phase as 7 Sep to 18 Oct 2026, with submi
 | 23 to 25 Sep | 0. Foundations | Team registered, GCP project, monorepo, shared schema package, infra scripts for topics, bucket, and datasets, demo shop skeleton with bug flags | `infra` creates everything from scratch in one command |
 | 26 Sep to 1 Oct | 1. Vertical slice | SDK to collector to Pub/Sub to processor with one detector (dead_click) to BigQuery to a bare findings list | Clicking the broken button in the demo shop produces a signal row within a minute |
 | 2 to 7 Oct | 2. Detector set | rage_click, response_decay, error_correlation, probes and invariant_check; clusterer with fingerprints; Firestore live feed; `sim` generating a few hundred sessions | The three injected bugs each collapse into one cluster |
-| 8 to 12 Oct | 3. Agent layer | Triage, visual verification, revenue-at-risk score, priority rule set; finding detail page with replay at the signal moment | A finding shows a Gemini summary, repro steps, and a working replay link |
+| 8 to 12 Oct | 3. Agent layer | Triage, visual verification, revenue-at-risk score, priority rule set; finding detail page with replay at the signal moment (built 8 Oct; see section 5) | A finding shows a Gemini summary, repro steps, and a working replay link |
 | 13 to 15 Oct | 4. Bitemporal | Versioned findings, time-travel controls, plain-English rule author with dry run, fast-path retroactive re-scan | Adding a rule surfaces past sessions tagged found-later |
 | 16 to 17 Oct | 5. Harden and package | Final deploy to Cloud Run and Firebase, 3-minute video, deck, README, public repo cleanup | A fresh browser runs the whole demo with no console errors |
 | 18 Oct | Submit | Prototype link, video, public repo, deck | Submitted a day early if possible |

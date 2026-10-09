@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { appendFile, mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { BigQuery } from '@google-cloud/bigquery';
-import { BQ_TABLES, type RawChunkRow, type RowTypes, type SignalRow, type TableName } from '@cp/schema';
+import { BQ_TABLES, type BusinessEventRow, type FindingRow, type RawChunkRow, type RowTypes, type SignalRow, type TableName } from '@cp/schema';
 
 export interface InsertRow<T> {
   /** Deterministic id; BigQuery uses it for best-effort dedupe, local mode for exact dedupe. */
@@ -116,12 +116,72 @@ export interface SignalQuery {
   limit: number;
 }
 
-/** Read side of the warehouse, for the API. Every query is scoped to one tenant. */
+/** Business events whose value is the shopper's current cart (the latest one wins). */
+export const CART_EVENT_NAMES = ['cart_viewed', 'checkout_started', 'order_placed'] as const;
+export const ORDER_EVENT_NAME = 'order_placed';
+
+/**
+ * One session's commerce outcome, the input to revenue at risk (AGENTS.md rule 9). Built from the
+ * raw_chunks index and business_events only: no page content.
+ */
+export interface SessionOutcome {
+  session_id: string;
+  /** Batch routes the session visited. */
+  routes: string[];
+  releases: string[];
+  /** Valid time of the first and last stored batch. */
+  first_seen: number;
+  last_seen: number;
+  /** The SDK sampler's rate (null = not recorded, treat as 1). */
+  sample_rate: number | null;
+  /** Latest cart value seen (cart_viewed, checkout_started or order_placed), minor units. */
+  cart_value_minor: number | null;
+  currency: string | null;
+  ordered: boolean;
+}
+
+/** Most session outcomes one scoring pass reads. */
+export const MAX_OUTCOME_ROWS = 200_000;
+
+/** Read side of the warehouse, for the API and the agent service. Every query is scoped to one tenant. */
 export interface WarehouseReader {
   /** Newest first, one row per signal_id. */
   signals(q: SignalQuery): Promise<SignalRow[]>;
   /** A session's stored chunks in seq order, one row per seq. */
   rawChunks(tenantId: string, sessionId: string, sinceMs: number): Promise<RawChunkRow[]>;
+  /** Every session that stored a batch since `sinceMs`, with its cart and order outcome. */
+  sessionOutcomes(tenantId: string, sinceMs: number): Promise<SessionOutcome[]>;
+  /** Every stored version of one finding, oldest first, with `recorded_to` derived from the next version. */
+  findingVersions(tenantId: string, findingId: string, sinceMs: number): Promise<FindingRow[]>;
+}
+
+/** Fold raw chunk and business event rows into per-session outcomes (local mode, and tests). */
+export function foldOutcomes(chunks: readonly RawChunkRow[], business: readonly BusinessEventRow[]): SessionOutcome[] {
+  const by = new Map<string, SessionOutcome & { cart_at: number }>();
+  for (const c of chunks) {
+    let o = by.get(c.session_id);
+    if (!o) {
+      o = { session_id: c.session_id, routes: [], releases: [], first_seen: c.event_time_start, last_seen: c.event_time_end, sample_rate: c.sample_rate, cart_value_minor: null, currency: null, ordered: false, cart_at: -Infinity };
+      by.set(c.session_id, o);
+    }
+    if (!o.routes.includes(c.route)) o.routes.push(c.route);
+    if (!o.releases.includes(c.release)) o.releases.push(c.release);
+    o.first_seen = Math.min(o.first_seen, c.event_time_start);
+    o.last_seen = Math.max(o.last_seen, c.event_time_end);
+    if (c.sample_rate !== null && (o.sample_rate === null || c.sample_rate < o.sample_rate)) o.sample_rate = c.sample_rate;
+  }
+  const cartNames = new Set<string>(CART_EVENT_NAMES);
+  for (const b of business) {
+    const o = by.get(b.session_id);
+    if (!o) continue;
+    if (b.name === ORDER_EVENT_NAME) o.ordered = true;
+    if (cartNames.has(b.name) && b.value_minor !== null && b.event_time >= o.cart_at) {
+      o.cart_at = b.event_time;
+      o.cart_value_minor = b.value_minor;
+      o.currency = b.currency;
+    }
+  }
+  return [...by.values()].map(({ cart_at: _c, ...o }) => o);
 }
 
 /** Converts a BigQuery result row back to code types: TIMESTAMP -> epoch ms, INT64 -> number. */
@@ -179,6 +239,62 @@ export class BigQueryWarehouseReader implements WarehouseReader {
     });
     return (rows as Record<string, unknown>[]).map((r) => fromBigQueryRow('raw_chunks', r));
   }
+
+  async sessionOutcomes(tenantId: string, sinceMs: number): Promise<SessionOutcome[]> {
+    const [rows] = await this.bq.query({
+      query: `WITH chunks AS (
+                SELECT session_id, ARRAY_AGG(DISTINCT route) AS routes, ARRAY_AGG(DISTINCT release) AS releases,
+                       MIN(event_time_start) AS first_seen, MAX(event_time_end) AS last_seen, MIN(sample_rate) AS sample_rate
+                FROM ${this.table('raw_chunks')}
+                WHERE tenant_id = @tenant AND event_time_start >= TIMESTAMP_MILLIS(@since)
+                GROUP BY session_id
+              ), biz AS (
+                SELECT session_id,
+                       ARRAY_AGG(IF(name IN UNNEST(@cart_names) AND value_minor IS NOT NULL, STRUCT(value_minor, currency), NULL)
+                                 IGNORE NULLS ORDER BY event_time DESC LIMIT 1)[SAFE_OFFSET(0)] AS cart,
+                       LOGICAL_OR(name = @order_name) AS ordered
+                FROM ${this.table('business_events')}
+                WHERE tenant_id = @tenant AND event_time >= TIMESTAMP_MILLIS(@since)
+                GROUP BY session_id
+              )
+              SELECT c.session_id, c.routes, c.releases, UNIX_MILLIS(c.first_seen) AS first_seen, UNIX_MILLIS(c.last_seen) AS last_seen,
+                     c.sample_rate, b.cart.value_minor AS cart_value_minor, b.cart.currency AS currency, IFNULL(b.ordered, FALSE) AS ordered
+              FROM chunks AS c LEFT JOIN biz AS b USING (session_id)
+              LIMIT @max_rows`,
+      params: { tenant: tenantId, since: Math.floor(sinceMs), cart_names: [...CART_EVENT_NAMES], order_name: ORDER_EVENT_NAME, max_rows: MAX_OUTCOME_ROWS },
+      maximumBytesBilled: MAX_BYTES_BILLED,
+    });
+    return (rows as Record<string, unknown>[]).map((r) => ({
+      session_id: String(r.session_id),
+      routes: (r.routes as string[] | null) ?? [],
+      releases: (r.releases as string[] | null) ?? [],
+      first_seen: Number(r.first_seen),
+      last_seen: Number(r.last_seen),
+      sample_rate: r.sample_rate === null || r.sample_rate === undefined ? null : Number(r.sample_rate),
+      cart_value_minor: r.cart_value_minor === null || r.cart_value_minor === undefined ? null : Number(r.cart_value_minor),
+      currency: (r.currency as string | null | undefined) ?? null,
+      ordered: r.ordered === true,
+    }));
+  }
+
+  async findingVersions(tenantId: string, findingId: string, sinceMs: number): Promise<FindingRow[]> {
+    const [rows] = await this.bq.query({
+      query: `SELECT * FROM ${this.table('findings_versions')}
+              WHERE tenant_id = @tenant AND finding_id = @finding AND valid_from >= TIMESTAMP_MILLIS(@since)
+              ORDER BY recorded_from LIMIT 500`,
+      params: { tenant: tenantId, finding: findingId, since: Math.floor(sinceMs) },
+      maximumBytesBilled: MAX_BYTES_BILLED,
+      parseJSON: true,
+    });
+    return (rows as Record<string, unknown>[]).map((r) => {
+      const row = fromBigQueryRow('findings', r);
+      const derived = r.recorded_to_derived;
+      if (row.recorded_to === null && derived !== null && derived !== undefined) {
+        row.recorded_to = Date.parse(typeof derived === 'object' && 'value' in derived ? String((derived as { value: unknown }).value) : String(derived));
+      }
+      return row;
+    });
+  }
 }
 
 export class LocalWarehouseReader implements WarehouseReader {
@@ -202,5 +318,19 @@ export class LocalWarehouseReader implements WarehouseReader {
       bySeq.set(r.seq, row);
     }
     return [...bySeq.values()].sort((a, b) => a.seq - b.seq);
+  }
+
+  async sessionOutcomes(tenantId: string, sinceMs: number): Promise<SessionOutcome[]> {
+    const chunks = ((await this.store.rows('raw_chunks')) as unknown as RawChunkRow[]).filter((r) => r.tenant_id === tenantId && r.event_time_start >= sinceMs);
+    const business = ((await this.store.rows('business_events')) as unknown as BusinessEventRow[]).filter((r) => r.tenant_id === tenantId && r.event_time >= sinceMs);
+    return foldOutcomes(chunks, business).slice(0, MAX_OUTCOME_ROWS);
+  }
+
+  async findingVersions(tenantId: string, findingId: string, sinceMs: number): Promise<FindingRow[]> {
+    const rows = ((await this.store.rows('findings')) as unknown as (FindingRow & { _insert_id?: string })[])
+      .filter((r) => r.tenant_id === tenantId && r.finding_id === findingId && r.valid_from >= sinceMs)
+      .map(({ _insert_id: _id, ...row }) => row)
+      .sort((a, b) => a.recorded_from - b.recorded_from);
+    return rows.map((r, i) => ({ ...r, recorded_to: r.recorded_to ?? rows[i + 1]?.recorded_from ?? null }));
   }
 }

@@ -4,7 +4,7 @@ Finds friction and silent data bugs in checkout sessions recorded with rrweb, an
 
 **All demo data is synthetic.** Sessions come from the test kit and the simulator, never from real shoppers.
 
-## What runs today (Phase 2: detectors, live issues, simulator)
+## What runs today (Phase 3: agents, revenue at risk, ranked findings)
 
 ```text
 SDK batch ──POST /v1/ingest──> collector ──raw chunk──> Cloud Storage (immutable)
@@ -15,9 +15,23 @@ SDK batch ──POST /v1/ingest──> collector ──raw chunk──> Cloud St
                                                                    ├──> Firestore session tail (+ detector state)
                                                                    └──> Pub/Sub signals ──push──> clusterer
                                                                                                     └──> Firestore issues
-API (:8082) ──> dashboard (:5174): live Issues feed, issue pages, signals, session replay with the flagged moment
+                                                                                                    └──> agent (:8084, ADK + Gemini): revenue at risk,
+                                                                                                         priority tier, triage, screenshot + root cause,
+                                                                                                         ranker -> findings: BigQuery (versions) + Firestore
+API (:8082) ──> dashboard (:5174): ranked findings, finding pages with evidence-linked analysis, signals, session replay
 Logs: pretty in your terminal, structured JSON on Cloud Run -> Cloud Logging, `pnpm logs:tail` back to your terminal.
 ```
+
+The agent service scores every issue as a finding:
+
+- Revenue at risk is computed in code: affected sessions with a cart × average cart × (abandonment of affected sessions − abandonment of baseline sessions).
+- A priority tier comes from a versioned rule set: checkout blocker P0, pricing error P1, bag or checkout friction P2, browse friction P3.
+- Three ADK agents explain each finding:
+  - triage: summary and repro steps;
+  - root cause: checks a screenshot of the masked replay at the flagged moment;
+  - ranker: may move the tier by at most one step, citing a rule.
+
+Every claim must cite evidence ids the agents were given. Without `GOOGLE_API_KEY`, an offline stand-in writes templated text so the demo still runs end to end, and the dashboard labels that text as templated.
 
 The clusterer turns many sessions into one issue per broken thing. All the symptoms of one control (dead clicks, rage clicks, "stopped responding", and the errors just before them) share an issue keyed by route and element. Data-rule violations share an issue keyed by rule.
 
@@ -30,7 +44,7 @@ The clusterer turns many sessions into one issue per broken thing. All the sympt
 
 ```powershell
 pnpm install
-pnpm dev      # collector :8080, processor :8081, api :8082, clusterer :8083, shop :5173, dashboard :5174; one merged log stream
+pnpm dev      # collector :8080, processor :8081, api :8082, clusterer :8083, agent :8084, shop :5173, dashboard :5174; one merged log stream
 pnpm smoke    # in a second terminal: sends a synthetic Apply Coupon session, waits for dead_click signals
 ```
 
@@ -92,7 +106,9 @@ It writes the ground truth to `sim/out/ground-truth.json`, recording for each se
 - no clean session is in any issue;
 - there are no stray issues.
 
-It also prints abandonment for affected and baseline shoppers. Those rates are synthetic by design, and Phase 3 turns them into revenue at risk.
+It also prints abandonment for affected and baseline shoppers, and runs the Phase 3 exit test. Each bug's issue must have a finding with an agent summary and at least two repro steps, and a replay link that opens the flagged moment. It then prints each finding's tier and revenue at risk. Those rates are synthetic by design.
+
+Revenue at risk counts a session once it has been idle for `ABANDON_AFTER_IDLE_MS`, which is 2 minutes in the demo. Run `sim:check` about two minutes after `pnpm sim` ends to see the estimates.
 
 ## 2. Your laptop against real GCP: supply the keys
 
@@ -101,7 +117,7 @@ It also prints abandonment for affected and baseline shoppers. Those rates are s
    - `GCP_PROJECT_ID`: your project id.
    - `GCP_REGION`: default `asia-south1`.
    - `SITE_KEYS`: the SDK keys you accept, e.g. `{"pk_test_demo":"demo"}`.
-   - `GOOGLE_API_KEY`: optional now, used from Phase 3 (Gemini).
+   - `GOOGLE_API_KEY`: Gemini for the agent service. Without it, the agents run an offline stand-in.
 3. Authenticate. Either run `gcloud auth login` and then `gcloud auth application-default login`, or set `GOOGLE_APPLICATION_CREDENTIALS` to a service-account key stored outside the repo.
 4. `pnpm infra:up` (add `-- --dry-run` to preview). This creates everything in one region and is safe to re-run:
    - APIs and the Artifact Registry
@@ -121,6 +137,7 @@ It also prints abandonment for affected and baseline shoppers. Those rates are s
 pnpm deploy:collector            # build + test gate, Cloud Build image, Cloud Run (public; site-key auth)
 pnpm deploy:processor            # private; switches events.raw.processor to authenticated push
 pnpm deploy:clusterer            # private; switches signals.clusterer to authenticated push
+pnpm deploy:agent                # private; one always-on instance; Gemini key from Secret Manager; no screenshots (no browser in the image)
 pnpm smoke -- --collector https://cp-collector-....run.app
 pnpm logs:tail                   # stream the services' Cloud Logging entries into your terminal
 pnpm logs:tail -- --service processor --since 1h
@@ -136,14 +153,14 @@ Each deploy prints a Logs Explorer link. Services scale to zero by default. Use 
 | `pnpm build` | Compile every package (`tsc -b`) |
 | `pnpm typecheck` | Build plus type-check tests and scripts |
 | `pnpm test` | All unit tests (Vitest); `pnpm --filter @cp/detectors test` for one package |
-| `pnpm dev` | Collector, processor, clusterer, API, demo shop (:5173), and dashboard (:5174), with watch mode and merged logs |
+| `pnpm dev` | Collector, processor, clusterer, agent, API, demo shop (:5173), and dashboard (:5174), with watch mode and merged logs |
 | `pnpm e2e` | Real-browser check: shop -> signals -> one issue -> replay pinpoints the dead click (screenshots in `sim/out/`) |
 | `pnpm sim` | Synthetic shoppers with ground truth (`-- --sessions 300 --seed 42 --concurrency 8`) |
-| `pnpm sim:check` | Phase 2 exit test: scores the issues against the last run's ground truth |
+| `pnpm sim:check` | Phase 2 and 3 exit tests: scores the issues against the last run's ground truth, then checks each bug's finding |
 | `pnpm build:sdk` | Build the one-tag SDK bundle (`apps/sdk/bundle/cp-sdk.js`) |
 | `pnpm smoke` | Phase 1 exit test on a synthetic session |
 | `pnpm infra:up` | Create or update all GCP resources (`-- --dry-run` to preview) |
-| `pnpm deploy:collector`, `deploy:processor`, `deploy:clusterer` | Deploy to Cloud Run (`-- --min 1`, `--skip-tests`, `--dry-run`) |
+| `pnpm deploy:collector`, `deploy:processor`, `deploy:clusterer`, `deploy:agent` | Deploy to Cloud Run (`-- --min 1`, `--skip-tests`, `--dry-run`) |
 | `pnpm logs:tail` | Stream Cloud Logging into the terminal (`--service`, `--source cloud_run\|local`, `--since 10m`) |
 | `pnpm clean` | Delete local-mode data |
 
@@ -152,4 +169,4 @@ Each deploy prints a Logs Explorer link. Services scale to zero by default. Use 
 - **Nothing sensitive is stored.** The collector scrubs every batch again before storing it: emails, phone numbers, card-like digit runs, every input `value` (hidden inputs included), typed text, textarea contents, and URL query strings.
 - **Probes send numbers, not text.** The cart total, line totals, discount, and quantities are parsed to numbers in the browser; only allowlisted probe selectors are read.
 - **Logs carry no payloads.** They hold ids, counts, timings, detectors, fingerprints and selectors only, and a redaction list censors payload keys as a backstop.
-- **Gemini sees no raw sessions.** From Phase 3 it receives structured evidence only.
+- **Gemini sees no raw sessions.** It receives structured evidence only (detector facts, selectors, error signatures, numbers; no session ids, events, or HTML), plus one screenshot rendered from the already-masked replay with the network off.

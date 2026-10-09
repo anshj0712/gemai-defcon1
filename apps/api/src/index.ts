@@ -31,7 +31,7 @@ async function main(): Promise<void> {
     maxReplayChunks: e.MAX_REPLAY_CHUNKS,
   });
   await app.listen({ port: e.API_PORT, host: e.API_HOST });
-  logger.info({ mode: pc.mode, port: e.API_PORT, tenant: e.API_DEFAULT_TENANT }, `api ready: http://localhost:${e.API_PORT}/v1/signals`);
+  logger.info({ mode: pc.mode, port: e.API_PORT, tenant: e.API_DEFAULT_TENANT }, `api ready: http://localhost:${e.API_PORT}/v1/findings`);
 
   const shutdown = async () => {
     await app.close();

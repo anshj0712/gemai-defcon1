@@ -1,0 +1,12 @@
+{
+  "title": "Apply Coupon stops working after five presses on /cart",
+  "category": "broken_control",
+  "confidence": 0.86,
+  "summary": { "text": "Shoppers press Apply Coupon on the bag page and, after it has worked a few times, nothing happens: no discount, no message.", "evidence_ids": ["E1", "E2", "E8"] },
+  "likely_cause": { "text": "The coupon handler stops reacting after repeated use: no DOM change, navigation, or request follows the later presses.", "evidence_ids": ["E2", "E3"] },
+  "repro_steps": [
+    { "step": "Add an item to the bag and open /cart.", "evidence_ids": ["E1"] },
+    { "step": "Type a coupon code and press Apply Coupon six or more times, about a second apart.", "evidence_ids": ["E2", "E3"] },
+    { "step": "From the sixth press on, the button does nothing.", "evidence_ids": ["E3"] }
+  ]
+}

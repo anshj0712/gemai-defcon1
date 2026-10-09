@@ -36,6 +36,9 @@
     },
     {
       "path": "apps/clusterer"
+    },
+    {
+      "path": "apps/agent"
     }
   ]
 }
