@@ -48,5 +48,11 @@ function mockApi(): Plugin {
 export default defineConfig({
   plugins: [mockApi()],
   resolve: { conditions: ['source'] },
-  server: { port: 5173, strictPort: true, host: '127.0.0.1' },
+  server: {
+    port: 5173,
+    strictPort: true,
+    host: '127.0.0.1',
+    // Which bugs are live is set on the dashboard and kept by the API, so the shop asks it (no CORS).
+    proxy: { '/v1/demo': 'http://127.0.0.1:8082' },
+  },
 });

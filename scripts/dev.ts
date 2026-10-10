@@ -53,7 +53,7 @@ process.stdout.write(
     ...(backendOnly
       ? []
       : [
-          '  shop       http://localhost:5173/?bugs=dead_button   (click Apply Coupon 6+ times)',
+          '  shop       http://localhost:5173/?bugs=dead_button   (click Apply Coupon 4+ times)',
           '  dashboard  http://localhost:5174                     (ranked findings, issues, signals, session replay)',
           '  simulate   pnpm sim -- --sessions 100, then pnpm sim:check',
         ]),

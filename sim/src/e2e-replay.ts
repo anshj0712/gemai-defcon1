@@ -5,7 +5,7 @@ import { arg, flushSdk, launchBrowser, moveAndClick, requireServices, say, sessi
 /**
  * `pnpm e2e`: the replay check on a real browser (installed Chrome, throwaway profile).
  * A synthetic shopper uses the demo shop with the dead_button bug on, then the run asserts that:
- *   1. exactly two dead_click signals land on button#apply-coupon (clicks 6 and 7),
+ *   1. exactly two dead_click signals land on button#apply-coupon (clicks 4 and 5),
  *   2. the stitched replay has a full snapshot and both flags,
  *   3. nothing the shopper typed (name, email, phone, address, card) is in the stored session,
  *   4. the session joins exactly one issue (cluster), about that button,
@@ -77,7 +77,7 @@ async function main(): Promise<void> {
     await moveAndClick(shop, '[data-testid="toast-view-bag"]');
     await shop.waitForSelector('#apply-coupon');
     await typeInto(shop, '#coupon-code', 'SAVE10');
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 5; i++) {
       await moveAndClick(shop, '#apply-coupon');
       await shop.waitForTimeout(1300);
     }

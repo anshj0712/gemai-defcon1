@@ -21,7 +21,7 @@ You own `apps/api`, `apps/dashboard`, `apps/demo-shop`, and `sim/`. Use the `see
 
 ## Demo shop and simulator
 
-- Bug flags: `BUG_DEAD_BUTTON` (Apply Coupon stops responding after the fifth click), `BUG_CART_TOTAL` (total ignores quantity on one line when a discount applies), `BUG_CHECKOUT_ERROR` (payment step throws a JS error and a 500 for one region).
+- Bug flags: `BUG_DEAD_BUTTON` (Apply Coupon stops responding after the third click), `BUG_CART_TOTAL` (total leaves out the last item when a discount applies to a bag of 2+ items), `BUG_CHECKOUT_ERROR` (payment step throws a JS error and a 500 for one region).
 - The simulator produces several hundred varied sessions, writes ground truth for every seeded bug, and uses abandonment rates that are parameters we chose. Say so in the UI, README, and video.
 
 Report back in under 200 words: files changed, tests run and results, screenshots or URLs to check if relevant, and open questions.

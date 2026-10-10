@@ -7,9 +7,9 @@ import { icons } from './icons';
 
 /**
  * STRIDE: a synthetic store for exercising the pipeline (all data is made up). Three bugs can be
- * switched on with `?bugs=dead_button,cart_total,checkout_error` or the Demo controls dock:
- *   dead_button     Apply Coupon silently stops responding after the fifth click
- *   cart_total      with a discount applied, the total ignores the first line's quantity
+ * switched on with `?bugs=dead_button,cart_total,checkout_error` or from the dashboard (localhost:5174):
+ *   dead_button     Apply Coupon silently stops responding after the third click
+ *   cart_total      with a discount applied and 2+ items in the bag (same shoe or different), the total skips the last item
  *   checkout_error  the Northeast region gets a 500 and a JS error at payment
  *
  * Rule for this file: every clickable element must visibly do something (navigate, change the
@@ -31,12 +31,35 @@ const BUG_NAMES = ['dead_button', 'cart_total', 'checkout_error'] as const;
 type Bug = (typeof BUG_NAMES)[number];
 const isBug = (s: string): s is Bug => (BUG_NAMES as readonly string[]).includes(s);
 
+// The original fetch, taken before the SDK wraps it: polling the dashboard switch must not be recorded,
+// or a poll landing just after a click would look like that click's response and hide a dead click.
+const rawFetch = window.fetch.bind(window);
+
+/** An explicit ?bugs= in the URL (the simulator and e2e use it, even empty) wins for that tab. */
 function loadBugs(): Set<Bug> {
   const fromUrl = new URLSearchParams(location.search).get('bugs');
   if (fromUrl !== null) sessionStorage.setItem('demo_bugs', fromUrl);
   return new Set((sessionStorage.getItem('demo_bugs') ?? '').split(',').filter(isBug));
 }
 const bugs = loadBugs();
+const tabOverride = sessionStorage.getItem('demo_bugs') !== null;
+
+/** Otherwise the dashboard (localhost:5174) decides which bugs are live; follow it every 2 s. */
+async function followDashboardBugs(): Promise<void> {
+  if (tabOverride) return;
+  try {
+    const res = await rawFetch('/v1/demo/bugs', { cache: 'no-store' });
+    if (!res.ok) return;
+    const body = (await res.json()) as { bugs?: unknown };
+    const live = Array.isArray(body.bugs) ? body.bugs.filter((b): b is Bug => typeof b === 'string' && isBug(b)) : [];
+    bugs.clear();
+    for (const b of live) bugs.add(b);
+  } catch {
+    // The API is not running: keep the current set.
+  }
+}
+void followDashboardBugs();
+setInterval(() => void followDashboardBugs(), 2000);
 
 const DASHBOARD_URL = import.meta.env.VITE_CP_DASHBOARD ?? 'http://localhost:5174';
 const cp = init({
@@ -91,10 +114,11 @@ function persist(): void {
 function totals(): { subtotal: number; discount: number; total: number } {
   const subtotal = state.bag.reduce((sum, l) => sum + productById(l.id)!.price_minor * l.qty, 0);
   const discount = Math.round((subtotal * state.discountPct) / 100);
-  const first = state.bag[0];
-  if (bugs.has('cart_total') && state.discountPct > 0 && first) {
-    // BUG cart_total: when a discount applies, the first line's quantity is ignored.
-    const wrongSubtotal = subtotal - productById(first.id)!.price_minor * (first.qty - 1);
+  const units = state.bag.reduce((n, l) => n + l.qty, 0);
+  const last = state.bag[state.bag.length - 1];
+  if (bugs.has('cart_total') && state.discountPct > 0 && units >= 2 && last) {
+    // BUG cart_total: with a discount and 2+ items in the bag, the last item is left out of the total.
+    const wrongSubtotal = subtotal - productById(last.id)!.price_minor;
     return { subtotal, discount, total: wrongSubtotal - Math.round((wrongSubtotal * state.discountPct) / 100) };
   }
   return { subtotal, discount, total: subtotal - discount };
@@ -318,8 +342,8 @@ function renderBag(): void {
 
 async function applyCoupon(): Promise<void> {
   state.couponClicks += 1;
-  // BUG dead_button: after the fifth click the handler silently does nothing (no request, no DOM change).
-  if (bugs.has('dead_button') && state.couponClicks > 5) return;
+  // BUG dead_button: after the third click the handler silently does nothing (no request, no DOM change).
+  if (bugs.has('dead_button') && state.couponClicks > 3) return;
 
   const input = document.getElementById('coupon-code') as HTMLInputElement;
   const msg = document.getElementById('coupon-msg')!;
@@ -438,10 +462,10 @@ function renderHelp(): void {
       <h2>Where do I see the replay of my session?</h2>
       <p>Open <strong>Demo controls</strong> (bottom left) and press <strong>Watch this session's replay</strong>. Flagged sessions are also listed on the <a class="underline" href="${DASHBOARD_URL}" target="_blank" rel="noopener">dashboard</a>. Replays update about every 5 seconds as your session uploads.</p>
       <h2>Trying the bugs</h2>
-      <p>Switch them on in Demo controls, or open the store with <code>?bugs=dead_button</code>.</p>
+      <p>Switch them on in the dashboard (localhost:5174, top bar), or open the store with <code>?bugs=dead_button</code>.</p>
       <ul>
-        <li><strong>dead_button</strong>: in your Bag, type SAVE10 and press Apply Coupon 6+ times, about a second apart. From the 6th press it silently does nothing; those presses are flagged as dead clicks.</li>
-        <li><strong>cart_total</strong>: add 2 of one shoe, apply SAVE10, and the total ignores the first item's quantity.</li>
+        <li><strong>dead_button</strong>: in your Bag, type SAVE10 and press Apply Coupon 4+ times, about a second apart. From the 4th press it silently does nothing; those presses are flagged as dead clicks.</li>
+        <li><strong>cart_total</strong>: put 2 or more items in the bag (2 of one shoe, or two different shoes), apply SAVE10, and the total leaves out the last item.</li>
         <li><strong>checkout_error</strong>: choose region Northeast at checkout and Place Order fails.</li>
       </ul>
       <h2>Privacy</h2>
@@ -686,16 +710,5 @@ demoPanel.addEventListener('click', (e) => {
     navigate(link.getAttribute('href') ?? '/');
   }
 });
-for (const box of document.querySelectorAll<HTMLInputElement>('input[data-bug]')) {
-  const bug = box.dataset.bug ?? '';
-  box.checked = isBug(bug) && bugs.has(bug);
-  box.addEventListener('change', () => {
-    if (!isBug(bug)) return;
-    if (box.checked) bugs.add(bug);
-    else bugs.delete(bug);
-    sessionStorage.setItem('demo_bugs', [...bugs].join(','));
-  });
-}
-
 render();
 refreshDemoPanel();

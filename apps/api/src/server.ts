@@ -2,6 +2,7 @@ import Fastify, { LogController, type FastifyBaseLogger, type FastifyInstance } 
 import { z } from 'zod';
 import type { Logger } from '@cp/logger';
 import { loadReplay, SessionTooLongError, type BlobStore, type ReplayPayload, type StateStore, type WarehouseReader } from '@cp/platform';
+import { DEMO_BUGS, isDemoBug, type DemoBugStore } from './demo-bugs.js';
 import { compareFindings, SAFE_ID, TENANT_ID, type Finding, type FindingSummary } from '@cp/schema';
 
 export interface ApiDeps {
@@ -11,6 +12,8 @@ export interface ApiDeps {
   /** The live issues feed (clusters) lives in the state store. */
   state: StateStore;
   defaultTenant: string;
+  /** Local mode only: which bugs the demo shop has switched on. Absent on GCP, which hides the routes. */
+  demoBugs?: DemoBugStore;
   signalsLookbackMs: number;
   replayLookbackMs: number;
   maxReplayChunks: number;
@@ -35,6 +38,7 @@ const FindingsQuery = z.object({
   tenant: z.string().regex(TENANT_ID).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(100),
 });
+const DemoBugsBody = z.object({ bugs: z.array(z.string()).max(DEMO_BUGS.length) });
 const TenantQuery = z.object({ tenant: z.string().regex(TENANT_ID).optional() });
 
 /** The feed leaves out the evidence pack and the run log; the detail endpoint has both. */
@@ -67,6 +71,18 @@ export function buildApi(deps: ApiDeps): FastifyInstance {
   });
 
   app.get('/healthz', async () => ({ ok: true, service: 'api' }));
+
+  // Demo shop bug switches (local mode only). The dashboard writes them, the shop reads them.
+  const demoBugs = deps.demoBugs;
+  if (demoBugs) {
+    const view = (live: readonly string[]) => ({ bugs: live, known: DEMO_BUGS, synthetic: true });
+    app.get('/v1/demo/bugs', async (_req, reply) => reply.header('cache-control', 'no-store').send(view(demoBugs.read())));
+    app.put('/v1/demo/bugs', async (req, reply) => {
+      const body = DemoBugsBody.safeParse(req.body);
+      if (!body.success || !body.data.bugs.every(isDemoBug)) return reply.code(400).send({ error: 'invalid_bugs' });
+      return reply.header('cache-control', 'no-store').send(view(demoBugs.write(body.data.bugs.filter(isDemoBug))));
+    });
+  }
 
   app.get('/v1/signals', async (req, reply) => {
     const q = SignalsQuery.safeParse(req.query);

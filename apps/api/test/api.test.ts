@@ -8,6 +8,7 @@ import { LocalBlobStore, LocalStateStore, LocalWarehouse, LocalWarehouseReader }
 import type { Cluster, Finding, FindingRow, RawChunkRow, SignalRow, StoredChunk } from '@cp/schema';
 import { applyCouponScenario, toEnvelopes } from '@cp/testkit';
 import { describe as caption, formatMoney, skewBySeq, stitchEvents, toMarkers } from '../src/replay.js';
+import { createFileDemoBugStore } from '../src/demo-bugs.js';
 import { buildApi } from '../src/server.js';
 
 const T0 = 1_790_000_000_000;
@@ -269,5 +270,40 @@ describe('replay captions', () => {
   it('outlines the probe element for invariant markers', () => {
     const [marker] = toMarkers([{ ...sig('invariant_check', { highlight_probe: 'cart_total' }, null), signal_id: 's', seq: 0, event_time: 5, fingerprint: 'f', evidence: { seq: 0, tStart: 5, values: { highlight_probe: 'cart_total' } } } as unknown as SignalRow], new Map());
     expect(marker?.selector).toBe('[data-cp-probe="cart_total"]');
+  });
+});
+
+describe('demo bug switches (local mode)', () => {
+  const withBugs = () =>
+    buildApi({
+      logger: quiet,
+      reader: new LocalWarehouseReader(warehouse),
+      blob,
+      state,
+      defaultTenant: 'demo',
+      demoBugs: createFileDemoBugStore(join(dir, 'demo-bugs.json')),
+      signalsLookbackMs: 1,
+      replayLookbackMs: 1,
+      maxReplayChunks: 1,
+    });
+
+  it('starts with nothing live, and keeps what the dashboard sets', async () => {
+    const app = withBugs();
+    expect((await app.inject({ method: 'GET', url: '/v1/demo/bugs' })).json().bugs).toEqual([]);
+    const put = await app.inject({ method: 'PUT', url: '/v1/demo/bugs', payload: { bugs: ['checkout_error', 'dead_button'] } });
+    expect(put.json().bugs).toEqual(['dead_button', 'checkout_error']);
+    const again = (await app.inject({ method: 'GET', url: '/v1/demo/bugs' })).json();
+    expect(again.bugs).toEqual(['dead_button', 'checkout_error']);
+    expect(again.known.map((k: { id: string }) => k.id)).toEqual(['dead_button', 'cart_total', 'checkout_error']);
+    expect((await app.inject({ method: 'PUT', url: '/v1/demo/bugs', payload: { bugs: [] } })).json().bugs).toEqual([]);
+  });
+
+  it('rejects unknown bug names', async () => {
+    const res = await withBugs().inject({ method: 'PUT', url: '/v1/demo/bugs', payload: { bugs: ['nope'] } });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('has no such routes when the store is absent (GCP mode)', async () => {
+    expect((await api().inject({ method: 'GET', url: '/v1/demo/bugs' })).statusCode).toBe(404);
   });
 });

@@ -13,8 +13,8 @@ The shop has a product list, product page, cart with coupon, and checkout. Bugs 
 
 | Flag | Behavior |
 | --- | --- |
-| `BUG_DEAD_BUTTON` | Apply Coupon silently stops responding after the fifth click |
-| `BUG_CART_TOTAL` | Cart total ignores quantity on one line when a discount applies, so it differs from the sum of line items |
+| `BUG_DEAD_BUTTON` | Apply Coupon silently stops responding after the third click |
+| `BUG_CART_TOTAL` | With a discount applied and 2+ items in the bag, the cart total leaves out the last item, so it differs from the sum of line items |
 | `BUG_CHECKOUT_ERROR` | Payment step throws a JS error and a 500 for one region, producing rage clicks and abandonment |
 | `BUG_COUPON_BANNER` (retro demo) | Banner promises a discount but the total does not change. No default rule catches it, so the plain-English rule added during the demo finds it in past sessions |
 

@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { createLogger, flushLogs } from '@cp/logger';
 import { createPlatform, loadDotEnv, loadPlatformConfig, parseEnv } from '@cp/platform';
 import { TENANT_ID } from '@cp/schema';
+import { join } from 'node:path';
+import { createFileDemoBugStore } from './demo-bugs.js';
 import { buildApi } from './server.js';
 
 const ApiEnv = z.object({
@@ -26,6 +28,8 @@ async function main(): Promise<void> {
     blob: platform.blob,
     state: platform.state,
     defaultTenant: e.API_DEFAULT_TENANT,
+    // Local mode only: the dashboard switches demo bugs on and off, the shop follows.
+    demoBugs: pc.mode === 'local' ? createFileDemoBugStore(join(pc.localDataDir, 'demo-bugs.json')) : undefined,
     signalsLookbackMs: e.SIGNALS_LOOKBACK_DAYS * 86_400_000,
     replayLookbackMs: e.REPLAY_LOOKBACK_DAYS * 86_400_000,
     maxReplayChunks: e.MAX_REPLAY_CHUNKS,

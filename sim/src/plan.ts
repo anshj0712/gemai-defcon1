@@ -8,9 +8,9 @@ export const BUGS = ['dead_button', 'cart_total', 'checkout_error'] as const;
 export type Bug = (typeof BUGS)[number];
 
 export type Persona =
-  /** dead_button: tries five codes, then the right one, and the button has stopped working. */
+  /** dead_button: tries three codes, then the right one, and the button has stopped working. */
   | 'coupon_hunter'
-  /** cart_total: raises the quantity of the first line and applies SAVE10; the total comes out wrong. */
+  /** cart_total: ends with 2+ items in the bag (two products, or more of one) and applies SAVE10; the total comes out wrong. */
   | 'bulk_buyer'
   /** checkout_error: pays from the Northeast region, the payment fails, and they retry quickly. */
   | 'northeast_payer'
@@ -123,12 +123,16 @@ export function makePlans(sessions: number, seed: number, config: SimConfig = DE
     };
     switch (bug) {
       case 'dead_button': {
-        // Five wrong codes (presses 1-5 work), then SAVE10 on press 6: the button is dead from there.
-        const wrong = [...INVALID_CODES].sort(() => r() - 0.5).slice(0, 5);
+        // Three wrong codes (presses 1-3 work), then SAVE10 on press 4: the button is dead from there.
+        const wrong = [...INVALID_CODES].sort(() => r() - 0.5).slice(0, 3);
         return { ...base, persona: 'coupon_hunter', flags: [bug], products: distinctProducts(r, chance(r, 0.5) ? 1 : 2), codes: [...wrong, 'SAVE10'], extraPresses: chance(r, 0.5) ? 2 : 3, rapidBurst: chance(r, 0.5), abandon: chance(r, config.abandonment.dead_button) };
       }
-      case 'cart_total':
-        return { ...base, persona: 'bulk_buyer', flags: [bug], products: distinctProducts(r, chance(r, 0.6) ? 1 : 2), codes: ['SAVE10'], qtyIncrements: chance(r, 0.6) ? 1 : 2, incrementFirstLine: true, abandon: chance(r, config.abandonment.cart_total) };
+      case 'cart_total': {
+        // 2+ items is the trigger: one product with a higher quantity, or two different products (with or without an extra).
+        const products = distinctProducts(r, chance(r, 0.6) ? 1 : 2);
+        const qtyIncrements = products.length === 1 ? (chance(r, 0.6) ? 1 : 2) : chance(r, 0.5) ? 0 : 1;
+        return { ...base, persona: 'bulk_buyer', flags: [bug], products, codes: ['SAVE10'], qtyIncrements, incrementFirstLine: true, abandon: chance(r, config.abandonment.cart_total) };
+      }
       case 'checkout_error':
         return { ...base, persona: 'northeast_payer', flags: [bug], products: distinctProducts(r, chance(r, 0.6) ? 1 : 2), codes: chance(r, 0.3) ? ['SAVE10'] : [], region: 'Northeast', retries: chance(r, 0.5) ? 3 : 4, abandon: chance(r, config.abandonment.checkout_error), abandonAt: 'checkout' };
       default: {
@@ -137,12 +141,13 @@ export function makePlans(sessions: number, seed: number, config: SimConfig = DE
         if (chance(r, config.windowShoppers)) {
           return { ...base, persona: 'window_shopper', flags, products: distinctProducts(r, 1 + Math.floor(r() * 3)), abandon: true, abandonAt: 'bag' };
         }
-        const products = distinctProducts(r, chance(r, 0.5) ? 1 : 2);
+        const bagged = distinctProducts(r, chance(r, 0.5) ? 1 : 2);
         const codes = chance(r, 0.5) ? (chance(r, 0.3) ? [pick(r, INVALID_CODES), 'SAVE10'] : ['SAVE10']) : [];
-        // With cart_total on, a discounted first line must stay at quantity 1 (that is the trigger).
+        // With cart_total on, a discounted bag must stay at a single item (2+ items is the trigger).
         const guard = flags.includes('cart_total') && codes.includes('SAVE10');
+        const products = guard ? bagged.slice(0, 1) : bagged;
         const incrementFirstLine = !guard && chance(r, 0.5);
-        const qtyIncrements = guard && products.length === 1 ? 0 : chance(r, 0.4) ? 1 + Math.floor(r() * 2) : 0;
+        const qtyIncrements = guard ? 0 : chance(r, 0.4) ? 1 + Math.floor(r() * 2) : 0;
         const region = flags.includes('checkout_error') ? base.region : pick(r, REGIONS);
         return { ...base, persona: 'buyer', flags, products, codes, qtyIncrements, incrementFirstLine, region, abandon: chance(r, config.abandonment.baseline) };
       }
@@ -155,8 +160,8 @@ export const touchesFirstLine = (p: Pick<SessionPlan, 'incrementFirstLine' | 'pr
 
 /** The bug a plan's actions reach, if any. Used by tests to keep the ground truth honest. */
 export function reachesTrigger(p: SessionPlan): Bug | null {
-  if (p.flags.includes('dead_button') && p.codes.length + p.extraPresses > 5) return 'dead_button';
-  if (p.flags.includes('cart_total') && p.codes.includes('SAVE10') && touchesFirstLine(p) && p.qtyIncrements > 0) return 'cart_total';
+  if (p.flags.includes('dead_button') && p.codes.length + p.extraPresses > 3) return 'dead_button';
+  if (p.flags.includes('cart_total') && p.codes.includes('SAVE10') && p.products.length + p.qtyIncrements >= 2) return 'cart_total';
   if (p.flags.includes('checkout_error') && p.region === 'Northeast' && p.persona !== 'window_shopper' && !(p.abandon && p.abandonAt === 'bag')) return 'checkout_error';
   return null;
 }

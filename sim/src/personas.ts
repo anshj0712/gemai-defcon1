@@ -150,7 +150,7 @@ export async function runPlan(page: Page, plan: SessionPlan): Promise<SessionOut
   out.cart_value_minor = await openBag(c);
 
   if (plan.persona === 'bulk_buyer') {
-    // Raise the first line's quantity, then the coupon: the bug drops that quantity from the total.
+    // Reach 2+ items (a second product, or a higher quantity), then the coupon: the bug drops the last item from the total.
     await changeQuantity(c);
     await tryCodes(c);
     await pause(c, 1500, 2500); // reads the summary
