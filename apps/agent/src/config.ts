@@ -7,7 +7,7 @@ const AgentEnv = z.object({
   AGENT_PORT: z.coerce.number().int().min(1).default(8084),
   // Loopback for local runs; all interfaces on Cloud Run (K_SERVICE) or when HOST is set (containers).
   HOST: z.string().default(process.env.K_SERVICE ? '0.0.0.0' : '127.0.0.1'),
-  /** auto: Gemini when GOOGLE_API_KEY is set, else the offline stand-in. vertex: Gemini on Vertex AI with ADC. */
+  /** auto: Gemini when GOOGLE_API_KEY is set, else the offline stand-in. vertex: Gemini on Vertex AI, with GOOGLE_API_KEY if it is a Vertex key (AQ...), else with ADC. */
   AGENT_LLM: z.enum(['auto', 'gemini', 'vertex', 'offline']).default('auto'),
   GOOGLE_API_KEY: z.string().optional(),
   GEMINI_MODEL_BULK: z.string().default('gemini-3.5-flash-lite'),
