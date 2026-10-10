@@ -75,6 +75,7 @@ export function describe(signal: SignalRow): string {
     case 'invariant_check':
       return `${String(v.rule_title ?? 'Rule violated')}: shows ${formatMoney(v.actual, v.currency)}, expected ${formatMoney(v.expected, v.currency)}`;
     case 'error_correlation':
+      if (v.standalone === true) return `${String(v.error_signature ?? 'An error')} right after pressing ${selector}`;
       return `${String(v.error_signature ?? 'An error')} right before the ${String(v.correlated_detector ?? 'signal').replace('_', ' ')} on ${selector}`;
     default:
       return `${signal.detector} on ${selector}`;

@@ -54,6 +54,58 @@ describe('error_correlation', () => {
   });
 });
 
+describe('error_correlation standalone', () => {
+  const pay = (t: number) => click(t, { selector: 'button#place-order', nodeId: 20, route: '/checkout', seq: 2 });
+
+  it('raises a signal for one failed payment that nothing else explains', () => {
+    const events = [pay(T + 1000), requestStart(T + 1005), requestEnd(T + 1005, T + 1300, 500), jsError(T + 1320, 'TypeError at main.ts:405')];
+    const { signals } = run(errorCorrelation, events, { signals: [] });
+    expect(signals).toHaveLength(1);
+    expect(signals[0]).toMatchObject({
+      detector: 'error_correlation',
+      eventTime: T + 1000,
+      evidence: {
+        seq: 2,
+        tStart: T + 1000,
+        tEnd: T + 1300,
+        selector: 'button#place-order',
+        route: '/checkout',
+        values: { standalone: true, error_signature: 'HTTP 500 POST /api/checkout', error_kind: 'http', status: 500, lead_ms: 300 },
+      },
+    });
+  });
+
+  it('ignores failures with no click just before them, or too long after one', () => {
+    expect(run(errorCorrelation, [jsError(T + 4500)], { signals: [] }).signals).toEqual([]);
+    expect(run(errorCorrelation, [pay(T + 1000), jsError(T + 3001)], { signals: [] }).signals).toEqual([]);
+    expect(run(errorCorrelation, [pay(T + 1000), jsError(T + 3000)], { signals: [] }).signals).toHaveLength(1);
+  });
+
+  it('leaves a failure to the signal that already explains it', () => {
+    const events = [pay(T + 1000), requestEnd(T + 1005, T + 1300, 500)];
+    const { signals } = run(errorCorrelation, events, { signals: [trigger(T + 1000, T + 1900)] });
+    expect(signals).toHaveLength(1);
+    expect(signals[0]?.evidence.values).toMatchObject({ correlated_detector: 'rage_click' });
+  });
+
+  it('emits once: a failure already in the tail was handled in its own chunk', () => {
+    expect(run(errorCorrelation, [], { tail: [pay(T + 1000), jsError(T + 1200)], signals: [] }).signals).toEqual([]);
+  });
+
+  it('gives each click its own failure, and nothing for a click that succeeded', () => {
+    const events = [pay(T + 1000), requestEnd(T + 1005, T + 1300, 500), pay(T + 4000), requestEnd(T + 4005, T + 4200, 200), pay(T + 7000), requestEnd(T + 7005, T + 7300, 500)];
+    expect(run(errorCorrelation, events, { signals: [] }).signals.map((s) => s.eventTime)).toEqual([T + 1000, T + 7000]);
+  });
+
+  it('can be switched off', () => {
+    expect(run(errorCorrelation, [pay(T + 1000), jsError(T + 1200)], { signals: [], params: { standalone: 0 } }).signals).toEqual([]);
+  });
+
+  it('does not count clicks on disabled or non-interactive elements', () => {
+    expect(run(errorCorrelation, [click(T + 1000, { disabled: true }), jsError(T + 1200)], { signals: [] }).signals).toEqual([]);
+  });
+});
+
 describe('two-pass registry', () => {
   it('runs correlators after the primary detectors, over their signals', () => {
     const events = [click(T + 1000), requestStart(T + 1005), mutation(T + 1010), requestEnd(T + 1005, T + 1200, 500), click(T + 3000)];
