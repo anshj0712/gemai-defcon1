@@ -191,7 +191,7 @@ Implementation notes (6 Oct, Phase 2). Every detector below is a pure function i
 | rage_click (1.1.0) | 3+ clicks on one element, each within 1.5 s of the previous and 40 px of the first, with 3 inside some 1.5 s window. At least one click must have failed: no response within 800 ms, or an error or failed request within 2 s (`requireFailure`; 0 restores the textbook rule). The burst is decided once its last click + 2 s is covered by a horizon. |
 | response_decay (1.1.0) | Per route and selector: 2+ answered clicks, then 3+ unanswered in a row. Fires once per streak. Counts persist across chunks in `SessionTail.detector_state`. |
 | invariant_check (1.0.0) | Evaluates each probe snapshot against the tenant's rules (built-in: `cart_total_matches_lines`, cart total = sum of line totals − discount, within 1 minor unit). Reports a given rule once per distinct set of probe values. `rule_version` is `<rule_id>@<version>`. |
-| error_correlation (1.0.0) | A second pass over this chunk's other signals. It attaches the latest JS error or failed request in the 2 s before a signal (or during it), inheriting that signal's route and element, so the error lands in the same issue as its symptom. |
+| error_correlation (1.1.0) | A second pass over this chunk's other signals. It attaches the latest JS error or failed request in the 2 s before a signal (or during it), inheriting that signal's route and element, so the error lands in the same issue as its symptom. **Standalone (`standalone` 1; 0 turns it off):** a failure that no other signal explains still becomes a signal when a shopper clicked a judgeable control within the 2 s before it, on that control's route and selector. One failed payment is a lost order but too few clicks for rage_click. Only the first such failure per click is reported, in the chunk it arrives in. A failure with no click just before it is ignored. |
 
 - **What counts as a response** (dead_click, rage_click, response_decay; `responseCheck` in `response.ts`): a mutation, navigation, request, or change on the clicked control itself, inside the window and before the user's next click on a different element.
   - Responses after a click elsewhere belong to that click: pressing Checkout right after a dead button navigates, but that does not answer the dead button.
@@ -361,6 +361,8 @@ How the replay payload is built:
 | Short clip | Opening a signal plays a short clip (6 s before to 3 s after, via `playRange`). |
 | Pinpointing | When playback reaches a flag, the element is found through the replay mirror (`node_id`, falling back to the selector). It is outlined in red, with a caption such as "Dead click on button#apply-coupon: no response within 800 ms". |
 
+**Demo bug switches (local mode only).** The dashboard's top bar shows which of the shop's three bugs are live and switches them. `GET` and `PUT /v1/demo/bugs` on the API keep the set in `.data/demo-bugs.json`; the routes do not exist in `CP_MODE=gcp`. The shop polls them every 2 s through a Vite proxy, using the `fetch` it took before the SDK wrapped it, so the poll is never recorded and cannot pass for a response to a click. A `?bugs=` in a shop tab (the simulator and e2e send it, even empty) overrides the switch for that tab.
+
 **Issues feed (implemented 6 Oct).** The dashboard opens on Issues, one card per cluster, most recently active first. It shows:
 
 - the title, kind (element or data rule), and symptom chips with counts;
@@ -465,7 +467,7 @@ Monorepo layout: see `AGENTS.md`. The `sim` folder matters as much as any servic
 Simulator (implemented 6 Oct). `pnpm sim -- --sessions 300 --seed 42 --concurrency 8` drives the demo shop in real Chrome, so the real SDK, probes, collector, processor, and clusterer all run.
 
 - **Plans.** Seeded plans (`sim/src/plan.ts`) give the mix: 20% dead_button, 15% cart_total, 15% checkout_error, and 50% clean.
-- **Near misses.** Half of the clean sessions carry a bug flag whose trigger they never reach: at most 2 coupon presses, a discounted first line kept at quantity 1, or a region other than Northeast. A test asserts that affected plans reach their trigger and clean plans never do.
+- **Near misses.** Half of the clean sessions carry a bug flag whose trigger they never reach: at most 2 coupon presses, a discounted bag kept at a single item, or a region other than Northeast. A test asserts that affected plans reach their trigger and clean plans never do.
 - **Abandonment.** Affected shoppers abandon more often than the baseline by design (60%, 40%, and 85% against 25%). Every session is recorded (sample rate 1), so the baseline is unbiased.
 - **Ground truth.** It goes to `sim/out/ground-truth.json`.
 - **Scoring.** `pnpm sim:check` waits for the pipeline to go quiet, then scores the issues against the ground truth: one issue per bug, precision 100%, recall ≥ 90%, no clean session in any issue, no stray issues. It writes `sim/out/check-report.json`.
@@ -525,8 +527,8 @@ The Cup's home page lists the building phase as 7 Sep to 18 Oct 2026, with submi
 
 Demo shop bug flags:
 
-- `BUG_DEAD_BUTTON`: the Apply Coupon button silently stops responding after the fifth click.
-- `BUG_CART_TOTAL`: the cart total ignores quantity on one line when a discount is applied, so it differs from the sum of line items.
+- `BUG_DEAD_BUTTON`: the Apply Coupon button silently stops responding after the third click.
+- `BUG_CART_TOTAL`: with a discount applied and 2 or more items in the bag (the same shoe or different ones), the cart total leaves out the last item, so it differs from the sum of line items.
 - `BUG_CHECKOUT_ERROR`: the payment step throws a JS error and a 500 for one region, producing rage clicks and abandonment.
 
 The `sim` generator runs several hundred scripted sessions with randomized behavior, where bug-affected sessions abandon at a higher rate than the rest. Those rates are parameters we choose, so say clearly in the demo and README that the data is synthetic.

@@ -4,6 +4,53 @@ Finds friction and silent data bugs in checkout sessions recorded with rrweb, an
 
 **All demo data is synthetic.** Sessions come from the test kit and the simulator, never from real shoppers.
 
+## Progress (updated 10 Oct 2026)
+
+| Phase | Status | Evidence |
+| --- | --- | --- |
+| 0. Foundations | Done | Monorepo, schema package, infra and deploy scripts (`pnpm infra:up`, `pnpm deploy:*`), demo shop |
+| 1. Vertical slice | Done | `pnpm smoke` passes: SDK to collector to Pub/Sub to processor to signal rows |
+| 2. Detectors, clusterer, simulator | Done | `pnpm sim:check`: each injected bug is one issue, precision 100%, recall at least 90%, no clean session in an issue |
+| 3. Agents, revenue at risk, ranked findings | Done, running on live Gemini locally | Triage, root cause with a screenshot check, and ranker answered for all three issues with no retries. Scoring is deterministic code |
+| 4. Bitemporal, rule author, re-scan | Not built | Finding versions are stored (append-only), but there is no time-travel view, plain-English rule author, or re-scan job yet |
+| 5. Deploy and package | Not done | Deploy scripts exist for the collector, processor, clusterer and agent but have not been run against a GCP project by us. API and dashboard are not deployed. No video or deck yet |
+
+Verified locally on 10 Oct: `pnpm build`, `pnpm typecheck` and `pnpm test` (350 tests) pass, and a 40-session `pnpm sim` plus `pnpm sim:check` passes. Nothing has been run on Cloud Run yet.
+
+Recent changes:
+
+- **Issue page redesign.** Revenue lost leads, then three compact cards (what shoppers hit, proof with the visual check, how to recreate). Click a card for the full detail with evidence chips; scoring, evidence, symptoms and the audit trail sit in closed sections.
+- **Failed payments are now detected on their own.** `error_correlation` 1.1.0 raises a signal when a click is followed within 2 s by a JS error or a 4xx, 5xx or network failure that no other signal explains. Before, one failed Place Order raised nothing because `rage_click` needs 3 or more clicks.
+- **Demo bug switches live in the dashboard.** The top bar shows which of the shop's bugs are live and toggles them; the shop follows within about 2 s. Bug rules: `dead_button` stops after the 3rd press, and `cart_total` fires for any bag of 2 or more items with SAVE10 applied (the same shoe or different ones).
+- **Gemini on Vertex AI with an API key.** Keys that start with `AQ.` are Vertex keys, and the AI Studio endpoint refuses them. Set `AGENT_LLM=vertex` (see below).
+
+### Gemini findings in the dashboard (synthetic data, live Gemini)
+
+The issues feed, ranked by revenue at risk:
+
+![Issues feed with revenue at risk per issue](docs/screenshots/issues-feed.jpg)
+
+One finding written by Gemini, with the screenshot the visual check confirmed:
+
+![Finding page: revenue lost, what shoppers hit, proof, how to recreate](docs/screenshots/issue-gemini-finding.jpg)
+
+Both screenshots show synthetic sessions from the simulator. The revenue figures come from simulator-set abandonment rates, not real shoppers.
+
+### Run the agents on real Gemini locally
+
+Without a key the agents run a templated offline stand-in. For real Gemini, put one of these in your own `.env` (never commit it):
+
+```text
+# AI Studio key
+GOOGLE_API_KEY=...
+
+# Vertex AI key (starts with AQ.; AI Studio refuses it with API_KEY_SERVICE_BLOCKED)
+GOOGLE_API_KEY=...
+AGENT_LLM=vertex
+```
+
+Model ids come from `GEMINI_MODEL_BULK` (triage, ranker) and `GEMINI_MODEL_REASONING` (root cause with the screenshot). Which models a key can use depends on its project: ours could use `gemini-3.8-flash` and `gemini-2.5-flash-lite` but not `gemini-3.5-flash-lite`, so `.env` sets `GEMINI_MODEL_BULK=gemini-2.5-flash-lite`. Restart `pnpm dev` after changing `.env`; the agent takes about 40 s to come up.
+
 ## What runs today (Phase 3: agents, revenue at risk, ranked findings)
 
 ```text
@@ -57,27 +104,27 @@ pnpm smoke    # in a second terminal: sends a synthetic Apply Coupon session, wa
 | BigQuery | `.data/bq/<table>.jsonl` |
 | Firestore | `.data/firestore/` (session tails, markers, issues) |
 
-`pnpm clean` deletes `.data/`.
+`pnpm clean` deletes `.data/`. Keep one checkout of the repo: every service reads and writes the `.data/` in that folder, so a second copy running at the same time means a second, separate database.
 
 ## See a flagged moment replayed (local, synthetic)
 
 1. Run `pnpm dev`. It starts the collector, processor, clusterer, API, demo shop, and dashboard, with all logs in one stream.
-2. Open **http://localhost:5173/?bugs=dead_button**. This is STRIDE, a fictional sneaker store with synthetic data.
+2. Switch a bug on in the dashboard (**http://localhost:5174**, red bar at the top: **Switch bugs**). The bar shows which bugs are live in the shop; the shop follows it within about 2 s. Then open **http://localhost:5173**. This is STRIDE, a fictional sneaker store with synthetic data. (`http://localhost:5173/?bugs=dead_button` still pins bugs for that one tab, and the simulator uses it.)
    1. Accept the banner.
    2. Open a shoe, pick a size, and press **Add to Bag**.
-   3. Open the **Bag**, type `SAVE10`, and press **Apply Coupon** 6 or more times, about a second apart. From the 6th press on, the button silently does nothing.
+   3. Open the **Bag**, type `SAVE10`, and press **Apply Coupon** 4 or more times, about a second apart. From the 4th press on, the button silently does nothing.
 3. Watch the replay in either place:
    - In the shop, open **Demo controls** (bottom left) and press **Watch this session's replay**. This works for any session, flagged or not.
    - Open the dashboard at **http://localhost:5174**. It opens on **Issues**, the live feed, which refreshes every 3 s. Open "Unresponsive button#apply-coupon on /cart" and press **Watch replay** on any occurrence. **Signals** lists every raw detector hit.
 
    You get a short clip of the shopper's pointer leading up to the flagged press: a blue ring with a trail, and clicks flash. The Apply Coupon button is outlined in red, with a caption saying what went wrong. Flags are red marks on the timeline.
-   - The other two bugs (switch them on in **Demo controls**, or with the URL):
+   - The other two bugs (switch them on in the dashboard bar, or with the URL):
 
      | Bug | URL | What to do | Issue it opens |
      | --- | --- | --- | --- |
-     | cart_total | `?bugs=cart_total` | In the Bag, press **+** on the first line, then apply `SAVE10` | "Cart total doesn't match its line items" (invariant_check) |
+     | cart_total | `?bugs=cart_total` | Put 2 or more items in the Bag (two different shoes, or press **+** on one), then apply `SAVE10` | "Cart total doesn't match its line items" (invariant_check) |
      | checkout_error | `?bugs=checkout_error` | At checkout, choose region **Northeast**, then press **Place Order** 3 or 4 times quickly | "Failing button#place-order on /checkout" (rage_click and error_correlation) |
-   - The Demo controls panel is tester tooling. It is excluded from recording, so it never appears in replays or triggers detectors.
+   - The shop's Demo controls panel (replay link only) is tester tooling. It is excluded from recording, so it never appears in replays or triggers detectors.
 4. `pnpm e2e` does all of this in a real Chrome (your installed Chrome with a throwaway profile). It checks:
    - the dead clicks, their route and shared fingerprint
    - the replay flags and the red outline
