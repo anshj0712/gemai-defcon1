@@ -63,3 +63,15 @@ export const fetchFinding = (id: string) =>
   });
 
 export const screenshotUrl = (id: string, capturedAt: number) => `/v1/findings/${encodeURIComponent(id)}/screenshot?v=${capturedAt}`;
+
+/** Demo shop bug switches (local mode only; the routes are absent on GCP and these reject). */
+export interface DemoBugsView {
+  bugs: string[];
+  known: { id: string; label: string; detail: string }[];
+}
+export const fetchDemoBugs = () => getJson<DemoBugsView>('/v1/demo/bugs');
+export async function putDemoBugs(bugs: string[]): Promise<DemoBugsView> {
+  const res = await fetch('/v1/demo/bugs', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ bugs }) });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return (await res.json()) as DemoBugsView;
+}

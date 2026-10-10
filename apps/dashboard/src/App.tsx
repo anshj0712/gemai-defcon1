@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { BugsBar } from './BugsBar';
 import { IssuePage } from './IssuePage';
 import { IssuesPage } from './IssuesPage';
 import { ReplayPage } from './ReplayPage';
@@ -45,6 +46,7 @@ export function App() {
         </nav>
         <span className="synthetic">Synthetic data: demo sessions only</span>
       </header>
+      <BugsBar />
       <main>
         {route.page === 'replay' ? (
           <ReplayPage key={route.sessionId} sessionId={route.sessionId} signalId={route.signalId} />

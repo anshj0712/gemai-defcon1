@@ -60,3 +60,10 @@ export function formulaLine(r: {
   const n = Number.isInteger(r.affected_with_cart) ? String(r.affected_with_cart) : r.affected_with_cart.toFixed(1);
   return `${n} sessions × ${money(r.avg_cart_value_minor, r.currency)} × (${pct(r.abandonment_affected)} − ${pct(r.abandonment_baseline)}) = ${money(r.revenue_at_risk_minor, r.currency)}`;
 }
+
+/** Gemini cites evidence inline as "(E1, E11)"; the clickable chips already show those, so the sentence reads cleaner without them. */
+export const plain = (text: string) =>
+  text
+    .replace(/\s*\(\s*E\d+(?:\s*,\s*E\d+)*\s*\)/g, '')
+    .replace(/\s+([.,;])/g, '$1')
+    .trim();

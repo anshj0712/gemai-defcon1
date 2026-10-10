@@ -99,7 +99,7 @@ export function IssuesPage() {
         <div className="empty">
           <h2>No issues yet</h2>
           <p>
-            Shop at <a href="http://localhost:5173/?bugs=dead_button">localhost:5173/?bugs=dead_button</a> and press Apply Coupon 6+ times, or run{' '}
+            Shop at <a href="http://localhost:5173/?bugs=dead_button">localhost:5173/?bugs=dead_button</a> and press Apply Coupon 4+ times, or run{' '}
             <code>pnpm sim -- --sessions 50</code> to seed synthetic shoppers.
           </p>
         </div>
