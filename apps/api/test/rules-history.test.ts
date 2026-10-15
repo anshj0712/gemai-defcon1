@@ -69,6 +69,7 @@ describe('rules routes', () => {
     expect(list.rules.map((r) => r.rule_id)).toEqual(['bag_subtotal_per_pair_cap']);
     expect(list.builtin[0]).toMatchObject({ rule_id: 'cart_total_matches_lines', text: 'cart_total = sum(line_total) − discount (within 1)' });
     expect(list.synthetic).toBe(true);
+    expect(list.rules[0]).toMatchObject({ text: { active: null, draft: null } });
     expect((await app.inject({ url: '/v1/rules/bag_subtotal_per_pair_cap' })).statusCode).toBe(200);
     expect((await app.inject({ url: '/v1/rules/nope_rule' })).statusCode).toBe(404);
     expect((await app.inject({ url: '/v1/rules/Bad-Id' })).statusCode).toBe(400);

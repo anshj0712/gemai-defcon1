@@ -117,6 +117,11 @@ export function IssuesPage() {
                 )}{' '}
                 <span className={`kind ${c.kind}`}>{c.kind === 'invariant' ? 'Data rule' : 'Element'}</span>
                 {f?.status === 'suspect' && <span className="suspect">Needs review</span>}
+                {c.found_later && c.found_later.sessions > 0 && (
+                  <span className="found-later" title="A re-scan with a newer rule found shoppers this hurt before the rule existed">
+                    Found later · {c.found_later.sessions} session{c.found_later.sessions === 1 ? '' : 's'}
+                  </span>
+                )}
                 <h3>{f?.title ?? c.title}</h3>
                 {f && f.title !== c.title && <p className="muted small detected">{c.title}</p>}
                 <div className="chips">

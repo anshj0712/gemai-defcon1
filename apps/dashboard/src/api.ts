@@ -1,4 +1,4 @@
-import type { Cluster, Finding, FindingSummary } from '@cp/schema';
+import type { Cluster, Finding, FindingSummary, RuleAuthorMeta, RuleDoc } from '@cp/schema';
 import type { Marker, TimedEvent } from './markers';
 
 /** An issue in the live feed (the session list is only on the detail endpoint). */
@@ -63,6 +63,85 @@ export const fetchFinding = (id: string) =>
   });
 
 export const screenshotUrl = (id: string, capturedAt: number) => `/v1/findings/${encodeURIComponent(id)}/screenshot?v=${capturedAt}`;
+
+// ---------------------------------------------------------------------------------------------
+// Phase 4: tenant rules (plain English, dry run, approve and re-scan) and time travel.
+// ---------------------------------------------------------------------------------------------
+
+/** A rule doc as the API serves it, with each version as one readable line. */
+export type RuleView = RuleDoc & { text: { active: string | null; draft: string | null } };
+
+export interface BuiltinRuleView {
+  rule_id: string;
+  version: number;
+  title: string;
+  rule_version: string;
+  text: string;
+}
+
+/** An error the API explained (the agent's code and message, and the rule author's reasoning when it declined). */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly code: string | null,
+    readonly author: RuleAuthorMeta | null,
+  ) {
+    super(message);
+  }
+}
+
+async function postJson<T>(url: string, body: unknown): Promise<T> {
+  const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const json = (await res.json().catch(() => ({}))) as { error?: string; message?: string; author?: RuleAuthorMeta | null };
+  if (!res.ok) throw new ApiError(json.message ?? `HTTP ${res.status}`, json.error ?? null, json.author ?? null);
+  return json as T;
+}
+
+export const fetchRules = () => getJson<{ rules: RuleView[]; builtin: BuiltinRuleView[] }>('/v1/rules');
+export const draftRule = (sentence: string) => postJson<{ rule: RuleDoc }>('/v1/rules/draft', { sentence });
+export const approveRule = (id: string, version: number) => postJson<{ rule: RuleDoc }>(`/v1/rules/${encodeURIComponent(id)}/approve`, { version });
+export const rejectRule = (id: string) => postJson<{ rule: RuleDoc }>(`/v1/rules/${encodeURIComponent(id)}/reject`, {});
+export const rescanRule = (id: string) => postJson<{ rule: RuleDoc }>(`/v1/rules/${encodeURIComponent(id)}/rescan`, {});
+
+/** One finding version as the record held it (from the findings table, not the live feed). */
+export interface HistoryFindingView {
+  finding_id: string;
+  version: number | null;
+  title: string;
+  tier: string;
+  score: number | null;
+  status: string | null;
+  revenue_at_risk_minor: number;
+  currency: string;
+  revenue_status: string | null;
+  affected_sessions: number;
+  kind: string | null;
+  route: string | null;
+  valid_from: number;
+  recorded_from: number;
+  recorded_to: number | null;
+  found_later_sessions: number;
+  model_version: string | null;
+}
+
+export interface HistoryMomentView {
+  at: number;
+  kind: 'rule_approved' | 'rescan_done';
+  rule_id: string;
+  label: string;
+}
+
+export interface HistoryView {
+  as_of: number;
+  checked_at: number;
+  window: { from: number; to: number };
+  then: HistoryFindingView[];
+  current: HistoryFindingView[];
+  found_later: string[];
+  moments: HistoryMomentView[];
+}
+
+export const fetchHistory = (asOf: number, from: number, to: number) => getJson<HistoryView>(`/v1/history?as_of=${Math.round(asOf)}&from=${Math.round(from)}&to=${Math.round(to)}`);
 
 /** Demo shop bug switches (local mode only; the routes are absent on GCP and these reject). */
 export interface DemoBugsView {

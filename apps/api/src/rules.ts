@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { BUILTIN_RULES } from '@cp/detectors';
 import type { StateStore } from '@cp/platform';
-import { RULE_ID, ruleText, ruleVersionOf, TENANT_ID } from '@cp/schema';
+import { RULE_ID, ruleText, ruleVersionOf, TENANT_ID, type RuleDoc } from '@cp/schema';
 
 /**
  * Tenant rules (Phase 4). Reads come from the rule hot docs in the state store. The three write
@@ -38,6 +38,11 @@ async function metadataIdToken(fetchImpl: typeof fetch, audience: string): Promi
   return res.text();
 }
 
+/** A rule doc plus each version as one readable line, so the dashboard needs no rule code. */
+export function ruleView(doc: RuleDoc) {
+  return { ...doc, text: { active: doc.active ? ruleText(doc.active.rule) : null, draft: doc.draft ? ruleText(doc.draft.rule) : null } };
+}
+
 export function registerRuleRoutes(app: FastifyInstance, deps: RuleRouteDeps): void {
   const fetchImpl = deps.fetchImpl ?? fetch;
   const tenantOf = (q: unknown) => {
@@ -68,7 +73,7 @@ export function registerRuleRoutes(app: FastifyInstance, deps: RuleRouteDeps): v
   app.get('/v1/rules', async (req, reply) => {
     const tenant = tenantOf(req.query);
     if (!tenant) return reply.code(400).send({ error: 'invalid_query' });
-    const rules = await deps.state.listRules(tenant);
+    const rules = (await deps.state.listRules(tenant)).map(ruleView);
     const builtin = BUILTIN_RULES.map((r) => ({ rule_id: r.id, version: r.version, title: r.title, rule_version: ruleVersionOf(r), text: ruleText(r) }));
     return reply.header('cache-control', 'no-store').send({ tenant, rules, builtin, synthetic: true });
   });
@@ -79,7 +84,7 @@ export function registerRuleRoutes(app: FastifyInstance, deps: RuleRouteDeps): v
     if (!p.success || !tenant) return reply.code(400).send({ error: 'invalid_request' });
     const rule = await deps.state.getRule(tenant, p.data.id);
     if (!rule) return reply.code(404).send({ error: 'rule_not_found' });
-    return reply.header('cache-control', 'no-store').send({ rule, synthetic: true });
+    return reply.header('cache-control', 'no-store').send({ rule: ruleView(rule), synthetic: true });
   });
 
   app.post('/v1/rules/draft', async (req, reply) => {
