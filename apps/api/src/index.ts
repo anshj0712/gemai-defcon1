@@ -4,6 +4,7 @@ import { createPlatform, loadDotEnv, loadPlatformConfig, parseEnv } from '@cp/pl
 import { TENANT_ID } from '@cp/schema';
 import { join } from 'node:path';
 import { createFileDemoBugStore } from './demo-bugs.js';
+import { DEFAULT_AGENT_URL } from './rules.js';
 import { buildApi } from './server.js';
 
 const ApiEnv = z.object({
@@ -14,6 +15,8 @@ const ApiEnv = z.object({
   SIGNALS_LOOKBACK_DAYS: z.coerce.number().positive().default(7),
   REPLAY_LOOKBACK_DAYS: z.coerce.number().positive().default(31),
   MAX_REPLAY_CHUNKS: z.coerce.number().int().positive().default(1000),
+  /** The agent service, where rule actions (draft, approve, reject, re-scan) are forwarded. */
+  AGENT_URL: z.url().default(DEFAULT_AGENT_URL),
 });
 
 async function main(): Promise<void> {
@@ -33,6 +36,8 @@ async function main(): Promise<void> {
     signalsLookbackMs: e.SIGNALS_LOOKBACK_DAYS * 86_400_000,
     replayLookbackMs: e.REPLAY_LOOKBACK_DAYS * 86_400_000,
     maxReplayChunks: e.MAX_REPLAY_CHUNKS,
+    // On Cloud Run (K_SERVICE) the agent is private: call it with an ID token from the metadata server.
+    rules: { agentUrl: e.AGENT_URL, agentAuth: process.env.K_SERVICE ? 'metadata' : 'none' },
   });
   await app.listen({ port: e.API_PORT, host: e.API_HOST });
   logger.info({ mode: pc.mode, port: e.API_PORT, tenant: e.API_DEFAULT_TENANT }, `api ready: http://localhost:${e.API_PORT}/v1/findings`);

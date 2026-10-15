@@ -6,5 +6,5 @@
     "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
   "include": ["src"],
-  "references": [{ "path": "../../packages/schema" }, { "path": "../../packages/logger" }, { "path": "../../packages/platform" }]
+  "references": [{ "path": "../../packages/schema" }, { "path": "../../packages/logger" }, { "path": "../../packages/platform" }, { "path": "../../packages/detectors" }]
 }

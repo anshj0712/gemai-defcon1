@@ -244,6 +244,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@cp/detectors':
+        specifier: workspace:*
+        version: link:../../packages/detectors
       '@cp/logger':
         specifier: workspace:*
         version: link:../../packages/logger
