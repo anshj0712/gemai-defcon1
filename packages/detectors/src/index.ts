@@ -13,6 +13,7 @@ export { invariantCheck } from './invariant-check.js';
 export { rageClick } from './rage-click.js';
 export { responseDecay } from './response-decay.js';
 export { BUILTIN_RULES, checkRule, evaluate } from './rules.js';
+export { signalId, signalRuleVersion, toSignalRows, type SignalRowContext } from './signal-rows.js';
 
 /** Every registered detector. Adding one here is the only wiring a new detector needs. */
 export const DETECTORS: readonly Detector[] = [deadClick, rageClick, responseDecay, invariantCheck, errorCorrelation];

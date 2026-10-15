@@ -3,7 +3,8 @@ import { routeTemplate } from './fingerprint.js';
 
 /**
  * Built-in invariant rules. They run only where their probes exist, so a tenant opts in by
- * registering probes with these names. Phase 4 adds tenant rules (authored in plain English).
+ * registering probes with these names. Tenant rules authored in plain English (Phase 4) run next to
+ * them once approved; the processor merges both.
  */
 export const BUILTIN_RULES: InvariantRule[] = [
   {

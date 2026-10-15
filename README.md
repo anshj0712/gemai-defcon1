@@ -4,7 +4,7 @@ Finds friction and silent data bugs in checkout sessions recorded with rrweb, an
 
 **All demo data is synthetic.** Sessions come from the test kit and the simulator, never from real shoppers.
 
-## Progress (updated 10 Oct 2026)
+## Progress (updated 15 Oct 2026)
 
 | Phase | Status | Evidence |
 | --- | --- | --- |
@@ -12,12 +12,25 @@ Finds friction and silent data bugs in checkout sessions recorded with rrweb, an
 | 1. Vertical slice | Done | `pnpm smoke` passes: SDK to collector to Pub/Sub to processor to signal rows |
 | 2. Detectors, clusterer, simulator | Done | `pnpm sim:check`: each injected bug is one issue, precision 100%, recall at least 90%, no clean session in an issue |
 | 3. Agents, revenue at risk, ranked findings | Done, running on live Gemini locally | Triage, root cause with a screenshot check, and ranker answered for all three issues with no retries. Scoring is deterministic code |
-| 4. Bitemporal, rule author, re-scan | Not built | Finding versions are stored (append-only), but there is no time-travel view, plain-English rule author, or re-scan job yet |
+| 4. Bitemporal, rule author, re-scan | Done (fast path), verified locally on the offline stand-in | `pnpm sim:rescan`: a merchant sentence becomes a rule, the re-scan finds all 12 past sessions of the silent qty_price bug (recall and precision 100%), the issue is tagged found later, and time travel as of the approval differs from now by exactly that finding. The rebuild path (a selector nobody probed) is not built, and the rule author has not been run on live Gemini yet |
 | 5. Deploy and package | Not done | Deploy scripts exist for the collector, processor, clusterer and agent but have not been run against a GCP project by us. API and dashboard are not deployed. No video or deck yet |
 
-Verified locally on 10 Oct: `pnpm build`, `pnpm typecheck` and `pnpm test` (350 tests) pass, and a 40-session `pnpm sim` plus `pnpm sim:check` passes. Nothing has been run on Cloud Run yet.
+Verified locally on 15 Oct (offline stand-in, no key):
+
+- `pnpm typecheck` and `pnpm test` (394 tests, 1 skipped) pass;
+- a 120-session `pnpm sim`, then `pnpm sim:check` and `pnpm sim:rescan`, pass;
+- `pnpm e2e` passes;
+- the Rules and Time travel pages load in Chrome with no console errors.
+
+Nothing has been run on Cloud Run yet.
 
 Recent changes:
+
+- **Rules in plain English, retroactive re-scan, found later, time travel (Phase 4).**
+  - **Rules tab.** A merchant writes a rule as a sentence. The rule author (Gemini) drafts it over the store's probes, code validates and compiles it, and a dry run shows what it would flag.
+  - **Approve.** Approving runs the rule on live traffic and re-scans the last 30 days from raw chunks. Past hits are written with their original time and tagged found later.
+  - **Time travel tab.** Compares what the findings record said at a moment with what it says now.
+  - **New demo bug.** `qty_price` (a line priced 100x, totals consistent) is invisible to every built-in rule until then. Once its sessions leave the baseline, the other issues' revenue at risk sharpens too (synthetic numbers).
 
 - **Issue page redesign.** Revenue lost leads, then three compact cards (what shoppers hit, proof with the visual check, how to recreate). Click a card for the full detail with evidence chips; scoring, evidence, symptoms and the audit trail sit in closed sections.
 - **Failed payments are now detected on their own.** `error_correlation` 1.1.0 raises a signal when a click is followed within 2 s by a JS error or a 4xx, 5xx or network failure that no other signal explains. Before, one failed Place Order raised nothing because `rage_click` needs 3 or more clicks.
@@ -142,7 +155,7 @@ pnpm sim -- --sessions 300 --seed 42 --concurrency 8   # about 12 minutes; watch
 pnpm sim:check                                          # scores the issues against the ground truth
 ```
 
-The simulator drives the shop in real Chrome. It runs a seeded mix: 20% dead_button, 15% cart_total, 15% checkout_error, and 50% clean shoppers. Half of the clean shoppers have a bug flag on but never reach its trigger.
+The simulator drives the shop in real Chrome. It runs a seeded mix: 20% dead_button, 15% cart_total, 15% checkout_error, 10% qty_price, and 40% clean shoppers. Half of the clean shoppers have a bug flag on but never reach its trigger. qty_price is silent on purpose (see the next section): `sim:check` reports it as "silent until a merchant rule catches it" rather than failing.
 
 It writes the ground truth to `sim/out/ground-truth.json`, recording for each session its bug, persona, cart value, and whether it ordered or abandoned.
 
@@ -156,6 +169,24 @@ It writes the ground truth to `sim/out/ground-truth.json`, recording for each se
 It also prints abandonment for affected and baseline shoppers, and runs the Phase 3 exit test. Each bug's issue must have a finding with an agent summary and at least two repro steps, and a replay link that opens the flagged moment. It then prints each finding's tier and revenue at risk. Those rates are synthetic by design.
 
 Revenue at risk counts a session once it has been idle for `ABANDON_AFTER_IDLE_MS`, which is 2 minutes in the demo. Run `sim:check` about two minutes after `pnpm sim` ends to see the estimates.
+
+## Find the bugs your rules missed (Phase 4, synthetic)
+
+The demo shop's fourth bug, `qty_price`, shows a bag line with quantity 2 or more at 100x its price. Every total agrees with the shown lines, so no built-in rule fires and no issue opens: shoppers just leave.
+
+1. **Write the rule.** Open the dashboard's **Rules** tab and pick the first example: "No pair of shoes costs more than ₹17,000, so the bag subtotal must never be more than ₹17,000 times the number of pairs."
+2. **Check the draft.** The rule author (Gemini, or the offline stand-in without a key) drafts `sum(line_total) ≤ 17,00,000 × sum(qty)`. A dry run over recent sessions shows what it would flag, with replay links.
+3. **Approve it.** The rule then runs on live traffic and re-scans the last 30 days from the stored raw chunks. Past sessions it catches are written as signals with their original time, and the new issue is tagged **Found later**.
+4. **Compare.** The **Time travel** tab sets "what we knew just before the approval" against "what we know now" for the same stretch of shopper activity.
+
+The same steps run as the Phase 4 exit test, after `pnpm sim` (with `pnpm dev` running):
+
+```powershell
+pnpm sim:check     # passes with qty_price silent
+pnpm sim:rescan    # drafts and approves the rule, waits for the re-scan, checks recall, precision, found later, and time travel
+```
+
+`pnpm rescan -- --tenant demo --rule <rule_id>` re-scans history with a rule's approved version from the command line, and is the command a Cloud Run Job would run for large windows.
 
 ## 2. Your laptop against real GCP: supply the keys
 
@@ -204,6 +235,8 @@ Each deploy prints a Logs Explorer link. Services scale to zero by default. Use 
 | `pnpm e2e` | Real-browser check: shop -> signals -> one issue -> replay pinpoints the dead click (screenshots in `sim/out/`) |
 | `pnpm sim` | Synthetic shoppers with ground truth (`-- --sessions 300 --seed 42 --concurrency 8`) |
 | `pnpm sim:check` | Phase 2 and 3 exit tests: scores the issues against the last run's ground truth, then checks each bug's finding |
+| `pnpm sim:rescan` | Phase 4 exit test: a merchant rule surfaces past qty_price sessions, tagged found later, and time travel shows the difference |
+| `pnpm rescan -- --tenant demo --rule <id>` | Re-scan history with a rule's approved version (the Cloud Run Job command) |
 | `pnpm build:sdk` | Build the one-tag SDK bundle (`apps/sdk/bundle/cp-sdk.js`) |
 | `pnpm smoke` | Phase 1 exit test on a synthetic session |
 | `pnpm infra:up` | Create or update all GCP resources (`-- --dry-run` to preview) |

@@ -1,7 +1,8 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { arg, requireServices, say, URLS } from './browser.js';
-import { evaluate, evaluateFindings, pct, type ClusterLike, type FindingLike, type GroundTruth } from './truth.js';
+import { arg, requireServices, say } from './browser.js';
+import { get, waitForFindings, waitForQuiet } from './pipeline.js';
+import { evaluate, evaluateFindings, pct, type ClusterLike, type GroundTruth } from './truth.js';
 
 /**
  * `pnpm sim:check`: the Phase 2 and Phase 3 exit tests. Reads the last `pnpm sim` ground truth, waits
@@ -20,53 +21,6 @@ const settleS = Number(arg('settle') ?? 8);
 /** Seconds to wait for the agent service to score every bug's issue. */
 const findingsWaitS = Number(arg('findings-wait') ?? 60);
 
-interface Summary {
-  cluster_id: string;
-  signal_count: number;
-  last_seen: number;
-}
-
-const get = async <T>(path: string): Promise<T> => {
-  const res = await fetch(`${URLS.api}${path}`);
-  if (!res.ok) throw new Error(`GET ${path}: HTTP ${res.status}`);
-  return (await res.json()) as T;
-};
-
-/** Poll until the total signal count stops changing for `settleS` seconds (or 3 minutes pass). */
-async function waitForQuiet(): Promise<Summary[]> {
-  const deadline = Date.now() + 180_000;
-  let last = -1;
-  let stableSince = Date.now();
-  for (;;) {
-    const { clusters } = await get<{ clusters: Summary[] }>('/v1/clusters?limit=200');
-    const total = clusters.reduce((n, c) => n + c.signal_count, 0);
-    if (total !== last) {
-      last = total;
-      stableSince = Date.now();
-    } else if (Date.now() - stableSince >= settleS * 1000) return clusters;
-    if (Date.now() > deadline) {
-      say('  pipeline still busy after 3 minutes; scoring what has landed');
-      return clusters;
-    }
-    await new Promise((r) => setTimeout(r, 1000));
-  }
-}
-
-/** Wait (up to `findingsWaitS`) until every bug's issue has a finding with agent output. */
-async function waitForFindings(clusterIds: string[]): Promise<Map<string, FindingLike>> {
-  const deadline = Date.now() + findingsWaitS * 1000;
-  for (;;) {
-    const found = new Map<string, FindingLike>();
-    for (const id of clusterIds) {
-      const r = await get<{ finding: FindingLike }>(`/v1/findings/${id}`).catch(() => null);
-      if (r?.finding) found.set(id, r.finding);
-    }
-    const ready = clusterIds.every((id) => found.get(id)?.triage);
-    if (ready || Date.now() > deadline) return found;
-    await new Promise((r) => setTimeout(r, 2000));
-  }
-}
-
 async function main(): Promise<void> {
   const file = join(outDir, 'ground-truth.json');
   let truth: GroundTruth;
@@ -77,13 +31,17 @@ async function main(): Promise<void> {
   }
   await requireServices(['api']);
   say(`sim:check: ${truth.sessions.length} synthetic sessions (seed ${truth.seed}), waiting for the pipeline to go quiet…`);
-  const summaries = await waitForQuiet();
+  const summaries = await waitForQuiet(settleS);
   const clusters = await Promise.all(summaries.map(async (s) => (await get<{ cluster: ClusterLike }>(`/v1/clusters/${s.cluster_id}?sessions=5000`)).cluster));
   const report = evaluate(truth, clusters, minRecall);
 
   say('');
   say('  bug             sessions  issues  recall   precision  issue');
   for (const b of report.bugs) {
+    if (b.silent) {
+      say(`  ${b.bug.padEnd(15)} ${String(b.affected).padStart(8)}  ${String(0).padStart(6)}  silent until a merchant rule catches it (pnpm sim:rescan)`);
+      continue;
+    }
     say(`  ${b.bug.padEnd(15)} ${String(b.affected).padStart(8)}  ${String(b.clusters).padStart(6)}  ${pct(b.recall).padStart(6)}  ${pct(b.precision).padStart(9)}   ${b.title ?? '-'}`);
   }
   say(`  clean sessions in an issue: ${report.clean_in_clusters.length}`);
@@ -94,7 +52,10 @@ async function main(): Promise<void> {
   for (const a of report.abandonment) say(`    ${a.group.padEnd(15)} ${String(a.abandoned).padStart(4)} / ${String(a.with_cart).padEnd(4)} ${pct(a.rate)}`);
 
   // Phase 3: each bug's issue has a finding with a summary, repro steps, and a replay link that works.
-  const findings = await waitForFindings(report.bugs.map((b) => b.cluster_id).filter((id): id is string => id !== null));
+  const findings = await waitForFindings(
+    report.bugs.map((b) => b.cluster_id).filter((id): id is string => id !== null),
+    findingsWaitS,
+  );
   const phase3 = evaluateFindings(report.bugs, findings);
   for (const s of phase3.scores) {
     if (!s.replay_link) continue;

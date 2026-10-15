@@ -1,5 +1,5 @@
 import { gunzipSync } from 'node:zlib';
-import { normalizeSelector, routeTemplate, runDetectors, shortHash, type DetectorRun, type ParamOverrides } from '@cp/detectors';
+import { runDetectors, toSignalRows, type DetectorRun, type ParamOverrides } from '@cp/detectors';
 import type { Logger } from '@cp/logger';
 import { emptyState, normalize } from '@cp/normalizer';
 import type { BlobStore, InsertRow, Publisher, StateStore, Warehouse } from '@cp/platform';
@@ -13,7 +13,6 @@ import {
   type RawChunkMessage,
   type RawChunkRow,
   type SessionTail,
-  type Signal,
   type SignalRow,
 } from '@cp/schema';
 import type { TailCache } from './tail-cache.js';
@@ -40,8 +39,8 @@ export interface ChunkHandlerDeps {
   detectors: readonly Detector[];
   /** tenant -> detector -> params */
   overrides: Record<string, ParamOverrides>;
-  /** tenant -> invariant rules; tenants not listed get the built-in rules. */
-  rules?: Record<string, InvariantRule[]>;
+  /** The tenant's active invariant rules (see rules.ts); undefined means the built-in rules. */
+  rulesFor?: (tenantId: string) => Promise<InvariantRule[] | undefined>;
   lookbackMs: number;
   tailMaxEvents: number;
   markerTtlMs: number;
@@ -77,18 +76,6 @@ export class KeyedQueue {
 }
 
 const eventEnd = (e: NormalizedEvent) => (e.kind === 'request' ? e.tEnd : e.t);
-
-/** The rule version a signal was produced under: its own (invariant rules) or the run's params hash. */
-const signalRuleVersion = (run: DetectorRun, s: Signal) => s.ruleVersion ?? run.ruleVersion;
-
-/** Identity of a detector hit, independent of which delivery or chunk decided it. */
-function signalId(tenantId: string, run: DetectorRun, s: Signal): string {
-  const e = s.evidence;
-  return shortHash(
-    [tenantId, e.sessionId, s.detector, run.detector.version, signalRuleVersion(run, s), e.seq, e.tStart, e.selector ?? ''].join('|'),
-    32,
-  );
-}
 
 export function createChunkHandler(deps: ChunkHandlerDeps) {
   const queue = new KeyedQueue();
@@ -182,6 +169,7 @@ async function processChunk(deps: ChunkHandlerDeps, msg: RawChunkMessage, meta: 
   let stats: ReturnType<typeof normalize>['stats'] | null = null;
 
   if (!stale) {
+    const rules = await deps.rulesFor?.(msg.tenant_id);
     const norm = normalize(env.events, { seq: msg.seq, skewMs, state: tail?.state ?? emptyState() });
     stats = norm.stats;
     const lastEvent = norm.events.reduce((m, e) => Math.max(m, eventEnd(e)), Number.NEGATIVE_INFINITY);
@@ -207,30 +195,13 @@ async function processChunk(deps: ChunkHandlerDeps, msg: RawChunkMessage, meta: 
       deps.overrides[msg.tenant_id],
       {
         ...(tail?.detector_state ? { state: tail.detector_state } : {}),
-        ...(deps.rules?.[msg.tenant_id] ? { rules: deps.rules[msg.tenant_id] } : {}),
+        ...(rules ? { rules } : {}),
       },
     );
-    signalRows = runs.flatMap((run) =>
-      run.signals.map((s) => ({
-        insertId: signalId(msg.tenant_id, run, s),
-        row: {
-          signal_id: signalId(msg.tenant_id, run, s),
-          tenant_id: msg.tenant_id,
-          session_id: msg.session_id,
-          seq: s.evidence.seq,
-          detector: s.detector,
-          detector_version: run.detector.version,
-          rule_version: signalRuleVersion(run, s),
-          fingerprint: s.fingerprint,
-          route: routeTemplate(s.evidence.route ?? env.page.route),
-          element_selector: s.evidence.selector ? normalizeSelector(s.evidence.selector) : null,
-          release: env.release,
-          evidence: { ...s.evidence },
-          event_time: s.eventTime,
-          ingest_time: ingestTime,
-        },
-      })),
-    );
+    signalRows = toSignalRows(runs, { tenantId: msg.tenant_id, sessionId: msg.session_id, pageRoute: env.page.route, release: env.release, ingestTime }).map((row) => ({
+      insertId: row.signal_id,
+      row,
+    }));
     const cutoff = chunk.tEnd - deps.lookbackMs;
     newTail = {
       v: 1,

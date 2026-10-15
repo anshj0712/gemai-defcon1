@@ -4,8 +4,17 @@
  * seed and count always produce the same plans, whatever the browser timing.
  */
 
-export const BUGS = ['dead_button', 'cart_total', 'checkout_error'] as const;
+export const BUGS = ['dead_button', 'cart_total', 'checkout_error', 'qty_price'] as const;
 export type Bug = (typeof BUGS)[number];
+
+/**
+ * Bugs no built-in detector or rule can see: they stay silent (no issue) until a merchant writes a rule
+ * that catches them, and a re-scan then finds the sessions they already hurt (Phase 4, found later).
+ */
+export const RETRO_BUGS: readonly Bug[] = ['qty_price'];
+
+/** The sentence `pnpm sim:rescan` gives the rule author; it catches qty_price (and the dashboard offers it). */
+export const RETRO_RULE_SENTENCE = 'No pair of shoes costs more than ₹17,000, so the bag subtotal must never be more than ₹17,000 times the number of pairs.';
 
 export type Persona =
   /** dead_button: tries three codes, then the right one, and the button has stopped working. */
@@ -14,6 +23,8 @@ export type Persona =
   | 'bulk_buyer'
   /** checkout_error: pays from the Northeast region, the payment fails, and they retry quickly. */
   | 'northeast_payer'
+  /** qty_price: raises a line's quantity to 2+, and the bag shows that line at 100x its price (totals agree with it). */
+  | 'pair_buyer'
   /** Clean: looks at a few products and leaves without a bag. */
   | 'window_shopper'
   /** Clean: bags one or two products, maybe a coupon and a quantity change, then checks out or leaves. */
@@ -31,8 +42,8 @@ export interface SimConfig {
 }
 
 export const DEFAULT_CONFIG: SimConfig = {
-  mix: { dead_button: 0.2, cart_total: 0.15, checkout_error: 0.15 },
-  abandonment: { baseline: 0.25, dead_button: 0.6, cart_total: 0.4, checkout_error: 0.85 },
+  mix: { dead_button: 0.2, cart_total: 0.15, checkout_error: 0.15, qty_price: 0.1 },
+  abandonment: { baseline: 0.25, dead_button: 0.6, cart_total: 0.4, checkout_error: 0.85, qty_price: 0.7 },
   windowShoppers: 0.3,
   nearMiss: 0.5,
 };
@@ -135,6 +146,9 @@ export function makePlans(sessions: number, seed: number, config: SimConfig = DE
       }
       case 'checkout_error':
         return { ...base, persona: 'northeast_payer', flags: [bug], products: distinctProducts(r, chance(r, 0.6) ? 1 : 2), codes: chance(r, 0.3) ? ['SAVE10'] : [], region: 'Northeast', retries: chance(r, 0.5) ? 3 : 4, abandon: chance(r, config.abandonment.checkout_error), abandonAt: 'checkout' };
+      case 'qty_price':
+        // A higher quantity on the first line is the trigger; no coupon, so no other rule is involved.
+        return { ...base, persona: 'pair_buyer', flags: [bug], products: distinctProducts(r, chance(r, 0.6) ? 1 : 2), qtyIncrements: chance(r, 0.6) ? 1 : 2, incrementFirstLine: true, abandon: chance(r, config.abandonment.qty_price) };
       default: {
         // Clean. A near miss carries one bug flag but stays clear of its trigger.
         const flags: Bug[] = chance(r, config.nearMiss) ? [pick(r, BUGS)] : [];
@@ -147,7 +161,8 @@ export function makePlans(sessions: number, seed: number, config: SimConfig = DE
         const guard = flags.includes('cart_total') && codes.includes('SAVE10');
         const products = guard ? bagged.slice(0, 1) : bagged;
         const incrementFirstLine = !guard && chance(r, 0.5);
-        const qtyIncrements = guard ? 0 : chance(r, 0.4) ? 1 + Math.floor(r() * 2) : 0;
+        // With qty_price on, every quantity stays at 1 (a quantity of 2 is its trigger).
+        const qtyIncrements = guard || flags.includes('qty_price') ? 0 : chance(r, 0.4) ? 1 + Math.floor(r() * 2) : 0;
         const region = flags.includes('checkout_error') ? base.region : pick(r, REGIONS);
         return { ...base, persona: 'buyer', flags, products, codes, qtyIncrements, incrementFirstLine, region, abandon: chance(r, config.abandonment.baseline) };
       }
@@ -163,5 +178,6 @@ export function reachesTrigger(p: SessionPlan): Bug | null {
   if (p.flags.includes('dead_button') && p.codes.length + p.extraPresses > 3) return 'dead_button';
   if (p.flags.includes('cart_total') && p.codes.includes('SAVE10') && p.products.length + p.qtyIncrements >= 2) return 'cart_total';
   if (p.flags.includes('checkout_error') && p.region === 'Northeast' && p.persona !== 'window_shopper' && !(p.abandon && p.abandonAt === 'bag')) return 'checkout_error';
+  if (p.flags.includes('qty_price') && p.persona !== 'window_shopper' && p.qtyIncrements > 0) return 'qty_price';
   return null;
 }

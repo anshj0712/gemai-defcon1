@@ -11,6 +11,7 @@
     "test": "vitest run --root ../.. --project @cp/api"
   },
   "dependencies": {
+    "@cp/detectors": "workspace:*",
     "@cp/logger": "workspace:*",
     "@cp/platform": "workspace:*",
     "@cp/schema": "workspace:*",

@@ -112,6 +112,13 @@ export function toMarkers(signals: SignalRow[], skew: Map<number, number>): Repl
     .sort((a, b) => a.replay_ts - b.replay_ts);
 }
 
+/** One stored (already scrubbed) chunk, checked to belong to `tenantId`. */
+export async function loadStoredChunk(blob: BlobStore, uri: string, tenantId: string): Promise<StoredChunk> {
+  const stored = StoredChunk.parse(JSON.parse(gunzipSync(await blob.get(uri)).toString('utf8')));
+  if (stored.tenant_id !== tenantId) throw new Error('stored chunk belongs to another tenant');
+  return stored;
+}
+
 export class SessionTooLongError extends Error {
   override name = 'SessionTooLongError';
   constructor(readonly chunks: number) {
@@ -132,13 +139,7 @@ export async function loadReplay(
   const rows = await deps.reader.rawChunks(tenantId, sessionId, opts.sinceMs);
   if (rows.length === 0) return null;
   if (rows.length > opts.maxChunks) throw new SessionTooLongError(rows.length);
-  const chunks = await Promise.all(
-    rows.map(async (r) => {
-      const stored = StoredChunk.parse(JSON.parse(gunzipSync(await deps.blob.get(r.gcs_uri)).toString('utf8')));
-      if (stored.tenant_id !== tenantId) throw new Error('stored chunk belongs to another tenant');
-      return { seq: r.seq, stored };
-    }),
-  );
+  const chunks = await Promise.all(rows.map(async (r) => ({ seq: r.seq, stored: await loadStoredChunk(deps.blob, r.gcs_uri, tenantId) })));
   const signals = await deps.reader.signals({ tenantId, sessionId, sinceMs: opts.sinceMs, limit: 500 });
   const first = rows[0]!;
   const last = rows.at(-1)!;

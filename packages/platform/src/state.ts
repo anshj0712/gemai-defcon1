@@ -3,7 +3,7 @@ import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import type { Firestore } from '@google-cloud/firestore';
-import type { Cluster, Finding, SessionTail } from '@cp/schema';
+import type { Cluster, Finding, RuleDoc, SessionTail } from '@cp/schema';
 
 /** Result of applying one signal to a cluster. */
 export interface ClusterUpdate {
@@ -40,6 +40,15 @@ export interface StateStore {
   getFinding(tenantId: string, findingId: string): Promise<Finding | null>;
   /** Highest score first. */
   listFindings(tenantId: string, limit: number): Promise<Finding[]>;
+
+  /**
+   * Tenant rules (Phase 4): the approved version the processor runs, a pending draft, and the latest
+   * re-scan. Written by the agent service only; the `rules` table keeps every approved version.
+   */
+  putRule(rule: RuleDoc): Promise<void>;
+  getRule(tenantId: string, ruleId: string): Promise<RuleDoc | null>;
+  /** Most recently updated first. */
+  listRules(tenantId: string): Promise<RuleDoc[]>;
 }
 
 export const TAILS_COLLECTION = 'session_tails';
@@ -47,12 +56,18 @@ export const PROCESSED_COLLECTION = 'processed_chunks';
 export const CLUSTERS_COLLECTION = 'clusters';
 export const CLUSTERED_COLLECTION = 'clustered_signals';
 export const FINDINGS_COLLECTION = 'findings';
+export const RULES_COLLECTION = 'rules';
+
+/** Most rules one tenant may hold (a cardinality guard on the hot copy). */
+export const MAX_RULES_PER_TENANT = 200;
 
 const tailId = (tenantId: string, sessionId: string) => `${tenantId}__${sessionId}`;
 const processedId = (tenantId: string, sessionId: string, seq: number) => `${tenantId}__${sessionId}__${seq}`;
 const clusterDocId = (tenantId: string, clusterId: string) => `${tenantId}__${clusterId}`;
 const clusteredId = (tenantId: string, signalId: string) => `${tenantId}__${signalId}`;
 const findingDocId = (tenantId: string, findingId: string) => `${tenantId}__${findingId}`;
+const ruleDocId = (tenantId: string, ruleId: string) => `${tenantId}__${ruleId}`;
+const byUpdated = (a: RuleDoc, b: RuleDoc) => b.updated_at - a.updated_at || (a.rule_id < b.rule_id ? -1 : 1);
 
 /**
  * Firestore layout. The tail itself is stored as one gzipped JSON bytes field: it keeps the document
@@ -181,6 +196,28 @@ export class FirestoreStateStore implements StateStore {
     const q = await this.db.collection(FINDINGS_COLLECTION).where('tenant_id', '==', tenantId).orderBy('score', 'desc').limit(limit).get();
     return q.docs.map((d) => this.decodeFinding(d.get('payload'))).filter((f): f is Finding => f !== null);
   }
+
+  async putRule(r: RuleDoc): Promise<void> {
+    await this.db
+      .collection(RULES_COLLECTION)
+      .doc(ruleDocId(r.tenant_id, r.rule_id))
+      .set({ tenant_id: r.tenant_id, rule_id: r.rule_id, updated_at: new Date(r.updated_at), payload: gzipSync(JSON.stringify(r)) });
+  }
+
+  private decodeRule(payload: unknown): RuleDoc | null {
+    return payload instanceof Uint8Array ? (JSON.parse(gunzipSync(payload).toString('utf8')) as RuleDoc) : null;
+  }
+
+  async getRule(tenantId: string, ruleId: string): Promise<RuleDoc | null> {
+    const snap = await this.db.collection(RULES_COLLECTION).doc(ruleDocId(tenantId, ruleId)).get();
+    return snap.exists ? this.decodeRule(snap.get('payload')) : null;
+  }
+
+  async listRules(tenantId: string): Promise<RuleDoc[]> {
+    // Equality filter only, so the automatic single-field index serves it; sorted here.
+    const q = await this.db.collection(RULES_COLLECTION).where('tenant_id', '==', tenantId).limit(MAX_RULES_PER_TENANT).get();
+    return q.docs.map((d) => this.decodeRule(d.get('payload'))).filter((r): r is RuleDoc => r !== null).sort(byUpdated);
+  }
 }
 
 /** local mode: one JSON file per document under `<dir>/<collection>/`. No TTL; `pnpm clean` wipes it. */
@@ -288,5 +325,24 @@ export class LocalStateStore implements StateStore {
     const files = (await readdir(dir)).filter((f) => f.startsWith(prefix) && f.endsWith('.json'));
     const all = await Promise.all(files.map(async (f) => JSON.parse(await readFile(join(dir, f), 'utf8')) as Finding));
     return all.sort((a, b) => b.score - a.score || b.last_seen - a.last_seen).slice(0, limit);
+  }
+
+  async putRule(r: RuleDoc): Promise<void> {
+    await this.write(RULES_COLLECTION, ruleDocId(r.tenant_id, r.rule_id), r);
+  }
+
+  async getRule(tenantId: string, ruleId: string): Promise<RuleDoc | null> {
+    const file = this.path(RULES_COLLECTION, ruleDocId(tenantId, ruleId));
+    if (!existsSync(file)) return null;
+    return JSON.parse(await readFile(file, 'utf8')) as RuleDoc;
+  }
+
+  async listRules(tenantId: string): Promise<RuleDoc[]> {
+    const dir = join(this.dir, RULES_COLLECTION);
+    if (!existsSync(dir)) return [];
+    const prefix = `${tenantId}__`;
+    const files = (await readdir(dir)).filter((f) => f.startsWith(prefix) && f.endsWith('.json'));
+    const all = await Promise.all(files.map(async (f) => JSON.parse(await readFile(join(dir, f), 'utf8')) as RuleDoc));
+    return all.sort(byUpdated).slice(0, MAX_RULES_PER_TENANT);
   }
 }

@@ -6,6 +6,7 @@ export const DEMO_BUGS = [
   { id: 'dead_button', label: 'Dead button', detail: 'Apply Coupon silently stops responding after the 3rd press' },
   { id: 'cart_total', label: 'Cart total', detail: '2+ items in the bag (same or different shoes) and SAVE10 applied: the total leaves out the last item' },
   { id: 'checkout_error', label: 'Checkout error', detail: 'Region Northeast fails at payment (500 and a JS error)' },
+  { id: 'qty_price', label: 'Quantity price', detail: 'A bag line with quantity 2+ shows 100x its price; totals agree, so no built-in rule fires (found later by a merchant rule)' },
 ] as const;
 
 export type DemoBugId = (typeof DEMO_BUGS)[number]['id'];

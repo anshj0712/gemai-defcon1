@@ -11,7 +11,9 @@
     "test": "vitest run --root ../.. --project @cp/agent"
   },
   "dependencies": {
+    "@cp/detectors": "workspace:*",
     "@cp/logger": "workspace:*",
+    "@cp/normalizer": "workspace:*",
     "@cp/platform": "workspace:*",
     "@cp/schema": "workspace:*",
     "@google/adk": "2.2.1",

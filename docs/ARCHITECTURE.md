@@ -113,6 +113,13 @@ As built, column specs live in `packages/schema/src/bigquery.ts`, and a test kee
   - `signals_dedup` removes the rare duplicate that streaming insert can leave after a retry. `signal_id` is deterministic and doubles as the streaming insertId.
 - Writes use BigQuery streaming insert (`insertAll` with insertIds) behind a `Warehouse` port. The Storage Write API can replace it behind the same port.
 
+Phase 4 additions (15 Oct):
+
+- `signals.rescan_id` (nullable STRING) is set on signals a retroactive re-scan wrote and is absent on live ones. `pnpm infra:up` adds it to an existing table in place.
+- `rules` rows for tenant rules are written on approval only: kind `generated`, with the compiled rule, the sentence, the author's model id and prompt hash, and the approver in `definition`. A draft never ran, so it is not part of the record.
+- Firestore `rules/{tenant}__{rule_id}` is the hot copy of one tenant rule: the approved version the processor runs, a pending draft with its dry run, and the latest re-scan's progress. The agent service is its only writer.
+- `Cluster.found_later` and `Finding.discovery` mark sessions a re-scan surfaced. A finding row's `details` now also carries `kind`, `route`, `anchor`, `cluster_title`, `last_seen` and `discovery`, so an as-of view needs no hot copy.
+
 Live issues (Firestore, implemented 6 Oct). The clusterer keeps one document per issue in `clusters/{tenant}__{cluster_id}`. The document holds the queryable fields `tenant_id`, `cluster_id`, `kind`, `last_seen` and `updated_at`, plus the whole `Cluster` (`packages/schema/src/clusters.ts`) as gzipped JSON:
 
 - symptom counts per detector
@@ -221,7 +228,7 @@ Build it with the Agent Development Kit, whose TypeScript 2.0 release has graph 
 | --- | --- | --- | --- |
 | Triage | flash-lite | Cluster summary: fingerprint, count, route, top selectors, release, 3 to 5 sample evidence items | JSON: title, category, confidence, likely cause, repro steps |
 | Root cause and verify | flash (reasoning, vision) | Triage output plus tool calls: session samples, DOM diff at time t, error context, screenshot at time t, release diff | JSON: cause hypothesis, visual confirmation yes or no, evidence ids cited |
-| Rule author | flash | A merchant sentence such as "cart total must equal line items minus discount plus shipping" | Rule JSON (probes and invariant), dry-run precision on recent sessions, then human approval |
+| Rule author (built 15 Oct; see section 6) | flash | A merchant sentence such as "cart total must equal line items minus discount plus shipping", plus statistics of the recorded probes | Rule JSON (probes and invariant), a dry run on recent sessions, then human approval |
 | Ranker | Deterministic core with a bounded LLM step | Enriched finding and the priority rule set | Score, tier, and the priority rule ids that applied |
 
 Ranking against a rule set. The priority rule set is versioned data in the `rules` table, for example: checkout and payment blockers outrank pricing errors, pricing errors outrank browse-page friction, and a regression appearing right after a release gets a multiplier. Gemini classifies each finding into these buckets and cites the rule ids. The score itself is computed in code:
@@ -306,6 +313,62 @@ Two execution paths:
 - Rebuild path: a rule needing a selector nobody probed. A Cloud Run Job replays raw chunks in headless Chromium using the rrweb replayer and evaluates the new selector. It is slower and costs more, so cap it per run and treat it as phase 2 unless time allows.
 
 Cost guard: partition pruning by event date and a maximum-bytes-billed setting on every re-scan query.
+
+### Implemented (15 Oct, Phase 4): rules in plain English, retroactive re-scan, found later
+
+The fast path is built; the rebuild path (a selector nobody probed) is not.
+
+**Where it runs.** The agent service is the rules service:
+
+- it is the only writer of rule docs;
+- it runs the rule author (Gemini), the dry run, the approval record, and the re-scan;
+- the API serves reads from the state store and forwards the four actions to it (`AGENT_URL`; on Cloud Run with an ID token from the metadata server).
+
+A re-scan runs in-process in the agent, capped by `RESCAN_MAX_SESSIONS` (newest sessions first) over `RESCAN_WINDOW_DAYS`. `pnpm rescan -- --tenant demo --rule <id>` runs the same code from the command line and is the command a Cloud Run Job would run for larger windows. The job itself is not deployed yet (Phase 5).
+
+**Lifecycle.**
+
+| Step | What happens |
+| --- | --- |
+| Draft | The sentence and a probe catalog go to the rule author. The catalog holds names, how many snapshots carry each probe, values per snapshot, min, median, max, and routes, built from the newest `RULE_DRY_RUN_SESSIONS` sessions read back from raw. Code compiles the answer and runs the grounding validator. A dry run over the same sessions shows what the draft would flag. The draft lives only on the rule's hot doc. |
+| Approve | A person approves a draft by version. Approval writes a `rules` row (kind `generated`, `definition.type = invariant`, with the sentence, model id, prompt hash, dry-run summary, and approver) and starts a re-scan. Editing a rule (a new draft with the same id) makes version n+1. |
+| Live | The processor merges the built-in (or `INVARIANT_RULES`) rules with every approved tenant rule from the state store, cached `RULES_CACHE_TTL_MS` (15 s). A store failure keeps the last good list. |
+| Re-scan | Lists the window's chunks from `raw_chunks` in one query and loads each from the blob store. Sessions are normalized in seq order with carried state and the processor's skew correction, then the real `invariant_check` runs with the approved rule only. Rows are built by the same `toSignalRows` as the processor. |
+
+**What a re-scan writes.** Signals keep the original `event_time` and get `ingest_time` = the re-scan's time, the rule's `rule_id@version`, and the new nullable `signals.rescan_id`. They go to the warehouse and the `signals` topic, so the clusterer and the agent pipeline treat them like live signals.
+
+**Idempotence.** A hit's `signal_id` is the same whether it was found live, by this re-scan, or by a re-run, so overlap writes and clusters nothing twice.
+
+**Found later.** The clusterer counts sessions that a re-scan signal added to an issue: `Cluster.found_later`, with sessions and per re-scan counts. A session already known from live detection does not count. The finding carries `discovery: {found_later, found_later_sessions, rescan_ids}`. In the record, the issue's first finding version has `recorded_from` after the approval, while its `valid_from` lies before it.
+
+**Rule author** (`apps/agent/src/agents/rule-author.ts`, `GEMINI_MODEL_REASONING`, prompt `r4.1`).
+
+- **Output.** A flat linear form, so Gemini's response schema has no recursion: `left/right: [{coef, kind: probe | sum | count | const, probe, index, value, default_zero}]`, plus op, tolerance, routes, highlight probe, an explanation claim, and assumptions. `understood: false` means the sentence cannot be checked with the recorded probes.
+- **Compiling.** Code compiles the form into the detectors' `Expr`. Tolerance stays on `eq` and is folded into the right-hand side for `lte` and `gte`, so detector semantics never change.
+- **Validator.** It rejects:
+  - unknown probes, routes, or cited ids (S1 is the sentence, P the probes, R the existing rules);
+  - a built-in id;
+  - a fractional tolerance;
+  - anything that does not compile.
+  A rejected answer is retried once, then the draft fails closed.
+- **Inputs.** The author never sees sessions: only the sentence and probe statistics (numbers, synthetic).
+- **Offline.** The offline stand-in understands three sentence families (a per-unit price cap, a discount cap, totals that add up) and says so for anything else.
+
+**As-of queries.** `WarehouseReader.findingsAsOf` is the skill's query over `findings_versions`:
+
+- one row per finding, current at transaction time T;
+- valid time overlapping [from, to);
+- `maximumBytesBilled` set.
+
+`valid_from` is not constant per finding, because a re-scan can move `first_seen` earlier. The view's window therefore cannot prune on it, and the `valid_from >= since` filter bounds the scan instead.
+
+**Demo.** The demo shop has a fourth, silent bug, `qty_price`. A bag line with quantity 2 or more shows 100x its price (paise shown as rupees), and every total agrees with the shown lines, so no built-in rule fires. Business events and checkout keep the catalog price. The rule "No pair of shoes costs more than ₹17,000, so the bag subtotal must never be more than ₹17,000 times the number of pairs" compiles to `sum(line_total) ≤ 17,00,000 × sum(qty)`. The dearest catalog pair is ₹16,995, so clean sessions never trip it.
+
+**Exit test.** `pnpm sim:rescan` drafts that sentence, approves it, and waits for the re-scan. It then checks:
+
+- one issue holds the bug's sessions (recall at least 90%, precision 100%);
+- the issue and its finding are tagged found later;
+- time travel as of the approval does not have the finding, now it does, and that finding is the only difference.
 
 ## 7. Dashboard and API
 
@@ -401,6 +464,28 @@ Each claim carries evidence chips, and signal and screenshot chips open the repl
 
 Replay captions now cover every detector, for example "Rage clicks on button#place-order: 5 clicks in 2.2 s, 5 failed" or "Cart total doesn't match its line items: shows ₹9,715.50, expected ₹29,146.50" (from a synthetic sim session). Invariant markers outline the probe element (`[data-cp-probe="cart_total"]`).
 
+**Rules and time travel (implemented 15 Oct, Phase 4).** Routes as built (the table at the top of this section was the plan):
+
+| Endpoint | Returns |
+| --- | --- |
+| `GET /v1/rules?tenant=` | Tenant rule docs (approved version, pending draft with its dry run, latest re-scan), each version as one readable line, plus the built-in rules |
+| `GET /v1/rules/{id}?tenant=` | One rule doc |
+| `POST /v1/rules/draft` `{sentence}` | Forwarded to the agent: rule author and dry run; 422 when the sentence cannot be expressed |
+| `POST /v1/rules/{id}/approve` `{version}` | Forwarded: records the version and starts the re-scan; 409 for a stale version or a re-scan still running |
+| `POST /v1/rules/{id}/reject`, `/rescan` | Forwarded: drop the draft; re-scan with the approved version again |
+| `GET /v1/history?tenant=&as_of=&from=&to=` | `then` (as of T) and `current` (now) for the same valid-time window, `found_later` ids, and slider `moments` (approvals, finished re-scans), all from the findings record |
+
+The approver is recorded as `dashboard` until the API has sign-in (Phase 5).
+
+- **Rules page.** A sentence box with example chips. A draft shows:
+  - the readable rule;
+  - the author's explanation and model, with the offline stand-in named as such;
+  - the dry run (sessions checked, applicable, flagged, hit rate, already in an issue) with sample replays.
+
+  Approving shows the re-scan's progress, and a link to the resulting issue.
+- **Time travel page.** An as-of slider with ticks at approvals and re-scans, and a valid-time stretch (24 h, 7 d or 30 d before T). It shows "What we knew then" next to "What we know now about the same stretch", with found-later issues highlighted and synthetic totals.
+- **Issue cards and the issue page.** They show "Found later · N sessions" for issues a re-scan added sessions to.
+
 **Route per click.** A batch can span a navigation, so the normalizer tracks the current route (Meta loads and `cp.nav`) and stamps it on each click. dead_click (v1.2.0) fingerprints on the click's own route, not the route of the batch that decided it. The e2e check caught this: before the fix, the last clicks before navigating away got a different fingerprint.
 
 ## 8. Privacy and security
@@ -455,7 +540,7 @@ Everything runs on Cloud Run plus managed data services, which satisfies the Cup
 | Raw chunks and Parquet cache | Cloud Storage | Per-tenant prefix, lifecycle rule for retention |
 | Signals, findings, rules, business events | BigQuery | Partitioned by event date, clustered by tenant_id and session_id |
 | Hot session tail, live issues, latest findings | Firestore | Session tail and markers with a TTL; `clusters` behind the live issues feed (composite index tenant_id, last_seen desc); `findings` (composite index tenant_id, score desc) |
-| Re-scan and rebuild work | Cloud Run Jobs | Started by the API; capped per run |
+| Re-scan and rebuild work | Cloud Run Jobs | As built (Phase 4), the fast-path re-scan runs inside the agent service after an approval, capped per run; `pnpm rescan` is the same code as a job command for larger windows (not deployed yet) |
 | Dashboard hosting | Firebase Hosting | React and Vite build |
 | API keys and site keys | Secret Manager | Gemini key held here per the ADK Cloud Run docs |
 | Our own service logs and alerts | Cloud Logging and Monitoring | Never customer session data |
@@ -466,7 +551,7 @@ Monorepo layout: see `AGENTS.md`. The `sim` folder matters as much as any servic
 
 Simulator (implemented 6 Oct). `pnpm sim -- --sessions 300 --seed 42 --concurrency 8` drives the demo shop in real Chrome, so the real SDK, probes, collector, processor, and clusterer all run.
 
-- **Plans.** Seeded plans (`sim/src/plan.ts`) give the mix: 20% dead_button, 15% cart_total, 15% checkout_error, and 50% clean.
+- **Plans.** Seeded plans (`sim/src/plan.ts`) give the mix: 20% dead_button, 15% cart_total, 15% checkout_error, 10% qty_price (since 15 Oct; abandons 70%), and 40% clean. qty_price is a retro bug: `sim:check` accepts it having no issue, and `pnpm sim:rescan` checks the merchant rule surfaces it.
 - **Near misses.** Half of the clean sessions carry a bug flag whose trigger they never reach: at most 2 coupon presses, a discounted bag kept at a single item, or a region other than Northeast. A test asserts that affected plans reach their trigger and clean plans never do.
 - **Abandonment.** Affected shoppers abandon more often than the baseline by design (60%, 40%, and 85% against 25%). Every session is recorded (sample rate 1), so the baseline is unbiased.
 - **Ground truth.** It goes to `sim/out/ground-truth.json`.
@@ -530,6 +615,7 @@ Demo shop bug flags:
 - `BUG_DEAD_BUTTON`: the Apply Coupon button silently stops responding after the third click.
 - `BUG_CART_TOTAL`: with a discount applied and 2 or more items in the bag (the same shoe or different ones), the cart total leaves out the last item, so it differs from the sum of line items.
 - `BUG_CHECKOUT_ERROR`: the payment step throws a JS error and a 500 for one region, producing rage clicks and abandonment.
+- `qty_price` (added 15 Oct for Phase 4): a bag line with quantity 2 or more shows 100x its price, and every total agrees with it. No built-in rule sees it; a merchant rule written later finds the sessions it already hurt.
 
 The `sim` generator runs several hundred scripted sessions with randomized behavior, where bug-affected sessions abandon at a higher rate than the rest. Those rates are parameters we choose, so say clearly in the demo and README that the data is synthetic.
 

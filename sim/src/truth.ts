@@ -1,4 +1,4 @@
-import { BUGS, type Bug, type Persona, type SimConfig } from './plan.js';
+import { BUGS, RETRO_BUGS, type Bug, type Persona, type SimConfig } from './plan.js';
 
 /** One simulated session as it actually ran. All of it is synthetic. */
 export interface TruthSession {
@@ -56,6 +56,8 @@ export interface BugScore {
   recall: number;
   /** Affected sessions in that issue / every simulated session in it. */
   precision: number;
+  /** A retro bug that no issue holds yet: silent by design until a merchant rule catches it. */
+  silent: boolean;
 }
 
 export interface CheckReport {
@@ -72,7 +74,11 @@ export interface CheckReport {
   failures: string[];
 }
 
-/** Score this run's sessions against the issues. Sessions from other runs in the same issues are ignored. */
+/**
+ * Score this run's sessions against the issues. Sessions from other runs in the same issues are ignored.
+ * A retro bug (RETRO_BUGS) with no issue is fine: no rule can see it until a merchant writes one. Once an
+ * issue holds its sessions (after `pnpm sim:rescan`), it is held to the same bar as the others.
+ */
 export function evaluate(truth: GroundTruth, clusters: readonly ClusterLike[], minRecall = 0.9): CheckReport {
   const scored = truth.sessions.filter((s) => s.session_id && !s.error);
   const bugOf = new Map(scored.map((s) => [s.session_id!, s.bug]));
@@ -96,9 +102,10 @@ export function evaluate(truth: GroundTruth, clusters: readonly ClusterLike[], m
       title: main?.c.title ?? null,
       recall: affected ? (main?.hits ?? 0) / affected : 1,
       precision: main ? main.hits / main.ids.length : 1,
+      silent: RETRO_BUGS.includes(bug) && holding.length === 0,
     };
     bugs.push(score);
-    if (affected === 0) continue;
+    if (affected === 0 || score.silent) continue;
     if (score.clusters !== 1) failures.push(`${bug}: expected 1 issue, found ${score.clusters}`);
     if (score.recall < minRecall) failures.push(`${bug}: recall ${pct(score.recall)} is below ${pct(minRecall)}`);
     if (score.precision < 1) failures.push(`${bug}: precision ${pct(score.precision)} (its issue holds sessions from other groups)`);
@@ -142,6 +149,30 @@ export interface FindingLike {
   triage: { summary: { text: string }; repro_steps: { step: string }[] } | null;
   revenue: { status: string; revenue_at_risk_minor: number; currency: string | null; abandonment_affected: number | null; abandonment_baseline: number | null };
   evidence: { id: string; kind: string; signal_id?: string; session_id?: string }[];
+  /** Phase 4: sessions a re-scan surfaced (absent on findings written before Phase 4). */
+  discovery?: { found_later: boolean; found_later_sessions: number; rescan_ids: string[] };
+}
+
+/** Phase 4 exit test for one retro bug: its sessions, the issue the re-scan built, and how they compare. */
+export interface RetroScore {
+  bug: Bug;
+  affected: number;
+  /** Affected sessions in the rule's issue / all affected sessions. */
+  recall: number;
+  /** Affected sessions in the rule's issue / every simulated session in it. */
+  precision: number;
+  /** Sessions of this run the issue holds that are not the bug's (false positives of the new rule). */
+  others: number;
+}
+
+/** Score a retro bug against the issue the merchant rule produced (only this run's sessions count). */
+export function evaluateRetro(truth: GroundTruth, bug: Bug, issueSessions: readonly string[]): RetroScore {
+  const scored = truth.sessions.filter((s) => s.session_id && !s.error);
+  const bugOf = new Map(scored.map((s) => [s.session_id!, s.bug]));
+  const affected = scored.filter((s) => s.bug === bug).length;
+  const mine = issueSessions.filter((id) => bugOf.has(id));
+  const hits = mine.filter((id) => bugOf.get(id) === bug).length;
+  return { bug, affected, recall: affected ? hits / affected : 1, precision: mine.length ? hits / mine.length : 1, others: mine.length - hits };
 }
 
 export interface FindingScore {
