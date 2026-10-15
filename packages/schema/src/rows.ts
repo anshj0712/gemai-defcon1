@@ -42,6 +42,8 @@ export const SignalRow = z.object({
   evidence: json,
   event_time: ms,
   ingest_time: ms,
+  /** Phase 4: set on signals a retroactive re-scan wrote (original event_time, ingest_time = the re-scan). Absent on live signals. */
+  rescan_id: z.string().nullable().optional(),
 });
 export type SignalRow = z.infer<typeof SignalRow>;
 

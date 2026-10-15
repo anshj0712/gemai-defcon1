@@ -70,6 +70,7 @@ export const BQ_TABLES: Record<TableName, BqTableSpec> = {
       req('evidence', 'JSON'),
       req('event_time', 'TIMESTAMP', 'Valid time'),
       req('ingest_time', 'TIMESTAMP', 'Transaction time'),
+      opt('rescan_id', 'STRING', 'Set when a retroactive re-scan wrote the signal (null for live detection)'),
     ],
   },
   business_events: {

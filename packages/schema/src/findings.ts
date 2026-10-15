@@ -140,7 +140,7 @@ export interface RevenueAtRisk {
 }
 
 export interface AgentRun {
-  agent: 'triage' | 'root_cause' | 'ranker';
+  agent: 'triage' | 'root_cause' | 'ranker' | 'rule_author';
   model: string;
   prompt_hash: string;
   attempts: number;
@@ -216,8 +216,19 @@ export interface Finding {
   rule_version: string;
   created_at: number;
   updated_at: number;
+  /** Phase 4: whether a retroactive re-scan surfaced some of this issue's sessions (absent on older findings). */
+  discovery?: FindingDiscovery;
   /** All demo data is synthetic (AGENTS.md rule 10). */
   synthetic: true;
+}
+
+/** Known at the time, or found later by re-scanning history with a newer rule. */
+export interface FindingDiscovery {
+  /** True when a re-scan added sessions: shoppers were hurt before the rule that flags them existed. */
+  found_later: boolean;
+  /** Sessions a re-scan added to the issue. */
+  found_later_sessions: number;
+  rescan_ids: string[];
 }
 
 /** Feed entry: the finding without its evidence pack and run log. */

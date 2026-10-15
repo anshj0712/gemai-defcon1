@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { applyCouponScenario, toEnvelopes } from '@cp/testkit';
-import { BQ_TABLES, IngestEnvelope, RawChunkMessage, ROW_SCHEMAS, StoredChunk, type TableName } from '../src/index.js';
+import { BQ_TABLES, IngestEnvelope, RawChunkMessage, ROW_SCHEMAS, ruleText, StoredChunk, type TableName } from '../src/index.js';
 
 const envelope = () => toEnvelopes(applyCouponScenario({ start: 1_790_000_000_000 }).events, { sessionId: 's_schema_test_1' })[0]!;
 
@@ -63,11 +63,26 @@ describe('BigQuery specs', () => {
     expect(spec.clusterFields[0]).toBe('tenant_id');
   });
 
+  it('signals carry the re-scan id as a nullable column', () => {
+    expect(BQ_TABLES.signals.fields.find((f) => f.name === 'rescan_id')).toMatchObject({ type: 'STRING', mode: 'NULLABLE' });
+  });
+
   it('every row table carries both clocks', () => {
     for (const t of ['signals', 'business_events'] as const) {
       const names = BQ_TABLES[t].fields.map((f) => f.name);
       expect(names).toEqual(expect.arrayContaining(['event_time', 'ingest_time']));
     }
     expect(BQ_TABLES.findings.fields.map((f) => f.name)).toEqual(expect.arrayContaining(['valid_from', 'valid_to', 'recorded_from', 'recorded_to']));
+  });
+});
+
+describe('ruleText', () => {
+  it('reads a compiled rule back as one checkable line', () => {
+    expect(ruleText({ assert: { left: { probe: 'cart_total' }, op: 'eq', right: { sub: [{ sum: 'line_total' }, { probe: 'discount', default: 0 }] }, tolerance_minor: 1 } })).toBe(
+      'cart_total = sum(line_total) − discount (within 1)',
+    );
+    expect(
+      ruleText({ assert: { left: { add: [{ sum: 'line_total' }, { mul: [{ const: -1 }, { probe: 'discount' }] }] }, op: 'lte', right: { mul: [{ const: 1700000 }, { sum: 'qty' }] }, tolerance_minor: 0 } }),
+    ).toBe('sum(line_total) − discount ≤ 17,00,000 × sum(qty)');
   });
 });
