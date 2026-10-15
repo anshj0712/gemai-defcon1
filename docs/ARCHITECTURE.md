@@ -120,6 +120,8 @@ Phase 4 additions (15 Oct):
 - Firestore `rules/{tenant}__{rule_id}` is the hot copy of one tenant rule: the approved version the processor runs, a pending draft with its dry run, and the latest re-scan's progress. The agent service is its only writer.
 - `Cluster.found_later` and `Finding.discovery` mark sessions a re-scan surfaced. A finding row's `details` now also carries `kind`, `route`, `anchor`, `cluster_title`, `last_seen` and `discovery`, so an as-of view needs no hot copy.
 
+Planned, not yet implemented: `RuleDraft` (below, section 6) gains `origin: 'human' | 'agent'` and, when agent-originated, the `cluster_id` that triggered it, so a proposal nobody typed a sentence for can still be traced to the issue that produced it.
+
 Live issues (Firestore, implemented 6 Oct). The clusterer keeps one document per issue in `clusters/{tenant}__{cluster_id}`. The document holds the queryable fields `tenant_id`, `cluster_id`, `kind`, `last_seen` and `updated_at`, plus the whole `Cluster` (`packages/schema/src/clusters.ts`) as gzipped JSON:
 
 - symptom counts per detector
@@ -229,6 +231,7 @@ Build it with the Agent Development Kit, whose TypeScript 2.0 release has graph 
 | Triage | flash-lite | Cluster summary: fingerprint, count, route, top selectors, release, 3 to 5 sample evidence items | JSON: title, category, confidence, likely cause, repro steps |
 | Root cause and verify | flash (reasoning, vision) | Triage output plus tool calls: session samples, DOM diff at time t, error context, screenshot at time t, release diff | JSON: cause hypothesis, visual confirmation yes or no, evidence ids cited |
 | Rule author (built 15 Oct; see section 6) | flash | A merchant sentence such as "cart total must equal line items minus discount plus shipping", plus statistics of the recorded probes | Rule JSON (probes and invariant), a dry run on recent sessions, then human approval |
+| Rule suggester (planned; see section 6) | flash-lite | Same evidence pack as triage and ranker, for a recurring issue not yet explained by any active rule | `{propose, sentence, assumptions, explanation}`; the sentence is handed to the rule author, not compiled directly |
 | Ranker | Deterministic core with a bounded LLM step | Enriched finding and the priority rule set | Score, tier, and the priority rule ids that applied |
 
 Ranking against a rule set. The priority rule set is versioned data in the `rules` table, for example: checkout and payment blockers outrank pricing errors, pricing errors outrank browse-page friction, and a regression appearing right after a release gets a multiplier. Gemini classifies each finding into these buckets and cites the rule ids. The score itself is computed in code:
@@ -369,6 +372,26 @@ A re-scan runs in-process in the agent, capped by `RESCAN_MAX_SESSIONS` (newest 
 - one issue holds the bug's sessions (recall at least 90%, precision 100%);
 - the issue and its finding are tagged found later;
 - time travel as of the approval does not have the finding, now it does, and that finding is the only difference.
+
+### Planned: agent-suggested rules (origination lane)
+
+Not yet built. Today a rule exists only because a person typed the sentence; the agent service explains and ranks issues on its own (section 5) but never proposes that one deserves a standing rule. This closes that gap without a second pipeline: one more way a draft gets created, not a second place rules live.
+
+The draft, approve, live, re-scan lifecycle above does not change. An agent-originated draft is a draft like any other: same hot doc, same dry run, same human approval before it reaches live traffic or a `rules` row.
+
+**Trigger** (code, `apps/agent/src/pipeline.ts`, after the ranker step for a cluster). Deterministic, not scheduled, consistent with "code decides, Gemini drafts" (AGENTS rule 1): on a recurring issue — at least `RULE_SUGGEST_MIN_SESSIONS` sessions over at least `RULE_SUGGEST_MIN_DAYS`, same detector and route or region, not already explained by an active `InvariantRule` for the tenant — call the rule suggester once per issue per re-score pass, never per signal.
+
+**Rule suggester** (`apps/agent/src/agents/rule-suggester.ts`, `GEMINI_MODEL_BULK`, planned prompt `s1`). Input: the same evidence pack triage and the ranker already receive for that issue (selectors, detector, route, region if probed, session and revenue figures); no new evidence plumbing. Output: `{propose: boolean, sentence, assumptions, explanation}`, grounded the same way every other agent is (section 5). It does not emit a compiled rule: a proposal's `sentence` is handed to the existing rule author (`ruleAuthorInput` / `RULE_AUTHOR`) exactly as a merchant's sentence would be, so compiling, validating, and the dry run stay the single code path above.
+
+**Draft record.** `RuleDraft` (`packages/schema/src/rules.ts`) gains `origin: 'human' | 'agent'` and, when agent-originated, the triggering `cluster_id` (section 3). Nothing else in the lifecycle table changes.
+
+**Revenue lost so far, not just at risk.** The existing `revenueAtRisk()` (section 5) runs a second time over the draft's own dry-run hits (`sessions_hit`), rather than the forward-looking affected population, so a suggestion carries an estimate of money already lost to the pattern before anyone wrote a rule for it, from the one formula in section 5, not a new one.
+
+**Dashboard** (planned; section 7). The Rules tab shows agent-originated drafts in their own panel, separate from a merchant's own sentence box, each with the existing Approve and Reject actions. Approve behaves identically either way: it is still the only thing that writes a `rules` row and starts a re-scan.
+
+**Why one pipeline, not two.** The part with real correctness risk is the compiler, the validator, and the bitemporal re-scan (rules 3 to 5), not where the sentence came from. A second, parallel pipeline risks the two lanes disagreeing on hit rate or revenue, which is exactly the kind of thing a demo gets caught on.
+
+**Risk.** A wrong agent-authored suggestion reads worse than a wrong human one: it looks like the model hallucinated a rule rather than a person misdescribing one. Keep the trigger conservative and the suggester's job narrow (phrasing only, same grounding validator as every other agent); a few good suggestions beat a noisy feed, especially live in front of judges.
 
 ## 7. Dashboard and API
 
