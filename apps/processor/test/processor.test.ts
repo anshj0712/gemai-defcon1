@@ -3,10 +3,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { DETECTORS } from '@cp/detectors';
+import { BUILTIN_RULES, DETECTORS } from '@cp/detectors';
 import { createLogger } from '@cp/logger';
 import { LocalBlobStore, LocalStateStore, LocalWarehouse, type Publisher, type PublishOptions, type Warehouse } from '@cp/platform';
-import type { IngestEnvelope, RawChunkMessage, StoredChunk } from '@cp/schema';
+import type { IngestEnvelope, InvariantRule, RawChunkMessage, StoredChunk } from '@cp/schema';
 import { applyCouponScenario, SessionScript, toEnvelopes } from '@cp/testkit';
 import { createChunkHandler, PoisonMessageError } from '../src/handle-chunk.js';
 import { buildProcessor, deliver } from '../src/server.js';
@@ -38,7 +38,7 @@ beforeEach(() => {
   publisher = new RecordingPublisher();
 });
 
-function handler(opts: { now?: () => number; warehouse?: Warehouse; state?: LocalStateStore } = {}) {
+function handler(opts: { now?: () => number; warehouse?: Warehouse; state?: LocalStateStore; rulesFor?: (tenantId: string) => Promise<InvariantRule[] | undefined> } = {}) {
   const st = opts.state ?? state;
   return createChunkHandler({
     blob,
@@ -55,6 +55,7 @@ function handler(opts: { now?: () => number; warehouse?: Warehouse; state?: Loca
     gapWaitAttempts: 4,
     logger: quiet,
     ...(opts.now ? { now: opts.now } : {}),
+    ...(opts.rulesFor ? { rulesFor: opts.rulesFor } : {}),
   });
 }
 
@@ -176,6 +177,23 @@ describe('chunk handler', () => {
     const rows = (await warehouse.rows('signals')).filter((r) => r.detector === 'invariant_check');
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ rule_version: 'cart_total_matches_lines@1', route: '/cart', element_selector: null, detector_version: '1.0.0' });
+  });
+
+  it('applies the tenant rules it is given, so an approved rule flags live traffic', async () => {
+    // Internally consistent totals (the built-in rule passes) but a line priced 100x: only the tenant rule fires.
+    const script = new SessionScript(T0).meta(0).snapshot(5).probe(1000, { line_total: [139_900_000], qty: [2], discount: [0], cart_total: [139_900_000] });
+    const [env] = toEnvelopes(script.events, { sessionId: 's_tenant_rule_1', batchMs: 5000 });
+    const cap: InvariantRule = {
+      id: 'bag_price_cap',
+      version: 1,
+      title: 'Bag costs more than the dearest pair per unit',
+      requires: ['line_total', 'qty'],
+      assert: { left: { sum: 'line_total' }, op: 'lte', right: { mul: [{ const: 1_700_000 }, { sum: 'qty' }] }, tolerance_minor: 0 },
+    };
+    await handler({ rulesFor: async () => [...BUILTIN_RULES, cap] }).handle(await ingest(env!));
+    const rows = (await warehouse.rows('signals')).filter((r) => r.detector === 'invariant_check');
+    expect(rows.map((r) => r.rule_version)).toEqual(['bag_price_cap@1']);
+    expect(rows[0]).not.toHaveProperty('rescan_id');
   });
 
   it('keeps the valid time of a late-arriving chunk and stamps ingest time now', async () => {

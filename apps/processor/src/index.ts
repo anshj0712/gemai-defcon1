@@ -3,6 +3,7 @@ import { createLogger, flushLogs, logsExplorerUrl, resolveLogFormat, serviceLogF
 import { createPlatform, loadDotEnv } from '@cp/platform';
 import { loadProcessorConfig } from './config.js';
 import { createChunkHandler } from './handle-chunk.js';
+import { createRuleSource } from './rules.js';
 import { buildProcessor, deliver } from './server.js';
 import { TailCache } from './tail-cache.js';
 
@@ -27,7 +28,7 @@ async function main(): Promise<void> {
     signalsTopic: pc.topics.signals,
     detectors: DETECTORS,
     overrides: config.overrides,
-    rules: config.rules,
+    rulesFor: createRuleSource({ state: platform.state, base: config.rules, ttlMs: config.rulesCacheTtlMs, logger }),
     lookbackMs: config.tailLookbackMs,
     tailMaxEvents: config.tailMaxEvents,
     markerTtlMs: config.markerTtlMs,
