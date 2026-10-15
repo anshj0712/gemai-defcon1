@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Logger } from '@cp/logger';
 import type { BlobStore, ReplayPayload, SessionOutcome, WarehouseReader } from '@cp/platform';
-import type { AgentRun, Cluster, EvidenceItem, Finding, FindingRow, FindingScreenshot, PriorityRule, RankOutput, RootCauseOutput, SignalRow, TriageOutput } from '@cp/schema';
+import type { AgentRun, Cluster, EvidenceItem, Finding, FindingDiscovery, FindingRow, FindingScreenshot, PriorityRule, RankOutput, RootCauseOutput, SignalRow, TriageOutput } from '@cp/schema';
 import { PROMPT_VERSION, RANKER, rankerInput, ROOT_CAUSE, rootCauseInput, TRIAGE, triageInput } from './agents/prompts.js';
 import { buildEvidence, screenshotEvidence } from './evidence.js';
 import { validateRank, validateRootCause, validateTriage } from './grounding.js';
@@ -214,6 +214,7 @@ export async function analyze(deps: PipelineDeps, cluster: Cluster, ctx: TenantC
     rule_version: ranked.priority.rule_set_version,
     created_at: previous?.created_at ?? now,
     updated_at: now,
+    discovery: discoveryOf(cluster),
     synthetic: true,
   };
   finding.input_hash = versionHash(finding);
@@ -221,9 +222,16 @@ export async function analyze(deps: PipelineDeps, cluster: Cluster, ctx: TenantC
   return finding;
 }
 
+/** Known at the time, or found later: sessions a retroactive re-scan added to the issue. */
+export function discoveryOf(c: Cluster): FindingDiscovery {
+  const sessions = c.found_later?.sessions ?? 0;
+  return { found_later: sessions > 0, found_later_sessions: sessions, rescan_ids: Object.keys(c.found_later?.rescans ?? {}) };
+}
+
 /**
  * What makes a new finding version: the analysis, tier, score, status, and impact. Signal counts and
- * last_seen move with every signal and only refresh the hot copy.
+ * last_seen move with every signal and only refresh the hot copy. (Sessions found later always change
+ * affected_sessions too, so discovery needs no place here.)
  */
 export function versionHash(f: Finding): string {
   return sha(
@@ -276,6 +284,13 @@ export function toFindingRow(f: Finding, recordedAt: number): FindingRow {
       runs: f.runs,
       evidence: f.evidence,
       llm_key: f.llm_key,
+      // Enough to show this version in an as-of view without the hot copy (Phase 4).
+      kind: f.kind,
+      route: f.route,
+      anchor: f.anchor,
+      cluster_title: f.cluster_title,
+      last_seen: f.last_seen,
+      discovery: f.discovery ?? null,
       synthetic: true,
     },
     valid_from: f.first_seen,

@@ -208,9 +208,15 @@ importers:
 
   apps/agent:
     dependencies:
+      '@cp/detectors':
+        specifier: workspace:*
+        version: link:../../packages/detectors
       '@cp/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      '@cp/normalizer':
+        specifier: workspace:*
+        version: link:../../packages/normalizer
       '@cp/platform':
         specifier: workspace:*
         version: link:../../packages/platform
