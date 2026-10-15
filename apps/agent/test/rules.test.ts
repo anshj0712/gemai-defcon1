@@ -152,6 +152,7 @@ describe('offline rule author', () => {
 
   it('understands the demo sentence as a per-pair cap on the bag subtotal', () => {
     const out = author(SENTENCE);
+    expect(out.title).toBe('Bag subtotal is more than ₹17,000 a pair');
     expect(validateRuleAuthor(out, ctx())).toEqual([]);
     expect(ruleText(compileRule(out, 1))).toBe('sum(line_total) ≤ 17,00,000 × sum(qty)');
   });

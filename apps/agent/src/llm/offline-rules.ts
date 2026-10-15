@@ -37,7 +37,8 @@ function notUnderstood(text: string, cite: string[]): RuleAuthorOutput {
 
 /** "₹17,000", "Rs 17000", "17,000.50" -> minor units (two decimals). */
 function moneyMinor(s: string): { minor: number; text: string } | null {
-  const m = /(?:₹|rs\.?\s*|inr\s*)?\s*(\d[\d,]*(?:\.\d+)?)/i.exec(s);
+  // Thousands separators only between digits, so the comma in "₹17,000, so ..." stays out.
+  const m = /(?:₹|rs\.?\s*|inr\s*)?\s*(\d+(?:,\d+)*(?:\.\d+)?)/i.exec(s);
   if (!m?.[1]) return null;
   const major = Number(m[1].replace(/,/g, ''));
   return Number.isFinite(major) && major > 0 ? { minor: Math.round(major * 100), text: m[0].trim() } : null;

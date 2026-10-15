@@ -58,7 +58,8 @@ export function HistoryPage() {
   useEffect(() => {
     fetchHistory(now, now - 30 * 86_400_000, now).then(
       (h) => {
-        const earliest = Math.min(now - 3_600_000, ...h.current.map((f) => f.valid_from));
+        // Start a minute before the first shopper hit anything, so recent activity spans the whole slider.
+        const earliest = h.current.length ? Math.min(...h.current.map((f) => f.valid_from)) - 60_000 : now - 3_600_000;
         setMinT(earliest);
         setAsOf(Math.max(earliest, defaultAsOf(h.moments, now)));
       },

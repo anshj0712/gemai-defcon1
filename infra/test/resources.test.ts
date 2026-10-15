@@ -140,8 +140,8 @@ describe('agent service IAM', () => {
       .map((b) => `${b.role} ${b.resource}`)
       .sort();
 
-  it('reads raw chunks, writes screenshots, and reads the Gemini key only once it exists', () => {
-    expect(agentRoles(false)).toEqual(['roles/storage.objectCreator gs://cp-test-proj-cp-raw', 'roles/storage.objectViewer gs://cp-test-proj-cp-raw']);
+  it('reads raw chunks, writes screenshots, publishes re-scanned signals, and reads the Gemini key only once it exists', () => {
+    expect(agentRoles(false)).toEqual(['roles/pubsub.publisher signals', 'roles/storage.objectCreator gs://cp-test-proj-cp-raw', 'roles/storage.objectViewer gs://cp-test-proj-cp-raw']);
     expect(agentRoles(true)).toContain('roles/secretmanager.secretAccessor gemini-api-key');
     expect(projectBindings(cfg).filter((b) => b.member.includes('cp-agent')).map((b) => b.role).sort()).toEqual(['roles/bigquery.jobUser', 'roles/datastore.user', 'roles/logging.logWriter']);
   });
