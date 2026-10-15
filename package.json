@@ -29,6 +29,7 @@
     "e2e": "tsx --conditions=source sim/src/e2e-replay.ts",
     "sim": "tsx --conditions=source sim/src/sim.ts",
     "sim:check": "tsx --conditions=source sim/src/check.ts",
+    "sim:rescan": "tsx --conditions=source sim/src/rescan-check.ts",
     "deploy:agent": "tsx --conditions=source scripts/deploy.ts agent",
     "dev:agent": "tsx watch --conditions=source apps/agent/src/index.ts",
     "rescan": "tsx --conditions=source apps/agent/src/rescan-cli.ts"

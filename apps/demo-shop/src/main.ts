@@ -6,11 +6,13 @@ import { BRAND, CATEGORIES, PRODUCTS, SIZES, money, productById, shoeSvg, type P
 import { icons } from './icons';
 
 /**
- * STRIDE: a synthetic store for exercising the pipeline (all data is made up). Three bugs can be
- * switched on with `?bugs=dead_button,cart_total,checkout_error` or from the dashboard (localhost:5174):
+ * STRIDE: a synthetic store for exercising the pipeline (all data is made up). Four bugs can be
+ * switched on with `?bugs=dead_button,cart_total,checkout_error,qty_price` or from the dashboard (localhost:5174):
  *   dead_button     Apply Coupon silently stops responding after the third click
  *   cart_total      with a discount applied and 2+ items in the bag (same shoe or different), the total skips the last item
  *   checkout_error  the Northeast region gets a 500 and a JS error at payment
+ *   qty_price       a line with quantity 2+ shows 100x its price (paise as rupees); the totals agree with it, so only a
+ *                   merchant rule written later catches it (the Phase 4 found-later demo)
  *
  * Rule for this file: every clickable element must visibly do something (navigate, change the
  * page, or make a request). A control that silently does nothing is a real dead click, and only
@@ -27,7 +29,7 @@ declare global {
 // Bug flags and the recorder
 // ---------------------------------------------------------------------------------------------
 
-const BUG_NAMES = ['dead_button', 'cart_total', 'checkout_error'] as const;
+const BUG_NAMES = ['dead_button', 'cart_total', 'checkout_error', 'qty_price'] as const;
 type Bug = (typeof BUG_NAMES)[number];
 const isBug = (s: string): s is Bug => (BUG_NAMES as readonly string[]).includes(s);
 
@@ -111,8 +113,17 @@ function persist(): void {
   if (badge.textContent !== String(count)) badge.textContent = String(count);
 }
 
-function totals(): { subtotal: number; discount: number; total: number } {
-  const subtotal = state.bag.reduce((sum, l) => sum + productById(l.id)!.price_minor * l.qty, 0);
+/** A line's total. `display` false is the catalog price the store charges and reports in its events. */
+function lineTotal(l: Line, display = true): number {
+  const base = productById(l.id)!.price_minor * l.qty;
+  // BUG qty_price: with quantity 2+, the bag shows that line in paise as if they were rupees (100x). The bag's
+  // own sums use the shown values, so every total agrees with the others and no built-in rule fires.
+  return display && bugs.has('qty_price') && l.qty >= 2 ? base * 100 : base;
+}
+
+/** The bag's totals as shown (`display` true), or as charged. */
+function totals(display = true): { subtotal: number; discount: number; total: number } {
+  const subtotal = state.bag.reduce((sum, l) => sum + lineTotal(l, display), 0);
   const discount = Math.round((subtotal * state.discountPct) / 100);
   const units = state.bag.reduce((n, l) => n + l.qty, 0);
   const last = state.bag[state.bag.length - 1];
@@ -285,7 +296,7 @@ function bagLines(): string {
       return `<div class="bag-line">
         <a href="/product/${p.id}" data-link class="bag-thumb">${shoeSvg(p.colorway, { label: p.name })}</a>
         <div class="bag-info">
-          <div class="bag-row"><a href="/product/${p.id}" data-link>${esc(p.name)}</a><span data-cp-probe="line_total">${money(p.price_minor * l.qty)}</span></div>
+          <div class="bag-row"><a href="/product/${p.id}" data-link>${esc(p.name)}</a><span data-cp-probe="line_total">${money(lineTotal(l))}</span></div>
           <p class="muted">${esc(p.kind)}</p>
           <p class="muted">Size ${l.size}</p>
           <div class="qty">
@@ -337,7 +348,7 @@ function renderBag(): void {
       </aside>
     </div>`;
   updateTotals();
-  cp.track('cart_viewed', { value_minor: totals().total, currency: 'INR' });
+  cp.track('cart_viewed', { value_minor: totals(false).total, currency: 'INR' });
 }
 
 async function applyCoupon(): Promise<void> {
@@ -402,7 +413,7 @@ function renderCheckout(): void {
         ${state.bag
           .map((l) => {
             const p = productById(l.id)!;
-            return `<div class="mini-line"><div class="bag-thumb">${shoeSvg(p.colorway, { label: p.name })}</div><div><p>${esc(p.name)}</p><p class="muted">Size ${l.size} · Qty ${l.qty}</p><p>${money(p.price_minor * l.qty)}</p></div></div>`;
+            return `<div class="mini-line"><div class="bag-thumb">${shoeSvg(p.colorway, { label: p.name })}</div><div><p>${esc(p.name)}</p><p class="muted">Size ${l.size} · Qty ${l.qty}</p><p>${money(lineTotal(l))}</p></div></div>`;
           })
           .join('')}
         <div class="sum-row"><span>Subtotal</span><span>${money(t.subtotal)}</span></div>
@@ -420,7 +431,7 @@ async function placeOrder(form: HTMLFormElement): Promise<void> {
   button.disabled = true;
   button.textContent = 'Placing Order…';
   errorBox.textContent = '';
-  const res = await api('/api/checkout', { region, total_minor: totals().total });
+  const res = await api('/api/checkout', { region, total_minor: totals(false).total });
   if (!res.ok) {
     errorBox.textContent = "We couldn't process your payment. Please try again.";
     button.disabled = false;
@@ -430,7 +441,7 @@ async function placeOrder(form: HTMLFormElement): Promise<void> {
     return;
   }
   const { order_id } = (await res.json()) as { order_id: string };
-  cp.track('order_placed', { value_minor: totals().total, currency: 'INR' });
+  cp.track('order_placed', { value_minor: totals(false).total, currency: 'INR' });
   state.bag = [];
   state.discountPct = 0;
   persist();
@@ -587,7 +598,7 @@ document.addEventListener('click', (e) => {
   if (target.closest('#apply-coupon')) return void applyCoupon();
   if (target.closest('#add-to-bag')) return addToBag();
   if (target.closest('#checkout')) {
-    cp.track('checkout_started', { value_minor: totals().total, currency: 'INR' });
+    cp.track('checkout_started', { value_minor: totals(false).total, currency: 'INR' });
     return navigate('/checkout');
   }
 
