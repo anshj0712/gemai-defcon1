@@ -17,7 +17,7 @@ export interface ClusterKey {
   route: string;
 }
 
-export const LIMITS = { sessions: 5000, evidence: 5, fingerprints: 50 } as const;
+export const LIMITS = { sessions: 5000, evidence: 5, fingerprints: 50, rescans: 20 } as const;
 
 const hash = (s: string) => createHash('sha256').update(s).digest('hex').slice(0, 20);
 
@@ -85,6 +85,12 @@ export function applySignal(current: Cluster | null, row: SignalRow, key: Cluste
     // Past the cap, sessions are still counted but no longer listed (the count may then over-count repeats).
     if (base.sessions.length < LIMITS.sessions) base.sessions.push(row.session_id);
     base.session_count += 1;
+    // A session first brought in by a re-scan was hurt before the rule that flags it existed: found later.
+    if (row.rescan_id) {
+      const later = (base.found_later ??= { sessions: 0, rescans: {} });
+      later.sessions += 1;
+      if (row.rescan_id in later.rescans || Object.keys(later.rescans).length < LIMITS.rescans) later.rescans[row.rescan_id] = (later.rescans[row.rescan_id] ?? 0) + 1;
+    }
   }
   base.releases[row.release] = (base.releases[row.release] ?? 0) + 1;
   if (!base.fingerprints.includes(row.fingerprint) && base.fingerprints.length < LIMITS.fingerprints) base.fingerprints.push(row.fingerprint);

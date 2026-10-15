@@ -7,5 +7,11 @@
     "lib": ["ES2023", "DOM"]
   },
   "include": ["src"],
-  "references": [{ "path": "../../packages/schema" }, { "path": "../../packages/logger" }, { "path": "../../packages/platform" }]
+  "references": [
+    { "path": "../../packages/schema" },
+    { "path": "../../packages/logger" },
+    { "path": "../../packages/platform" },
+    { "path": "../../packages/normalizer" },
+    { "path": "../../packages/detectors" }
+  ]
 }

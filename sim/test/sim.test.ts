@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BUGS, makePlans, reachesTrigger, type Bug } from '../src/plan.js';
-import { evaluate, type ClusterLike, type GroundTruth, type TruthSession } from '../src/truth.js';
+import { evaluate, evaluateRetro, type ClusterLike, type GroundTruth, type TruthSession } from '../src/truth.js';
 
 describe('session plans', () => {
   const plans = makePlans(300, 42);
@@ -12,7 +12,7 @@ describe('session plans', () => {
 
   it('follows the bug mix exactly', () => {
     const count = (b: Bug | null) => plans.filter((p) => p.bug === b).length;
-    expect([count('dead_button'), count('cart_total'), count('checkout_error'), count(null)]).toEqual([60, 45, 45, 150]);
+    expect([count('dead_button'), count('cart_total'), count('checkout_error'), count('qty_price'), count(null)]).toEqual([60, 45, 45, 30, 120]);
   });
 
   it('keeps the ground truth honest: affected plans reach their trigger, clean plans never do', () => {
@@ -38,6 +38,13 @@ describe('session plans', () => {
       return group.filter((p) => p.abandon).length / group.length;
     };
     expect(rate((b) => b !== null)).toBeGreaterThan(rate((b) => b === null) + 0.2);
+  });
+
+  it('keeps quantities at 1 whenever qty_price is on and the session is clean (a quantity of 2 is its trigger)', () => {
+    const near = plans.filter((p) => p.bug === null && p.flags.includes('qty_price'));
+    expect(near.length).toBeGreaterThan(0);
+    for (const p of near) expect(p.qtyIncrements).toBe(0);
+    for (const p of plans.filter((x) => x.bug === 'qty_price')) expect(p).toMatchObject({ persona: 'pair_buyer', codes: [], incrementFirstLine: true });
   });
 });
 
@@ -65,7 +72,7 @@ describe('evaluate', () => {
     seed: 1,
     started_at: 0,
     finished_at: 1,
-    config: { mix: { dead_button: 0, cart_total: 0, checkout_error: 0 }, abandonment: { baseline: 0, dead_button: 0, cart_total: 0, checkout_error: 0 }, windowShoppers: 0, nearMiss: 0 },
+    config: { mix: { dead_button: 0, cart_total: 0, checkout_error: 0, qty_price: 0 }, abandonment: { baseline: 0, dead_button: 0, cart_total: 0, checkout_error: 0, qty_price: 0 }, windowShoppers: 0, nearMiss: 0 },
     sessions,
   });
   const c = (id: string, sessions: string[]): ClusterLike => ({ cluster_id: id, title: id, kind: 'element', anchor: 'a', route: '/', sessions, detectors: {} });
@@ -88,6 +95,22 @@ describe('evaluate', () => {
     expect(r.unexpected_clusters.map((u) => u.cluster_id)).toEqual(['stray']);
   });
 
+  it('treats a retro bug with no issue as silent, and holds it to the bar once an issue has it', () => {
+    const withRetro = [...sessions, s(7, 'qty_price'), s(8, 'qty_price')];
+    const silent = evaluate(truth(withRetro), [c('dead', ['s_1', 's_2']), c('total', ['s_3'])]);
+    expect(silent.pass).toBe(true);
+    expect(silent.bugs.find((b) => b.bug === 'qty_price')).toMatchObject({ silent: true, clusters: 0 });
+    const found = evaluate(truth(withRetro), [c('dead', ['s_1', 's_2']), c('total', ['s_3']), c('cap', ['s_7'])]);
+    expect(found.bugs.find((b) => b.bug === 'qty_price')).toMatchObject({ silent: false, recall: 0.5 });
+    expect(found.failures.join('\n')).toMatch(/qty_price: recall 50.0%/);
+  });
+
+  it('scores the issue a merchant rule produced for a retro bug', () => {
+    const t = truth([...sessions, s(7, 'qty_price'), s(8, 'qty_price')]);
+    expect(evaluateRetro(t, 'qty_price', ['s_7', 's_8', 'old_run'])).toEqual({ bug: 'qty_price', affected: 2, recall: 1, precision: 1, others: 0 });
+    expect(evaluateRetro(t, 'qty_price', ['s_7', 's_4'])).toMatchObject({ recall: 0.5, precision: 0.5, others: 1 });
+  });
+
   it('leaves failed browser runs out of scoring', () => {
     const r = evaluate(truth([...sessions, s(6, 'cart_total', { error: 'timed out' })]), [c('dead', ['s_1', 's_2']), c('total', ['s_3'])]);
     expect(r).toMatchObject({ pass: true, scored_sessions: 5, failed_sessions: 1 });
@@ -96,7 +119,7 @@ describe('evaluate', () => {
 
 describe('Phase 3 exit test (findings)', async () => {
   const { evaluateFindings } = await import('../src/truth.js');
-  const bug = (b: Bug, cluster_id: string | null) => ({ bug: b, affected: 3, clusters: 1, cluster_id, title: 't', recall: 1, precision: 1 });
+  const bug = (b: Bug, cluster_id: string | null) => ({ bug: b, affected: 3, clusters: 1, cluster_id, title: 't', recall: 1, precision: 1, silent: false });
   const finding = (over: object = {}) => ({
     finding_id: 'c1', cluster_id: 'c1', title: 'Coupon', tier: 'P2', status: 'open', model_version: 'offline-stand-in',
     triage: { summary: { text: 's' }, repro_steps: [{ step: 'a' }, { step: 'b' }] },

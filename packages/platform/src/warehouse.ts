@@ -143,6 +143,28 @@ export interface SessionOutcome {
 /** Most session outcomes one scoring pass reads. */
 export const MAX_OUTCOME_ROWS = 200_000;
 
+/** The chunks of the newest sessions in a valid-time window (dry runs and re-scans read these from raw). */
+export interface WindowChunks {
+  /** One row per (session, seq), grouped by session (newest session first), seq order within a session. */
+  chunks: RawChunkRow[];
+  sessions: number;
+  /** The window held more sessions than were returned. */
+  truncated: boolean;
+}
+
+/** What did we believe at transaction time `asOf` about findings whose valid time overlaps [validFrom, validTo)? */
+export interface AsOfQuery {
+  tenantId: string;
+  asOf: number;
+  validFrom: number;
+  validTo: number;
+  /** Lower bound on valid_from: findings that began earlier are left out (partition pruning). */
+  sinceMs: number;
+}
+
+/** Most finding versions an as-of query returns. */
+export const MAX_ASOF_ROWS = 500;
+
 /** Read side of the warehouse, for the API and the agent service. Every query is scoped to one tenant. */
 export interface WarehouseReader {
   /** Newest first, one row per signal_id. */
@@ -153,6 +175,59 @@ export interface WarehouseReader {
   sessionOutcomes(tenantId: string, sinceMs: number): Promise<SessionOutcome[]>;
   /** Every stored version of one finding, oldest first, with `recorded_to` derived from the next version. */
   findingVersions(tenantId: string, findingId: string, sinceMs: number): Promise<FindingRow[]>;
+  /** Chunks starting in [fromMs, toMs) of the `maxSessions` most recently active sessions in that window. */
+  chunksInWindow(tenantId: string, fromMs: number, toMs: number, maxSessions: number): Promise<WindowChunks>;
+  /** The version of each finding current at `asOf` (one row per finding, `recorded_to` derived), highest score first. */
+  findingsAsOf(q: AsOfQuery): Promise<FindingRow[]>;
+}
+
+/** Group chunk rows by session, keep the newest `maxSessions` sessions, one row per seq (the first ingested). */
+export function pickWindowSessions(rows: readonly RawChunkRow[], maxSessions: number): WindowChunks {
+  const bySession = new Map<string, { last: number; seqs: Map<number, RawChunkRow> }>();
+  for (const r of rows) {
+    let s = bySession.get(r.session_id);
+    if (!s) bySession.set(r.session_id, (s = { last: r.event_time_end, seqs: new Map() }));
+    s.last = Math.max(s.last, r.event_time_end);
+    const prev = s.seqs.get(r.seq);
+    if (!prev || r.ingest_time < prev.ingest_time) s.seqs.set(r.seq, r);
+  }
+  const ordered = [...bySession.entries()].sort((a, b) => b[1].last - a[1].last || (a[0] < b[0] ? -1 : 1));
+  const kept = ordered.slice(0, Math.max(0, maxSessions));
+  return {
+    chunks: kept.flatMap(([, s]) => [...s.seqs.values()].sort((a, b) => a.seq - b.seq)),
+    sessions: kept.length,
+    truncated: ordered.length > kept.length,
+  };
+}
+
+/**
+ * The as-of rule on rows with `recorded_to` already derived: the version current at `asOf` (recorded at
+ * or before it, not yet replaced), valid time overlapping the window. One row per finding.
+ */
+export function selectAsOf(rows: readonly FindingRow[], q: AsOfQuery): FindingRow[] {
+  const byFinding = new Map<string, FindingRow>();
+  for (const r of rows) {
+    if (r.tenant_id !== q.tenantId || r.valid_from < q.sinceMs) continue;
+    if (!(r.valid_from < q.validTo && (r.valid_to === null || r.valid_to > q.validFrom))) continue;
+    if (!(r.recorded_from <= q.asOf && (r.recorded_to === null || r.recorded_to > q.asOf))) continue;
+    const prev = byFinding.get(r.finding_id);
+    if (!prev || r.recorded_from > prev.recorded_from) byFinding.set(r.finding_id, r);
+  }
+  return [...byFinding.values()].sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || b.recorded_from - a.recorded_from).slice(0, MAX_ASOF_ROWS);
+}
+
+/** Close each version at the next one's `recorded_from` (per finding), as the findings_versions view does. */
+export function deriveRecordedTo(rows: readonly FindingRow[]): FindingRow[] {
+  const byFinding = new Map<string, FindingRow[]>();
+  for (const r of rows) {
+    const list = byFinding.get(r.finding_id) ?? [];
+    list.push(r);
+    byFinding.set(r.finding_id, list);
+  }
+  return [...byFinding.values()].flatMap((list) => {
+    list.sort((a, b) => a.recorded_from - b.recorded_from);
+    return list.map((r, i) => ({ ...r, recorded_to: r.recorded_to ?? list[i + 1]?.recorded_from ?? null }));
+  });
 }
 
 /** Fold raw chunk and business event rows into per-session outcomes (local mode, and tests). */
@@ -286,15 +361,65 @@ export class BigQueryWarehouseReader implements WarehouseReader {
       maximumBytesBilled: MAX_BYTES_BILLED,
       parseJSON: true,
     });
-    return (rows as Record<string, unknown>[]).map((r) => {
-      const row = fromBigQueryRow('findings', r);
-      const derived = r.recorded_to_derived;
-      if (row.recorded_to === null && derived !== null && derived !== undefined) {
-        row.recorded_to = Date.parse(typeof derived === 'object' && 'value' in derived ? String((derived as { value: unknown }).value) : String(derived));
-      }
-      return row;
-    });
+    return (rows as Record<string, unknown>[]).map(versionRow);
   }
+
+  async chunksInWindow(tenantId: string, fromMs: number, toMs: number, maxSessions: number): Promise<WindowChunks> {
+    const [rows] = await this.bq.query({
+      // One extra session tells whether the window held more than were asked for.
+      query: `WITH sessions AS (
+                SELECT session_id, MAX(event_time_end) AS last_seen
+                FROM ${this.table('raw_chunks')}
+                WHERE tenant_id = @tenant AND event_time_start >= TIMESTAMP_MILLIS(@from) AND event_time_start < TIMESTAMP_MILLIS(@to)
+                GROUP BY session_id
+                ORDER BY last_seen DESC
+                LIMIT @limit
+              )
+              SELECT c.* FROM ${this.table('raw_chunks')} AS c JOIN sessions AS s USING (session_id)
+              WHERE c.tenant_id = @tenant AND c.event_time_start >= TIMESTAMP_MILLIS(@from) AND c.event_time_start < TIMESTAMP_MILLIS(@to)`,
+      params: { tenant: tenantId, from: Math.floor(fromMs), to: Math.ceil(toMs), limit: maxSessions + 1 },
+      maximumBytesBilled: MAX_BYTES_BILLED,
+    });
+    return pickWindowSessions((rows as Record<string, unknown>[]).map((r) => fromBigQueryRow('raw_chunks', r)), maxSessions);
+  }
+
+  async findingsAsOf(q: AsOfQuery): Promise<FindingRow[]> {
+    // The skill's as-of query (bitemporal-rescan). valid_from is not constant per finding (a re-scan can
+    // move first_seen earlier), so the view's window cannot prune on it; the filter below bounds the scan.
+    const [rows] = await this.bq.query({
+      query: `SELECT * FROM ${this.table('findings_versions')}
+              WHERE tenant_id = @tenant
+                AND valid_from >= TIMESTAMP_MILLIS(@since)
+                AND valid_from < TIMESTAMP_MILLIS(@valid_to)
+                AND (valid_to IS NULL OR valid_to > TIMESTAMP_MILLIS(@valid_from))
+                AND recorded_from <= TIMESTAMP_MILLIS(@as_of)
+                AND (COALESCE(recorded_to, recorded_to_derived) IS NULL OR COALESCE(recorded_to, recorded_to_derived) > TIMESTAMP_MILLIS(@as_of))
+              ORDER BY score DESC
+              LIMIT @limit`,
+      params: {
+        tenant: q.tenantId,
+        since: Math.floor(q.sinceMs),
+        valid_from: Math.floor(q.validFrom),
+        valid_to: Math.ceil(q.validTo),
+        as_of: Math.floor(q.asOf),
+        limit: MAX_ASOF_ROWS * 2,
+      },
+      maximumBytesBilled: MAX_BYTES_BILLED,
+      parseJSON: true,
+    });
+    // A streaming retry can leave a duplicate version row; selectAsOf keeps one per finding.
+    return selectAsOf((rows as Record<string, unknown>[]).map(versionRow), q);
+  }
+}
+
+/** A findings_versions row with `recorded_to` taken from the view when the column is empty. */
+function versionRow(r: Record<string, unknown>): FindingRow {
+  const row = fromBigQueryRow('findings', r);
+  const derived = r.recorded_to_derived;
+  if (row.recorded_to === null && derived !== null && derived !== undefined) {
+    row.recorded_to = Date.parse(typeof derived === 'object' && 'value' in derived ? String((derived as { value: unknown }).value) : String(derived));
+  }
+  return row;
 }
 
 export class LocalWarehouseReader implements WarehouseReader {
@@ -332,5 +457,20 @@ export class LocalWarehouseReader implements WarehouseReader {
       .map(({ _insert_id: _id, ...row }) => row)
       .sort((a, b) => a.recorded_from - b.recorded_from);
     return rows.map((r, i) => ({ ...r, recorded_to: r.recorded_to ?? rows[i + 1]?.recorded_from ?? null }));
+  }
+
+  async chunksInWindow(tenantId: string, fromMs: number, toMs: number, maxSessions: number): Promise<WindowChunks> {
+    const rows = ((await this.store.rows('raw_chunks')) as unknown as (RawChunkRow & { _insert_id?: string })[])
+      .filter((r) => r.tenant_id === tenantId && r.event_time_start >= fromMs && r.event_time_start < toMs)
+      .map(({ _insert_id: _id, ...row }) => row);
+    return pickWindowSessions(rows, maxSessions);
+  }
+
+  async findingsAsOf(q: AsOfQuery): Promise<FindingRow[]> {
+    // Like the findings_versions view: close each version at the next one over the whole table, then filter.
+    const rows = ((await this.store.rows('findings')) as unknown as (FindingRow & { _insert_id?: string })[])
+      .filter((r) => r.tenant_id === q.tenantId)
+      .map(({ _insert_id: _id, ...row }) => row);
+    return selectAsOf(deriveRecordedTo(rows), q);
   }
 }

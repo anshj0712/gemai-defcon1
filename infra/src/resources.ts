@@ -101,7 +101,9 @@ export function resourceBindings(cfg: InfraConfig, pubsubAgent: string, opts: { 
     { kind: 'secret', resource: cfg.secrets.siteKeys, member: sa(cfg.serviceAccounts.collector), role: 'roles/secretmanager.secretAccessor' },
     // Lets Pub/Sub mint OIDC tokens as the push identity when calling the private processor and clusterer.
     { kind: 'service-account', resource: cfg.serviceAccounts.pubsubPush, member: sa(pubsubAgent), role: 'roles/iam.serviceAccountTokenCreator' },
-    // The agent reads raw chunks to render the flagged moment and writes the screenshot next to them.
+    // The agent re-scans history with approved rules (Phase 4) and publishes what it finds as signals.
+    { kind: 'topic', resource: cfg.topics.signals, member: agent, role: 'roles/pubsub.publisher' },
+    // The agent reads raw chunks to render the flagged moment (and to dry-run and re-scan rules) and writes the screenshot next to them.
     { kind: 'bucket', resource: `gs://${cfg.bucket}`, member: agent, role: 'roles/storage.objectViewer' },
     { kind: 'bucket', resource: `gs://${cfg.bucket}`, member: agent, role: 'roles/storage.objectCreator' },
     // Only once the Gemini key exists (it is optional until Phase 3 runs against Gemini).

@@ -106,6 +106,19 @@ describe('applySignal', () => {
     expect(titleFor({ kind: 'invariant', anchor: 'x', route: '/', detectors: {}, error_signatures: {} })).toBe('Rule x violated');
   });
 
+  it('counts sessions a re-scan brought in as found later, but not sessions already known live', () => {
+    const key = clusterKeyFor(invariantRow());
+    let c = applySignal(null, invariantRow({ session_id: 's_live_000001' }), key, T);
+    expect(c.found_later).toBeUndefined();
+    // The live session is hit again by the re-scan: still known at the time.
+    c = applySignal(c, invariantRow({ session_id: 's_live_000001', rescan_id: 'rs_a' }), key, T);
+    c = applySignal(c, invariantRow({ session_id: 's_past_000001', rescan_id: 'rs_a' }), key, T);
+    c = applySignal(c, invariantRow({ session_id: 's_past_000002', rescan_id: 'rs_a' }), key, T);
+    c = applySignal(c, invariantRow({ session_id: 's_past_000002', rescan_id: 'rs_a' }), key, T);
+    expect(c.found_later).toEqual({ sessions: 2, rescans: { rs_a: 2 } });
+    expect(c.session_count).toBe(3);
+  });
+
   it('does not modify the cluster it is given', () => {
     const key = clusterKeyFor(row());
     const first = applySignal(null, row(), key, T);

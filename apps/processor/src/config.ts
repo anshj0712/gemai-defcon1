@@ -22,6 +22,8 @@ const ProcessorEnv = z.object({
   GAP_WAIT_ATTEMPTS: z.coerce.number().int().min(1).default(4),
   /** {"<tenant>": [rule, ...]}: replaces the built-in invariant rules for that tenant. */
   INVARIANT_RULES: jsonEnv(z.record(z.string(), z.array(InvariantRuleSchema))).optional(),
+  /** How long approved tenant rules are cached before the state store is read again (an approval goes live within this). */
+  RULES_CACHE_TTL_MS: z.coerce.number().int().min(0).default(15_000),
 });
 
 export interface ProcessorConfig {
@@ -31,6 +33,7 @@ export interface ProcessorConfig {
   pull: boolean;
   overrides: Record<string, ParamOverrides>;
   rules: Record<string, InvariantRule[]>;
+  rulesCacheTtlMs: number;
   tailLookbackMs: number;
   tailMaxEvents: number;
   tailTtlMs: number;
@@ -50,6 +53,7 @@ export function loadProcessorConfig(env: NodeJS.ProcessEnv = process.env): Proce
     pull: e.PROCESSOR_PULL,
     overrides: e.DETECTOR_PARAMS ?? {},
     rules: e.INVARIANT_RULES ?? {},
+    rulesCacheTtlMs: e.RULES_CACHE_TTL_MS,
     tailLookbackMs: e.TAIL_LOOKBACK_MS,
     tailMaxEvents: e.TAIL_MAX_EVENTS,
     tailTtlMs: e.TAIL_TTL_HOURS * 3_600_000,

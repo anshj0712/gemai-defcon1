@@ -3,6 +3,8 @@ import { z } from 'zod';
 import type { Logger } from '@cp/logger';
 import { loadReplay, SessionTooLongError, type BlobStore, type ReplayPayload, type StateStore, type WarehouseReader } from '@cp/platform';
 import { DEMO_BUGS, isDemoBug, type DemoBugStore } from './demo-bugs.js';
+import { registerHistoryRoute } from './history.js';
+import { DEFAULT_AGENT_URL, registerRuleRoutes, type RuleRouteDeps } from './rules.js';
 import { compareFindings, SAFE_ID, TENANT_ID, type Finding, type FindingSummary } from '@cp/schema';
 
 export interface ApiDeps {
@@ -14,6 +16,8 @@ export interface ApiDeps {
   defaultTenant: string;
   /** Local mode only: which bugs the demo shop has switched on. Absent on GCP, which hides the routes. */
   demoBugs?: DemoBugStore;
+  /** Where rule actions are forwarded (the agent service); the local agent when absent. */
+  rules?: Omit<RuleRouteDeps, 'state' | 'defaultTenant'>;
   signalsLookbackMs: number;
   replayLookbackMs: number;
   maxReplayChunks: number;
@@ -167,6 +171,10 @@ export function buildApi(deps: ApiDeps): FastifyInstance {
     const png = await deps.blob.get(uri);
     return reply.header('cache-control', 'no-store').type('image/png').send(png);
   });
+
+  // Phase 4: tenant rules (reads here, actions forwarded to the agent) and time travel over findings.
+  registerRuleRoutes(app, { state: deps.state, defaultTenant: deps.defaultTenant, agentUrl: DEFAULT_AGENT_URL, ...deps.rules });
+  registerHistoryRoute(app, { reader: deps.reader, state: deps.state, defaultTenant: deps.defaultTenant, lookbackMs: deps.replayLookbackMs, now });
 
   app.get('/v1/sessions/:id/replay', async (req, reply) => {
     const p = ReplayParams.safeParse(req.params);

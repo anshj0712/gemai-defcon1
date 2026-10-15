@@ -46,4 +46,14 @@ export interface Cluster {
   updated_at: number;
   /** The latest evidence items, newest first, at most five. */
   evidence: ClusterEvidence[];
+  /** Phase 4: sessions a retroactive re-scan added (absent until one does). */
+  found_later?: ClusterFoundLater;
+}
+
+/** Sessions that were hurt before the rule that flags them existed, found by re-scanning history. */
+export interface ClusterFoundLater {
+  /** Sessions first added to this issue by a re-scan signal (a session first added live is not counted). */
+  sessions: number;
+  /** Re-scan id -> sessions it added. */
+  rescans: Record<string, number>;
 }

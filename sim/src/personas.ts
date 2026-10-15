@@ -58,6 +58,11 @@ async function openBag(c: Ctx): Promise<number | null> {
   return minorFromText(await c.page.locator('#subtotal').textContent());
 }
 
+/** Each bag line's total, in bag order (minor units). */
+async function linePrices(c: Ctx): Promise<number[]> {
+  return (await c.page.locator('[data-cp-probe="line_total"]').allTextContents()).map((t) => minorFromText(t) ?? 0);
+}
+
 async function changeQuantity(c: Ctx): Promise<void> {
   const firstLine = touchesFirstLine(c.plan);
   for (let i = 0; i < c.plan.qtyIncrements; i++) {
@@ -149,7 +154,14 @@ export async function runPlan(page: Page, plan: SessionPlan): Promise<SessionOut
   out.has_cart = true;
   out.cart_value_minor = await openBag(c);
 
-  if (plan.persona === 'bulk_buyer') {
+  if (plan.persona === 'pair_buyer') {
+    // The prices at quantity 1 are right; afterwards the bag shows the raised line at 100x (qty_price), so the
+    // true value is worked out from these rather than read from the (wrong) subtotal.
+    const prices = await linePrices(c);
+    await changeQuantity(c);
+    await pause(c, 1500, 3000); // stares at the price
+    out.cart_value_minor = prices.reduce((a, b) => a + b, 0) + (prices[0] ?? 0) * plan.qtyIncrements;
+  } else if (plan.persona === 'bulk_buyer') {
     // Reach 2+ items (a second product, or a higher quantity), then the coupon: the bug drops the last item from the total.
     await changeQuantity(c);
     await tryCodes(c);
@@ -158,7 +170,7 @@ export async function runPlan(page: Page, plan: SessionPlan): Promise<SessionOut
     await tryCodes(c);
     if (plan.qtyIncrements > 0) await changeQuantity(c);
   }
-  out.cart_value_minor = minorFromText(await page.locator('#subtotal').textContent()) ?? out.cart_value_minor;
+  if (plan.persona !== 'pair_buyer') out.cart_value_minor = minorFromText(await page.locator('#subtotal').textContent()) ?? out.cart_value_minor;
 
   if (plan.abandon && plan.abandonAt === 'bag') {
     await finish(c);

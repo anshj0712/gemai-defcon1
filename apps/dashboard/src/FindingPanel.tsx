@@ -122,6 +122,11 @@ export function FindingSummary({ finding: f, cluster }: { finding: Finding; clus
                 Needs review
               </span>
             )}
+            {cluster.found_later && cluster.found_later.sessions > 0 && (
+              <a className="found-later" href="#/history" title="Open time travel: what we knew before the rule, against what we know now">
+                Found later · {cluster.found_later.sessions} of {cluster.session_count} sessions surfaced by re-scanning history
+              </a>
+            )}
           </div>
           <h1 className="issue-title">{f.title}</h1>
           <p className="muted hero-meta">

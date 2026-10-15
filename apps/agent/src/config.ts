@@ -37,6 +37,13 @@ const AgentEnv = z.object({
   MAX_REPLAY_CHUNKS: z.coerce.number().int().positive().default(1000),
   /** Optional JSON array replacing the built-in priority rule set. */
   PRIORITY_RULES: jsonEnv(PriorityRuleSchema.array().min(1)).optional(),
+  /** Rule author dry run: the newest sessions it reads, and how far back. */
+  RULE_DRY_RUN_SESSIONS: z.coerce.number().int().positive().default(1000),
+  RULE_DRY_RUN_DAYS: z.coerce.number().positive().default(30),
+  /** Retroactive re-scan after an approval: how far back, the most sessions one run reads, and sessions read in parallel. */
+  RESCAN_WINDOW_DAYS: z.coerce.number().positive().default(30),
+  RESCAN_MAX_SESSIONS: z.coerce.number().int().positive().default(5000),
+  RESCAN_CONCURRENCY: z.coerce.number().int().positive().max(64).default(8),
 });
 
 export type AgentConfig = z.infer<typeof AgentEnv>;

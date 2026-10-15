@@ -1,0 +1,16 @@
+{
+  "understood": true,
+  "rule_id": "bag_subtotal_per_pair_cap",
+  "title": "Bag subtotal is more than ₹17,000 a pair",
+  "left": [{ "coef": 1, "kind": "sum", "probe": "line_total", "index": 0, "value": 0, "default_zero": false }],
+  "op": "lte",
+  "right": [{ "coef": 1700000, "kind": "sum", "probe": "qty", "index": 0, "value": 0, "default_zero": false }],
+  "tolerance_minor": 0,
+  "routes": [],
+  "highlight_probe": "line_total",
+  "explanation": {
+    "text": "The bag subtotal is the sum of the line totals (P3) and the number of pairs is the sum of the quantities (P4); the merchant caps the subtotal at ₹17,000 per pair (S1).",
+    "evidence_ids": ["S1", "P3", "P4"]
+  },
+  "assumptions": ["Money has two decimal places, so ₹17,000 is 1700000 minor units.", "One unit of qty is one pair."]
+}
