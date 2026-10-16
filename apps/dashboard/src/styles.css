@@ -252,3 +252,18 @@ a.found-later:hover { background: #ddd6fe; }
 .small-block { display: block; font-size: 12px; font-weight: 400; }
 .hist-money { color: #b91c1c; white-space: nowrap; }
 @media (max-width: 900px) { .hist-grid { grid-template-columns: 1fr; } }
+
+/* Agent-suggested rules: their own panel, apart from the merchant's sentence box */
+.suggested { margin: 20px 0 16px; padding: 12px 16px 16px; border: 1px solid #bfdbfe; border-radius: 14px; background: #f5f9ff; }
+.suggested-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.suggested-head .section-title { margin: 0; }
+.suggested > .small-p { margin: 8px 0 0; }
+.rule-card.draft.agent { border-color: #60a5fa; box-shadow: 0 0 0 3px #dbeafe; }
+.agent-badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #dbeafe; color: #1e40af; }
+.lost { margin: 10px 0 8px; padding: 10px 14px; border: 1px solid #fecaca; border-radius: 10px; background: #fef2f2; }
+.lost.pending { border-color: #e2e8f0; background: #f8fafc; }
+.lost-line { margin: 0 0 4px; font-size: 15px; color: #7f1d1d; }
+.lost-line b { font-size: 20px; color: #b91c1c; }
+.lost.pending .lost-line { color: #475569; }
+.lost .small-p { margin: 0; }
+.lost-line .synthetic-note, .small-p .synthetic-note { margin: 0 0 0 4px; vertical-align: middle; }
