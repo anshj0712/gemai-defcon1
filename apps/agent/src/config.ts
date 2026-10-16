@@ -44,6 +44,16 @@ const AgentEnv = z.object({
   RESCAN_WINDOW_DAYS: z.coerce.number().positive().default(30),
   RESCAN_MAX_SESSIONS: z.coerce.number().int().positive().default(5000),
   RESCAN_CONCURRENCY: z.coerce.number().int().positive().max(64).default(8),
+  /** Agent-suggested rules: ask the rule suggester about recurring issues and draft its sentence (a person still approves). */
+  RULE_SUGGEST: boolEnv.default(true),
+  /** The trigger: at least this many affected sessions... */
+  RULE_SUGGEST_MIN_SESSIONS: z.coerce.number().int().min(1).default(10),
+  /** ...seen over at least this many days (0 for the demo, whose sessions span minutes; raise to 1 or more in production)... */
+  RULE_SUGGEST_MIN_DAYS: z.coerce.number().min(0).default(0),
+  /** ...with one symptom (detector) carrying at least this share of the issue's signals. */
+  RULE_SUGGEST_MIN_DETECTOR_SHARE: z.coerce.number().min(0).max(1).default(0.5),
+  /** Most of the issue's sessions read back from raw for the suggester's probe statistics. */
+  RULE_SUGGEST_MAX_SESSIONS: z.coerce.number().int().min(1).default(25),
 });
 
 export type AgentConfig = z.infer<typeof AgentEnv>;

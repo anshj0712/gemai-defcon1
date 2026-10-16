@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { DryRun, RescanStatus } from '@cp/schema';
+import type { DryRun, RescanStatus, RevenueAtRisk } from '@cp/schema';
 import { ApiError, approveRule, draftRule, fetchClusters, fetchRules, rejectRule, rescanRule, type BuiltinRuleView, type ClusterSummary, type RuleView } from './api';
-import { ago, money, pct, time } from './format';
+import { ago, formulaLine, money, pct, time } from './format';
 
 /** Example sentences. The first one finds the demo shop's silent quantity-price bug (synthetic data). */
 export const EXAMPLES = [
@@ -15,6 +15,54 @@ const REFRESH_MS = 2000;
 /** "Model gemini-3.8-flash" or the offline stand-in, said plainly. */
 function authorLine(a: { model: string; offline: boolean }): string {
   return a.offline ? 'Drafted by the offline stand-in (a template parser, not Gemini). Set GOOGLE_API_KEY for Gemini.' : `Drafted by ${a.model}`;
+}
+
+/** Who worded an agent suggestion: Gemini, or the offline stand-in, said plainly. */
+function suggesterLine(s: { model: string; offline: boolean }): string {
+  return s.offline ? 'Suggested by the offline stand-in (templated, not Gemini). Set GOOGLE_API_KEY for Gemini.' : `Suggested by ${s.model}`;
+}
+
+const LOST_HOW = 'Affected sessions with a cart × average cart × (their abandonment − baseline abandonment), over the sessions the dry run flags.';
+
+/**
+ * Revenue already lost to the pattern: the revenue-at-risk formula over the dry run's hits. Prominent on an
+ * agent suggestion (it is why the suggestion matters), one compact line on a merchant's own draft.
+ */
+function RevenueLost({ r, prominent, at }: { r: RevenueAtRisk; prominent: boolean; at: number }) {
+  const ok = r.status === 'ok';
+  // Computed once, when the draft and its dry run were made; it does not move with later sessions.
+  const asOf = <span className="muted small-inline">as of {time(at)}</span>;
+  if (!prominent) {
+    return (
+      <p className="small-p" title={ok ? `${LOST_HOW} ${formulaLine(r)}` : undefined}>
+        Estimated revenue lost to date: {ok ? <b className="bad">{money(r.revenue_at_risk_minor, r.currency)}</b> : <span className="muted">{r.note ?? 'not enough data yet'}</span>} {asOf} <span className="synthetic-note">synthetic data</span>
+      </p>
+    );
+  }
+  return (
+    <div className={`lost${ok ? '' : ' pending'}`}>
+      <p className="lost-line">
+        Estimated revenue lost to date: {ok ? <b>{money(r.revenue_at_risk_minor, r.currency)}</b> : <span className="muted">not enough data yet</span>} {asOf} <span className="synthetic-note">synthetic data</span>
+      </p>
+      {ok ? (
+        <p className="small-p muted" title={formulaLine(r)}>
+          {LOST_HOW} {formulaLine(r)}
+        </p>
+      ) : (
+        r.note && <p className="small-p muted">{r.note}</p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The two sides of a flagged snapshot. Probe values carry no unit, so whole numbers under 1,000 on both
+ * sides are shown as counts (for example 1 pair against 2 lines): no amount in the shop is below ₹10.
+ */
+function sideText(left: number | null, right: number | null, currency: string | null): string {
+  const small = (v: number | null) => v === null || (Number.isInteger(v) && Math.abs(v) < 1000);
+  if (small(left) && small(right)) return `${left ?? '?'} against ${right ?? '?'}`;
+  return `${money(left, currency)} against ${money(right, currency)}`;
 }
 
 function DryRunBlock({ d }: { d: DryRun }) {
@@ -33,7 +81,7 @@ function DryRunBlock({ d }: { d: DryRun }) {
                 <td>{time(s.event_time)}</td>
                 <td>{s.route}</td>
                 <td title="Left side of the rule against its right side">
-                  {money(s.left, s.currency)} against {money(s.right, s.currency)}
+                  {sideText(s.left, s.right, s.currency)}
                 </td>
                 <td>{s.in_issue ? <span className="muted">in an issue</span> : <span className="found-later">new</span>}</td>
                 <td>
@@ -86,6 +134,81 @@ function RescanBlock({ s, issue, onRescan, busy }: { s: RescanStatus; issue: Clu
 }
 
 /**
+ * A pending draft: the merchant's own, or one the agent suggested for a recurring issue. Both have the same
+ * dry run and the same two actions; approving is the only thing that makes either live and starts a re-scan.
+ */
+function DraftCard({ r, busy, error, onApprove, onDiscard }: { r: RuleView; busy: string | null; error: Error | null; onApprove: () => void; onDiscard: () => void }) {
+  const d = r.draft!;
+  const agent = d.origin === 'agent';
+  const suggester = d.suggester ?? null;
+  const lost = d.revenue_lost ?? null;
+  return (
+    <div className={`panel rule-card draft${agent ? ' agent' : ''}`}>
+      <div className="finding-head">
+        <span className="kind invariant">Draft · v{d.rule.version}</span>
+        {agent && <span className="agent-badge">Suggested by the agent</span>}
+        <span className="muted small-inline">{authorLine(d.author)}</span>
+      </div>
+      <h3 className="rule-title">{d.rule.title}</h3>
+      <p className="sentence">“{d.sentence}”</p>
+      {agent && (
+        <>
+          {suggester?.explanation && (
+            <p className="small-p">
+              <b>Why:</b> {suggester.explanation}
+            </p>
+          )}
+          {suggester && suggester.assumptions.length > 0 && (
+            <ul className="assumptions">
+              {suggester.assumptions.map((a) => (
+                <li key={a}>{a}</li>
+              ))}
+            </ul>
+          )}
+          <p className="small-p muted">
+            {suggester ? suggesterLine(suggester) : 'Suggested by the agent'}
+            {d.cluster_id && (
+              <>
+                {' · '}
+                <a href={`#/issues/${d.cluster_id}`}>Open the issue that prompted it</a>
+              </>
+            )}
+          </p>
+          {lost && <RevenueLost r={lost} prominent at={d.created_at} />}
+        </>
+      )}
+      <p className="rule-text">
+        <code>{r.text.draft}</code> <span className="muted small">(money in minor units)</span>
+      </p>
+      {d.author.explanation && <p className="small-p">{d.author.explanation}</p>}
+      {d.author.assumptions.length > 0 && (
+        <ul className="assumptions">
+          {d.author.assumptions.map((a) => (
+            <li key={a}>{a}</li>
+          ))}
+        </ul>
+      )}
+      <h4>Dry run (nothing written)</h4>
+      {d.dry_run ? <DryRunBlock d={d.dry_run} /> : <p className="muted">No dry run.</p>}
+      {!agent && lost && <RevenueLost r={lost} prominent={false} at={d.created_at} />}
+      <div className="row-actions">
+        <button className="btn primary" disabled={busy !== null} onClick={onApprove}>
+          {busy === `approve-${r.rule_id}` ? 'Approving…' : 'Approve and re-scan the last 30 days'}
+        </button>
+        <button className="btn" disabled={busy !== null} onClick={onDiscard}>
+          Discard
+        </button>
+      </div>
+      {error && (
+        <div className="notice">
+          <b>That did not work.</b> {error.message}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * Rules in plain English (Phase 4). A merchant describes what must always hold; Gemini drafts an
  * invariant over the store's probes; a dry run shows what it would flag; approving it runs it on live
  * traffic and re-scans the last 30 days, so shoppers it already hurt show up as found later.
@@ -97,6 +220,8 @@ export function RulesPage() {
   const [sentence, setSentence] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<ApiError | Error | null>(null);
+  /** The action that failed, so a draft card shows its own error instead of the composer. */
+  const [errorKey, setErrorKey] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(
@@ -122,11 +247,13 @@ export function RulesPage() {
   const act = async (key: string, fn: () => Promise<unknown>) => {
     setBusy(key);
     setError(null);
+    setErrorKey(null);
     try {
       await fn();
       await load();
     } catch (e) {
       setError(e instanceof Error ? e : new Error(String(e)));
+      setErrorKey(key);
     } finally {
       setBusy(null);
     }
@@ -138,7 +265,20 @@ export function RulesPage() {
   if (!rules) return <p className="muted">Loading…</p>;
 
   const drafts = rules.filter((r) => r.draft);
+  // Drafts stored before origin existed have none: they are the merchant's.
+  const suggested = drafts.filter((r) => r.draft!.origin === 'agent');
+  const own = drafts.filter((r) => r.draft!.origin !== 'agent');
   const active = rules.filter((r) => r.active);
+  const card = (r: RuleView) => (
+    <DraftCard
+      key={`draft-${r.rule_id}`}
+      r={r}
+      busy={busy}
+      error={errorKey === `approve-${r.rule_id}` || errorKey === `reject-${r.rule_id}` ? error : null}
+      onApprove={() => void act(`approve-${r.rule_id}`, () => approveRule(r.rule_id, r.draft!.rule.version))}
+      onDiscard={() => void act(`reject-${r.rule_id}`, () => rejectRule(r.rule_id))}
+    />
+  );
 
   return (
     <>
@@ -172,7 +312,7 @@ export function RulesPage() {
             {busy === 'draft' ? 'Drafting… (rule author + dry run)' : 'Draft rule'}
           </button>
         </div>
-        {error && (
+        {error && !drafts.some((r) => errorKey === `approve-${r.rule_id}` || errorKey === `reject-${r.rule_id}`) && (
           <div className="notice">
             <b>{error instanceof ApiError && error.code === 'not_understood' ? 'The rule author could not express this as a rule.' : 'That did not work.'}</b> {error.message}
             {error instanceof ApiError && error.author && <p className="small-p muted">{authorLine(error.author)}</p>}
@@ -180,40 +320,19 @@ export function RulesPage() {
         )}
       </div>
 
-      {drafts.map((r) => {
-        const d = r.draft!;
-        return (
-          <div key={`draft-${r.rule_id}`} className="panel rule-card draft">
-            <div className="finding-head">
-              <span className="kind invariant">Draft · v{d.rule.version}</span>
-              <span className="muted small-inline">{authorLine(d.author)}</span>
-            </div>
-            <h3 className="rule-title">{d.rule.title}</h3>
-            <p className="sentence">“{d.sentence}”</p>
-            <p className="rule-text">
-              <code>{r.text.draft}</code> <span className="muted small">(money in minor units)</span>
-            </p>
-            {d.author.explanation && <p className="small-p">{d.author.explanation}</p>}
-            {d.author.assumptions.length > 0 && (
-              <ul className="assumptions">
-                {d.author.assumptions.map((a) => (
-                  <li key={a}>{a}</li>
-                ))}
-              </ul>
-            )}
-            <h4>Dry run (nothing written)</h4>
-            {d.dry_run ? <DryRunBlock d={d.dry_run} /> : <p className="muted">No dry run.</p>}
-            <div className="row-actions">
-              <button className="btn primary" disabled={busy !== null} onClick={() => void act(`approve-${r.rule_id}`, () => approveRule(r.rule_id, d.rule.version))}>
-                {busy === `approve-${r.rule_id}` ? 'Approving…' : 'Approve and re-scan the last 30 days'}
-              </button>
-              <button className="btn" disabled={busy !== null} onClick={() => void act(`reject-${r.rule_id}`, () => rejectRule(r.rule_id))}>
-                Discard
-              </button>
-            </div>
-          </div>
-        );
-      })}
+      {own.map(card)}
+
+      <section className="suggested">
+        <div className="suggested-head">
+          <h2 className="section-title">Suggested by the agent</h2>
+          <span className="muted small-inline">You approve these the same way; nothing runs until you do.</span>
+        </div>
+        {suggested.length === 0 ? (
+          <p className="muted small-p">No suggestions yet. The agent suggests a rule when a recurring issue's recorded numbers show a defect a rule could catch.</p>
+        ) : (
+          suggested.map(card)
+        )}
+      </section>
 
       <h2 className="section-title">Your rules</h2>
       {active.length === 0 ? (

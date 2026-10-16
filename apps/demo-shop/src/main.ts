@@ -6,13 +6,15 @@ import { BRAND, CATEGORIES, PRODUCTS, SIZES, money, productById, shoeSvg, type P
 import { icons } from './icons';
 
 /**
- * STRIDE: a synthetic store for exercising the pipeline (all data is made up). Four bugs can be
- * switched on with `?bugs=dead_button,cart_total,checkout_error,qty_price` or from the dashboard (localhost:5174):
+ * STRIDE: a synthetic store for exercising the pipeline (all data is made up). Five bugs can be switched on
+ * with `?bugs=dead_button,cart_total,checkout_error,qty_price,ghost_line` or from the dashboard (localhost:5174):
  *   dead_button     Apply Coupon silently stops responding after the third click
  *   cart_total      with a discount applied and 2+ items in the bag (same shoe or different), the total skips the last item
  *   checkout_error  the Northeast region gets a 500 and a JS error at payment
  *   qty_price       a line with quantity 2+ shows 100x its price (paise as rupees); the totals agree with it, so only a
  *                   merchant rule written later catches it (the Phase 4 found-later demo)
+ *   ghost_line      Remove leaves a bag line in the bag at quantity 0 (₹0) and then stops responding; totals agree, so
+ *                   no built-in rule fires (the agent suggests one)
  *
  * Rule for this file: every clickable element must visibly do something (navigate, change the
  * page, or make a request). A control that silently does nothing is a real dead click, and only
@@ -29,7 +31,7 @@ declare global {
 // Bug flags and the recorder
 // ---------------------------------------------------------------------------------------------
 
-const BUG_NAMES = ['dead_button', 'cart_total', 'checkout_error', 'qty_price'] as const;
+const BUG_NAMES = ['dead_button', 'cart_total', 'checkout_error', 'qty_price', 'ghost_line'] as const;
 type Bug = (typeof BUG_NAMES)[number];
 const isBug = (s: string): s is Bug => (BUG_NAMES as readonly string[]).includes(s);
 
@@ -115,6 +117,8 @@ function persist(): void {
 
 /** A line's total. `display` false is the catalog price the store charges and reports in its events. */
 function lineTotal(l: Line, display = true): number {
+  // BUG ghost_line: a line left in the bag at quantity 0 by Remove is shown and charged at ₹0 (price x 0), so every
+  // total agrees with the shown lines and no built-in rule fires.
   const base = productById(l.id)!.price_minor * l.qty;
   // BUG qty_price: with quantity 2+, the bag shows that line in paise as if they were rupees (100x). The bag's
   // own sums use the shown values, so every total agrees with the others and no built-in rule fires.
@@ -300,9 +304,9 @@ function bagLines(): string {
           <p class="muted">${esc(p.kind)}</p>
           <p class="muted">Size ${l.size}</p>
           <div class="qty">
-            <button type="button" data-action="dec" data-key="${lineKey(l)}" aria-label="${l.qty === 1 ? 'Remove' : 'Decrease quantity'}">${l.qty === 1 ? icons.trash : icons.minus}</button>
+            <button type="button" data-action="dec" data-testid="qty-dec" data-key="${lineKey(l)}" aria-label="${l.qty <= 1 ? 'Remove' : 'Decrease quantity'}">${l.qty <= 1 ? icons.trash : icons.minus}</button>
             <span data-cp-probe="qty">${l.qty}</span>
-            <button type="button" data-action="inc" data-key="${lineKey(l)}" aria-label="Increase quantity">${icons.plus}</button>
+            <button type="button" data-action="inc" data-testid="qty-inc" data-key="${lineKey(l)}" aria-label="Increase quantity">${icons.plus}</button>
           </div>
         </div>
       </div>`;
@@ -478,6 +482,7 @@ function renderHelp(): void {
         <li><strong>dead_button</strong>: in your Bag, type SAVE10 and press Apply Coupon 4+ times, about a second apart. From the 4th press it silently does nothing; those presses are flagged as dead clicks.</li>
         <li><strong>cart_total</strong>: put 2 or more items in the bag (2 of one shoe, or two different shoes), apply SAVE10, and the total leaves out the last item.</li>
         <li><strong>checkout_error</strong>: choose region Northeast at checkout and Place Order fails.</li>
+        <li><strong>ghost_line</strong>: put two shoes in your Bag and press Remove (the bin) on one. It stays in the bag at quantity 0 (₹0), and pressing Remove again does nothing. The totals agree with the lines, so no built-in rule fires: the agent suggests one on the dashboard's Rules tab.</li>
       </ul>
       <h2>Privacy</h2>
       <p>Recording starts only after you accept. Everything you type is masked before it leaves the browser, and payment fields are never captured.</p>
@@ -632,8 +637,12 @@ document.addEventListener('click', (e) => {
     case 'dec': {
       const line = state.bag.find((l) => lineKey(l) === action.dataset.key);
       if (!line) return;
-      line.qty += action.dataset.action === 'inc' ? 1 : -1;
-      if (line.qty <= 0) state.bag = state.bag.filter((l) => l !== line);
+      const dec = action.dataset.action === 'dec';
+      // BUG ghost_line: Remove on a line already at 0 silently does nothing (no request, no DOM change)...
+      if (bugs.has('ghost_line') && dec && line.qty === 0) return;
+      line.qty += dec ? -1 : 1;
+      // ...and Remove at quantity 1 leaves the line in the bag at 0 (re-rendered below, so this press visibly responds).
+      if (line.qty <= 0 && !bugs.has('ghost_line')) state.bag = state.bag.filter((l) => l !== line);
       persist();
       if (state.bag.length === 0) renderBag();
       else {

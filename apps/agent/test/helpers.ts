@@ -1,7 +1,9 @@
+import { gzipSync } from 'node:zlib';
 import { BaseLlm, type LlmRequest, type LlmResponse } from '@google/adk';
 import { createLogger } from '@cp/logger';
-import type { SessionOutcome } from '@cp/platform';
-import type { Cluster, SignalRow } from '@cp/schema';
+import type { BlobStore, SessionOutcome, Warehouse } from '@cp/platform';
+import type { BusinessEventRow, Cluster, SignalRow, StoredChunk } from '@cp/schema';
+import { SessionScript, toEnvelopes } from '@cp/testkit';
 import { applySignal, clusterKeyFor } from '../../clusterer/src/cluster.js';
 
 /** Test helpers. All sessions are synthetic. */
@@ -95,4 +97,66 @@ export class RecordedLlm extends BaseLlm {
   calls(agent: string): number {
     return this.requests.filter((r) => r.config?.labels?.adk_agent_name === agent).length;
   }
+}
+
+/**
+ * Store a session's batches the way the collector and processor would (raw chunk + index row), +40 ms
+ * skew, one probe snapshot per second on /cart. Returns the snapshots' valid times.
+ */
+export async function seedRawSession(stores: { blob: BlobStore; warehouse: Warehouse }, sessionId: string, start: number, probes: Record<string, number[]>[]): Promise<number[]> {
+  const script = new SessionScript(start).meta(0).snapshot(5);
+  probes.forEach((p, i) => script.probe(1000 + i * 1000, p));
+  const times: number[] = probes.map((_, i) => start + 1000 + i * 1000 + 40);
+  for (const env of toEnvelopes(script.events, { sessionId, batchMs: 5000 })) {
+    const { site_key: _k, ...envelope } = env;
+    const receivedAt = env.client_sent_at + 40;
+    const doc: StoredChunk = { v: 1, tenant_id: 'demo', collector_received_at: receivedAt, envelope };
+    const body = gzipSync(JSON.stringify(doc));
+    const { uri } = await stores.blob.putIfAbsent(`raw/demo/${sessionId}/${String(env.seq).padStart(8, '0')}.json.gz`, body, 'application/gzip');
+    await stores.warehouse.insert('raw_chunks', [
+      {
+        insertId: `demo:${sessionId}:${env.seq}`,
+        row: {
+          tenant_id: 'demo',
+          session_id: sessionId,
+          seq: env.seq,
+          gcs_uri: uri,
+          bytes: body.length,
+          event_count: env.events.length,
+          event_time_start: env.client_ts_start + 40,
+          event_time_end: env.client_ts_end + 40,
+          ingest_time: receivedAt + 100,
+          client_sent_at: env.client_sent_at,
+          collector_received_at: receivedAt,
+          release: env.release,
+          route: env.page.route,
+          sdk_version: env.sdk_version,
+          sample_rate: 1,
+        },
+      },
+    ]);
+  }
+  return times;
+}
+
+/** A cart (and an order when `ordered`) for a seeded session, so the reader folds its outcome (synthetic). */
+export async function seedCartOutcome(warehouse: Warehouse, sessionId: string, at: number, cartValueMinor: number, ordered: boolean): Promise<void> {
+  const rows: BusinessEventRow[] = [
+    { tenant_id: 'demo', session_id: sessionId, seq: 0, name: 'cart_viewed', value_minor: cartValueMinor, currency: 'INR', event_time: at, ingest_time: at },
+    ...(ordered ? [{ tenant_id: 'demo', session_id: sessionId, seq: 1, name: 'order_placed', value_minor: cartValueMinor, currency: 'INR', event_time: at + 1, ingest_time: at + 1 }] : []),
+  ];
+  await warehouse.insert('business_events', rows.map((row) => ({ insertId: `${row.session_id}:${row.name}`, row })));
+}
+
+/** The ghost_line bug's control: Remove at quantity 1 leaves the line in the bag at quantity 0. */
+export const GHOST_SELECTOR = 'button[data-testid="qty-dec"]';
+
+/** The ghost_line issue (synthetic): dead clicks on the qty-dec button on /cart in every session, rage clicks in some. */
+export function ghostLineCluster(sessionIds: readonly string[], rageEvery = 3): Cluster {
+  return clusterOf(
+    sessionIds.flatMap((s, i) => [
+      signal({ session_id: s, element_selector: GHOST_SELECTOR, fingerprint: 'fp-ghost-dead' }),
+      ...(i % rageEvery === 0 ? [signal({ session_id: s, element_selector: GHOST_SELECTOR, detector: 'rage_click', fingerprint: 'fp-ghost-rage' }, { clicks: 4, span_ms: 1800 })] : []),
+    ]),
+  );
 }

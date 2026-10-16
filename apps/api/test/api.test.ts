@@ -294,7 +294,7 @@ describe('demo bug switches (local mode)', () => {
     expect(put.json().bugs).toEqual(['dead_button', 'checkout_error']);
     const again = (await app.inject({ method: 'GET', url: '/v1/demo/bugs' })).json();
     expect(again.bugs).toEqual(['dead_button', 'checkout_error']);
-    expect(again.known.map((k: { id: string }) => k.id)).toEqual(['dead_button', 'cart_total', 'checkout_error', 'qty_price']);
+    expect(again.known.map((k: { id: string }) => k.id)).toEqual(['dead_button', 'cart_total', 'checkout_error', 'qty_price', 'ghost_line']);
     expect((await app.inject({ method: 'PUT', url: '/v1/demo/bugs', payload: { bugs: [] } })).json().bugs).toEqual([]);
   });
 

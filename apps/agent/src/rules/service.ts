@@ -1,15 +1,17 @@
 import { BUILTIN_RULES, shortHash } from '@cp/detectors';
 import type { Logger } from '@cp/logger';
 import type { BlobStore, Publisher, StateStore, Warehouse, WarehouseReader } from '@cp/platform';
-import { ruleVersionOf, type InvariantRule, type RuleAuthorMeta, type RuleDoc } from '@cp/schema';
+import { ruleVersionOf, type InvariantRule, type RawChunkRow, type RevenueAtRisk, type RuleAuthorMeta, type RuleDoc } from '@cp/schema';
 import { RULE_AUTHOR, ruleAuthorInput } from '../agents/rule-author.js';
+import { SENTENCE_LIMITS } from '../grounding.js';
 import type { ModelSet } from '../llm/models.js';
 import { OFFLINE_MODEL_ID } from '../llm/offline.js';
 import { runStructured, type RunOptions } from '../llm/run-agent.js';
+import { revenueAtRisk, type RevenueParams } from '../scoring/revenue.js';
 import { compileRule, validateRuleAuthor } from './compile.js';
-import { buildCatalog, dryRun } from './evaluate.js';
+import { buildCatalog, dryRun, type ProbeCatalog } from './evaluate.js';
 import { initialStatus, runRescan } from './rescan.js';
-import { scanWindow, type SessionProbes } from './scan.js';
+import { scanWindow, sessionProbes, type SessionProbes } from './scan.js';
 
 /**
  * Tenant rules, end to end (ARCHITECTURE.md section 6):
@@ -21,13 +23,18 @@ import { scanWindow, type SessionProbes } from './scan.js';
  *   reject   drops the draft
  *   rescan   runs the approved version over the window again (idempotent)
  *
+ * A draft has one of two origins: a merchant's sentence, or the rule suggester's (the agent pipeline
+ * hands its sentence to `draft` with origin agent). Both go through the same author, compiler, validator
+ * and dry run; an agent draft additionally never replaces a pending draft or edits a live rule, and is
+ * refused when its dry run flags nothing. Every draft carries revenue already lost over its dry-run hits.
+ *
  * The agent service is the only writer of rule docs; writes to one rule are serialized here.
  */
 
 export class RuleError extends Error {
   override name = 'RuleError';
   constructor(
-    readonly code: 'unknown_tenant' | 'invalid_sentence' | 'no_probes' | 'not_understood' | 'author_failed' | 'not_found' | 'conflict',
+    readonly code: 'unknown_tenant' | 'invalid_sentence' | 'no_probes' | 'not_understood' | 'author_failed' | 'not_found' | 'conflict' | 'no_hits',
     message: string,
     readonly status: number,
     readonly author: RuleAuthorMeta | null = null,
@@ -48,12 +55,29 @@ export interface RuleServiceDeps {
   tenants: readonly string[];
   dryRun: { sessions: number; days: number };
   rescan: { sessions: number; days: number; concurrency: number };
+  /** The revenue-at-risk parameters, for revenue already lost over a draft's dry-run hits. */
+  revenue: RevenueParams;
   runOptions?: RunOptions;
   now?: () => number;
 }
 
-export const SENTENCE_LIMITS = { min: 8, max: 500 } as const;
+/** A draft written from the rule suggester's sentence (see pipeline.ts); omitted for a merchant's. */
+export interface AgentDraftOptions {
+  origin: 'agent';
+  /** The issue whose evidence prompted the suggestion. */
+  cluster_id: string;
+  suggester: RuleAuthorMeta;
+}
+
+export { SENTENCE_LIMITS };
 const SCAN_CONCURRENCY = 8;
+
+/** The route most hits were on (ties: alphabetical), for a like-for-like revenue baseline. */
+function commonestRoute(routes: Iterable<string>): string {
+  const counts = new Map<string, number>();
+  for (const r of routes) counts.set(r, (counts.get(r) ?? 0) + 1);
+  return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? '';
+}
 
 export function createRuleService(deps: RuleServiceDeps) {
   const now = deps.now ?? Date.now;
@@ -117,8 +141,11 @@ export function createRuleService(deps: RuleServiceDeps) {
   }
 
   return {
-    /** Draft a rule from one merchant sentence, with a dry run. Nothing reaches live traffic until approve. */
-    async draft(tenantId: string, rawSentence: string): Promise<RuleDoc> {
+    /**
+     * Draft a rule from one sentence, with a dry run. Nothing reaches live traffic until approve. A
+     * merchant's sentence by default; `opts` marks a sentence from the rule suggester.
+     */
+    async draft(tenantId: string, rawSentence: string, opts?: AgentDraftOptions): Promise<RuleDoc> {
       requireTenant(tenantId);
       const sentence = rawSentence.trim().replace(/\s+/g, ' ');
       if (sentence.length < SENTENCE_LIMITS.min || sentence.length > SENTENCE_LIMITS.max) {
@@ -163,14 +190,55 @@ export function createRuleService(deps: RuleServiceDeps) {
       }
       if (!out.understood) throw new RuleError('not_understood', out.explanation.text || 'the sentence could not be expressed over the recorded probes', 422, author);
 
+      const agent = opts?.origin === 'agent' ? opts : null;
       const issueSessions = await sessionsInIssues(tenantId);
-      return (await update(tenantId, out.rule_id, (doc) => {
+      const outcomes = await deps.reader.sessionOutcomes(tenantId, window.from);
+      const unchanged: { doc?: RuleDoc } = {};
+      const written = await update(tenantId, out.rule_id, (doc) => {
+        if (agent && doc) {
+          // The same issue's own pending suggestion: nothing to do (idempotent, so the caller records drafted).
+          if (doc.draft?.origin === 'agent' && doc.draft.cluster_id === agent.cluster_id) {
+            unchanged.doc = doc;
+            return null;
+          }
+          // Any other doc for this rule id: an agent never replaces a pending draft, never edits a live rule,
+          // and never re-proposes a rule a person discarded (reject leaves the doc with no draft and no active).
+          throw new RuleError(
+            'conflict',
+            `rule ${out.rule_id} already has a pending draft, is live, or was discarded by a person before; a suggestion never replaces, edits, or re-proposes it`,
+            409,
+            author,
+          );
+        }
         const version = (doc?.active?.rule.version ?? 0) + 1;
         const rule = compileRule(out, version);
         const t = now();
-        const preview = dryRun({ tenantId, rule, sessions, window, inIssues: issueSessions, truncated: scan.truncated, now: t, startedAt });
+        const hits = new Map<string, string>();
+        const preview = dryRun({ tenantId, rule, sessions, window, inIssues: issueSessions, truncated: scan.truncated, now: t, startedAt, onHit: (sessionId, route) => void hits.set(sessionId, route) });
+        // A suggested rule that flags nothing in the window is noise, not a finding.
+        if (agent && preview.sessions_hit === 0) {
+          throw new RuleError('no_hits', `the suggested rule flags none of the ${preview.sessions_scanned} sessions of the last ${deps.dryRun.days} days, so it was not drafted`, 422, author);
+        }
+        // Revenue already lost: the one revenue-at-risk formula, over the dry run's hit sessions.
+        const revenueLost: RevenueAtRisk | null =
+          hits.size > 0
+            ? revenueAtRisk(
+                { affectedSessionIds: [...hits.keys()], affectedSessionCount: hits.size, route: commonestRoute(hits.values()), sessionsInAnyIssue: issueSessions, outcomes, now: t },
+                deps.revenue,
+              )
+            : null;
         log.info(
-          { rule_version: ruleVersionOf(rule), model: author.model, attempts: author.attempts, sessions: preview.sessions_scanned, applicable: preview.sessions_applicable, hit: preview.sessions_hit },
+          {
+            rule_version: ruleVersionOf(rule),
+            origin: agent ? 'agent' : 'human',
+            model: author.model,
+            attempts: author.attempts,
+            sessions: preview.sessions_scanned,
+            applicable: preview.sessions_applicable,
+            hit: preview.sessions_hit,
+            revenue_lost_minor: revenueLost?.revenue_at_risk_minor ?? null,
+            revenue_lost_status: revenueLost?.status ?? null,
+          },
           'rule drafted',
         );
         return {
@@ -179,14 +247,25 @@ export function createRuleService(deps: RuleServiceDeps) {
           rule_id: rule.id,
           title: doc?.active ? doc.title : rule.title,
           active: doc?.active ?? null,
-          draft: { rule, sentence, author, dry_run: preview, created_at: t },
+          draft: {
+            rule,
+            sentence,
+            author,
+            dry_run: preview,
+            created_at: t,
+            origin: agent ? 'agent' : 'human',
+            cluster_id: agent?.cluster_id ?? null,
+            suggester: agent?.suggester ?? null,
+            revenue_lost: revenueLost,
+          },
           rescan: doc?.rescan ?? null,
           versions: doc?.versions ?? [],
           created_at: doc?.created_at ?? t,
           updated_at: t,
           synthetic: true,
         };
-      }))!;
+      });
+      return (written ?? unchanged.doc)!;
     },
 
     /** Approve the pending draft (by version): record it, run it live, and re-scan history with it. */
@@ -272,6 +351,38 @@ export function createRuleService(deps: RuleServiceDeps) {
         }
       }
       return n;
+    },
+
+    /** The rules the processor runs for a tenant: built-ins (unless replaced) plus every approved tenant rule. */
+    activeRules,
+
+    /**
+     * Probe statistics over the given sessions (the rule suggester's view of one issue): each session's
+     * chunks read back from raw (one per seq, the first ingested) and normalized as the dry run does, then
+     * summarized into the catalog. Numbers only; a session that cannot be read is skipped.
+     */
+    async probeStats(tenantId: string, sessionIds: readonly string[]): Promise<ProbeCatalog> {
+      requireTenant(tenantId);
+      const since = now() - deps.dryRun.days * 86_400_000;
+      const read: (SessionProbes | null)[] = sessionIds.map(() => null);
+      let next = 0;
+      const worker = async () => {
+        for (let i = next++; i < sessionIds.length; i = next++) {
+          const sessionId = sessionIds[i]!;
+          try {
+            const bySeq = new Map<number, RawChunkRow>();
+            for (const row of await deps.reader.rawChunks(tenantId, sessionId, since)) {
+              const seen = bySeq.get(row.seq);
+              if (!seen || row.ingest_time < seen.ingest_time) bySeq.set(row.seq, row);
+            }
+            if (bySeq.size > 0) read[i] = await sessionProbes(deps.blob, tenantId, sessionId, [...bySeq.values()]);
+          } catch (err) {
+            deps.logger.warn({ err, tenant_id: tenantId, session_id: sessionId }, 'probe statistics could not read a session; skipped');
+          }
+        }
+      };
+      await Promise.all(Array.from({ length: Math.max(1, Math.min(SCAN_CONCURRENCY, sessionIds.length)) }, worker));
+      return buildCatalog(read.filter((s): s is SessionProbes => s !== null));
     },
 
     /** Resolves when every re-scan started so far has finished (tests, shutdown). */

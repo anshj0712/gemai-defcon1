@@ -1,12 +1,35 @@
 import { createHash } from 'node:crypto';
+import { BUILTIN_RULES } from '@cp/detectors';
 import type { Logger } from '@cp/logger';
 import type { BlobStore, ReplayPayload, SessionOutcome, WarehouseReader } from '@cp/platform';
-import type { AgentRun, Cluster, EvidenceItem, Finding, FindingDiscovery, FindingRow, FindingScreenshot, PriorityRule, RankOutput, RootCauseOutput, SignalRow, TriageOutput } from '@cp/schema';
+import type {
+  AgentRun,
+  Cluster,
+  EvidenceItem,
+  Finding,
+  FindingDiscovery,
+  FindingRow,
+  FindingRuleSuggestion,
+  FindingScreenshot,
+  InvariantRule,
+  PriorityRule,
+  RankOutput,
+  RevenueAtRisk,
+  RootCauseOutput,
+  RuleAuthorMeta,
+  RuleDoc,
+  SignalRow,
+  TriageOutput,
+} from '@cp/schema';
 import { PROMPT_VERSION, RANKER, rankerInput, ROOT_CAUSE, rootCauseInput, TRIAGE, triageInput } from './agents/prompts.js';
+import { RULE_SUGGESTER, ruleSuggesterInput, SUGGEST_PROMPT_VERSION } from './agents/rule-suggester.js';
 import { buildEvidence, screenshotEvidence } from './evidence.js';
-import { validateRank, validateRootCause, validateTriage } from './grounding.js';
+import { validateRank, validateRootCause, validateRuleSuggestion, validateTriage } from './grounding.js';
 import type { ModelSet } from './llm/models.js';
+import { OFFLINE_MODEL_ID } from './llm/offline.js';
 import { runStructured, type RunOptions } from './llm/run-agent.js';
+import type { ProbeCatalog } from './rules/evaluate.js';
+import { RuleError } from './rules/service.js';
 import { baseTier, isRegression, rank, revenueAtRisk, ruleSetVersion, type RevenueParams } from './scoring/index.js';
 import type { Screenshotter } from './visual/screenshot.js';
 
@@ -19,7 +42,34 @@ import type { Screenshotter } from './visual/screenshot.js';
  *
  * The LLM steps re-run only when the cluster's nature changes (symptoms, errors, releases, rule set,
  * models, prompts) or its session count doubles; scores are recomputed on every pass.
+ *
+ * Optionally (deps.ruleSuggest), a recurring issue that a deterministic trigger picks is shown to the
+ * rule suggester, whose sentence becomes an agent-originated rule draft (ARCHITECTURE.md section 6).
+ * That step only fills `finding.rule_suggestion` on the hot copy: it never changes the finding's
+ * analysis, tier, score, or version.
  */
+
+/** When the rule suggester is asked about an issue (all from config: RULE_SUGGEST_*). */
+export interface RuleSuggestParams {
+  enabled: boolean;
+  /** At least this many affected sessions. */
+  minSessions: number;
+  /** Seen over at least this many days (first to last signal). */
+  minDays: number;
+  /** The issue's most frequent detector carries at least this share of its signals (0 to 1). */
+  minDetectorShare: number;
+  /** Most of the issue's sessions read for probe statistics. */
+  maxSessions: number;
+}
+
+/** The rule service as the suggestion step sees it (wired in index.ts). */
+export interface RuleSuggestDeps {
+  params: RuleSuggestParams;
+  activeRules(tenantId: string): Promise<InvariantRule[]>;
+  probeStats(tenantId: string, sessionIds: string[]): Promise<ProbeCatalog>;
+  /** Hand the sentence to the rule author as an agent-originated draft (same compile, validate, dry run). */
+  draft(tenantId: string, sentence: string, meta: { cluster_id: string; suggester: RuleAuthorMeta }): Promise<RuleDoc>;
+}
 
 export interface PipelineDeps {
   reader: WarehouseReader;
@@ -36,6 +86,8 @@ export interface PipelineDeps {
   now?: () => number;
   /** Replay loader (injectable for tests). */
   loadReplay: (tenantId: string, sessionId: string) => Promise<ReplayPayload | null>;
+  /** Agent-suggested rules; absent means the step never runs. */
+  ruleSuggest?: RuleSuggestDeps;
 }
 
 /** Per-pass context shared by every cluster of a tenant. */
@@ -173,6 +225,8 @@ export async function analyze(deps: PipelineDeps, cluster: Cluster, ctx: TenantC
     enr = { evidence, triage: t.output, root_cause: rc.output, ranker: rk.output, screenshot, runs };
   }
 
+  const suggestion = await suggestRule(deps, cluster, revenue, enr, key, previous, now, log);
+
   const ranked = rank(cluster, revenue, deps.rules, { regression, ranker: enr.ranker });
   if (ranked.rejected) log.info({ reason: ranked.rejected }, 'ranker move not applied');
   const status: Finding['status'] = enr.root_cause?.visual_check === 'not_confirmed' ? 'suspect' : 'open';
@@ -215,11 +269,137 @@ export async function analyze(deps: PipelineDeps, cluster: Cluster, ctx: TenantC
     created_at: previous?.created_at ?? now,
     updated_at: now,
     discovery: discoveryOf(cluster),
+    ...(suggestion ? { rule_suggestion: suggestion } : {}),
     synthetic: true,
   };
   finding.input_hash = versionHash(finding);
   finding.version = previous && previous.input_hash === finding.input_hash ? previous.version : (previous?.version ?? 0) + 1;
   return finding;
+}
+
+const DAY_MS = 86_400_000;
+const BUILTIN_RULE_IDS: ReadonlySet<string> = new Set(BUILTIN_RULES.map((r) => r.id));
+/** How runStructured reports a model it could not reach (as opposed to an answer the validator rejected). */
+const MODEL_CALL_FAILED = 'model call failed';
+
+/**
+ * The deterministic trigger for the rule suggester (AGENTS.md rule 1: code decides, Gemini drafts). A
+ * recurring issue qualifies when every condition holds: enough sessions, seen over enough days, one
+ * dominant symptom, not a data rule that an active rule already explains, and a revenue estimate. The
+ * route is fixed per issue by the clusterer's key.
+ */
+export function shouldSuggestRule(cluster: Cluster, revenue: RevenueAtRisk, activeRuleIds: ReadonlySet<string>, params: RuleSuggestParams): { ok: boolean; reason: string } {
+  if (!params.enabled) return { ok: false, reason: 'rule suggestions are off' };
+  if (cluster.session_count < params.minSessions) return { ok: false, reason: `${cluster.session_count} sessions, fewer than ${params.minSessions}` };
+  const days = (cluster.last_seen - cluster.first_seen) / DAY_MS;
+  if (cluster.last_seen - cluster.first_seen < params.minDays * DAY_MS) return { ok: false, reason: `seen over ${days.toFixed(2)} days, fewer than ${params.minDays}` };
+  const dominant = Math.max(0, ...Object.values(cluster.detectors));
+  const share = cluster.signal_count > 0 ? dominant / cluster.signal_count : 0;
+  if (share < params.minDetectorShare) return { ok: false, reason: `the most frequent symptom is ${Math.round(share * 100)}% of signals, below ${Math.round(params.minDetectorShare * 100)}%` };
+  if (cluster.kind === 'invariant' && activeRuleIds.has(cluster.anchor)) return { ok: false, reason: `already explained by the active rule ${cluster.anchor}` };
+  if (revenue.status !== 'ok') return { ok: false, reason: 'no revenue estimate yet' };
+  return { ok: true, reason: `${cluster.session_count} sessions over ${days.toFixed(2)} days, ${Math.round(share * 100)}% one symptom` };
+}
+
+/** Cache key of a suggestion: the issue's llm_key (nature, size class, models) and the suggester prompt. */
+export const suggestionKey = (llmKeyValue: string) => sha(JSON.stringify([llmKeyValue, SUGGEST_PROMPT_VERSION])).slice(0, 20);
+
+const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err)).slice(0, 500);
+
+/**
+ * The suggestion step. A drafted suggestion is never asked again; a declined or failed one only when its
+ * key changes. When the trigger does not trip, whatever the issue had is kept. Never throws. An answer is
+ * remembered (declined; failed for an output the validator rejected or a rule service verdict such as a
+ * conflict); a transient failure (store read, model unreachable, draft not written) is not, so the next
+ * re-score pass tries again, as the other agents do.
+ */
+async function suggestRule(
+  deps: PipelineDeps,
+  cluster: Cluster,
+  revenue: RevenueAtRisk,
+  enr: Enrichment,
+  llmKeyValue: string,
+  previous: Finding | null,
+  now: number,
+  log: Logger,
+): Promise<FindingRuleSuggestion | undefined> {
+  const prev = previous?.rule_suggestion;
+  const rs = deps.ruleSuggest;
+  if (prev?.status === 'drafted') return prev;
+  const key = suggestionKey(llmKeyValue);
+  if (prev && prev.key === key) return prev;
+  if (!rs?.params.enabled) return prev;
+
+  let run: AgentRun = { agent: RULE_SUGGESTER.name, model: deps.models.bulk.model, prompt_hash: '', attempts: 0, ok: false, error: null, ms: 0, at: now };
+  let sentence: string | null = null;
+  const outcome = (status: FindingRuleSuggestion['status'], ruleId: string | null, reason: string | null): FindingRuleSuggestion => {
+    const fields = { agent: run.agent, model: run.model, attempts: run.attempts, status, rule_id: ruleId };
+    if (status === 'failed') log.warn({ ...fields, error: reason }, 'rule suggestion failed');
+    else log.info({ ...fields, ms: run.ms, prompt_hash: run.prompt_hash }, status === 'drafted' ? 'rule suggestion drafted' : 'rule suggestion declined');
+    return { key, status, rule_id: ruleId, sentence, reason, run, at: now };
+  };
+
+  // The cheap conditions first, so an issue that cannot qualify costs no store reads on any pass.
+  // Built-in rules are always active, so an issue anchored on one needs no rules read either.
+  const cheap = shouldSuggestRule(cluster, revenue, BUILTIN_RULE_IDS, rs.params);
+  if (!cheap.ok) {
+    log.debug({ reason: cheap.reason }, 'rule suggester not asked');
+    return prev;
+  }
+  let active: InvariantRule[];
+  let catalog: ProbeCatalog;
+  try {
+    active = await rs.activeRules(cluster.tenant_id);
+    const trigger = shouldSuggestRule(cluster, revenue, new Set(active.map((r) => r.id)), rs.params);
+    if (!trigger.ok) {
+      log.debug({ reason: trigger.reason }, 'rule suggester not asked');
+      return prev;
+    }
+    catalog = await rs.probeStats(cluster.tenant_id, cluster.sessions.slice(0, rs.params.maxSessions));
+  } catch (err) {
+    // A store hiccup before the model is asked is not an answer: keep what the issue had and try next pass.
+    log.warn({ error: errorText(err) }, 'rule suggestion skipped this pass: rules or probe statistics could not be read');
+    return prev;
+  }
+
+  try {
+    const { input, evidenceIds, probeIds } = ruleSuggesterInput(enr.evidence, { triage: enr.triage, revenue }, catalog, active);
+    const res = await runStructured(RULE_SUGGESTER, deps.models.bulk, input, (o) => validateRuleSuggestion(o, evidenceIds, probeIds), deps.runOptions);
+    run = res.run;
+    const out = res.output;
+    if (!out && run.error?.startsWith(MODEL_CALL_FAILED)) {
+      // The model could not be reached (after runStructured's back-off): not an answer, so try next pass.
+      log.warn({ agent: run.agent, model: run.model, attempts: run.attempts, error: run.error }, 'rule suggestion skipped this pass: the model call failed');
+      return prev;
+    }
+    if (!out) return outcome('failed', null, run.error ?? 'the rule suggester gave no valid answer');
+    if (!out.propose) return outcome('declined', null, out.explanation.text);
+
+    sentence = out.sentence.trim();
+    const suggester: RuleAuthorMeta = {
+      model: run.model,
+      prompt_hash: run.prompt_hash,
+      offline: run.model === OFFLINE_MODEL_ID,
+      explanation: out.explanation.text,
+      evidence_ids: out.explanation.evidence_ids,
+      assumptions: out.assumptions,
+      attempts: run.attempts,
+      ms: run.ms,
+    };
+    let doc: RuleDoc;
+    try {
+      doc = await rs.draft(cluster.tenant_id, sentence, { cluster_id: cluster.cluster_id, suggester });
+    } catch (err) {
+      // A rule service verdict (conflict, no hits, not understood, author failed) is an answer: remember it.
+      if (err instanceof RuleError) return outcome('failed', null, errorText(err));
+      // Anything else (a store or network error) is transient: keep what the issue had and try next pass.
+      log.warn({ agent: run.agent, model: run.model, error: errorText(err) }, 'rule suggestion skipped this pass: the draft could not be written');
+      return prev;
+    }
+    return outcome('drafted', doc.rule_id, null);
+  } catch (err) {
+    return outcome('failed', null, errorText(err));
+  }
 }
 
 /** Known at the time, or found later: sessions a retroactive re-scan added to the issue. */

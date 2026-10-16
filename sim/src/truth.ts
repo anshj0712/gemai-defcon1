@@ -1,4 +1,4 @@
-import { BUGS, RETRO_BUGS, type Bug, type Persona, type SimConfig } from './plan.js';
+import { BUGS, RETRO_BUGS, SUGGESTED_RULE_BUGS, type Bug, type Persona, type SimConfig } from './plan.js';
 
 /** One simulated session as it actually ran. All of it is synthetic. */
 export interface TruthSession {
@@ -48,7 +48,7 @@ export interface BugScore {
   bug: Bug;
   /** Sessions that ran into the bug. */
   affected: number;
-  /** Issues holding at least one of those sessions (the exit test wants exactly 1). */
+  /** Issues holding at least one of those sessions (the exit test wants exactly 1), not counting `rule_cluster_ids`. */
   clusters: number;
   cluster_id: string | null;
   title: string | null;
@@ -58,6 +58,11 @@ export interface BugScore {
   precision: number;
   /** A retro bug that no issue holds yet: silent by design until a merchant rule catches it. */
   silent: boolean;
+  /**
+   * SUGGESTED_RULE_BUGS only: invariant issues that also hold the bug's sessions, built by the re-scan of the
+   * rule the agent suggested and a person approved. Expected, so they are not held to the one-issue bar.
+   */
+  rule_cluster_ids: string[];
 }
 
 export interface CheckReport {
@@ -78,6 +83,8 @@ export interface CheckReport {
  * Score this run's sessions against the issues. Sessions from other runs in the same issues are ignored.
  * A retro bug (RETRO_BUGS) with no issue is fine: no rule can see it until a merchant writes one. Once an
  * issue holds its sessions (after `pnpm sim:rescan`), it is held to the same bar as the others.
+ * A bug in SUGGESTED_RULE_BUGS may also sit in invariant issues (the approved agent rule's, after
+ * `pnpm sim:suggest`); those are neither a second issue nor unexpected, and its main issue keeps the bar.
  */
 export function evaluate(truth: GroundTruth, clusters: readonly ClusterLike[], minRecall = 0.9): CheckReport {
   const scored = truth.sessions.filter((s) => s.session_id && !s.error);
@@ -91,9 +98,15 @@ export function evaluate(truth: GroundTruth, clusters: readonly ClusterLike[], m
   const bugs: BugScore[] = [];
   for (const bug of BUGS) {
     const affected = scored.filter((s) => s.bug === bug).length;
-    const holding = members.map((m) => ({ ...m, hits: m.ids.filter((id) => bugOf.get(id) === bug).length })).filter((m) => m.hits > 0);
-    const main = [...holding].sort((a, b) => b.hits - a.hits)[0];
-    for (const h of holding) claimed.add(h.c.cluster_id);
+    const all = members.map((m) => ({ ...m, hits: m.ids.filter((id) => bugOf.get(id) === bug).length })).filter((m) => m.hits > 0);
+    for (const h of all) claimed.add(h.c.cluster_id);
+    // The approved suggested rule's own issue: a data-rule issue holding this bug's sessions and nothing else
+    // from the run. A rule issue that also holds clean or other bugs' sessions is judged like any other issue.
+    const isRuleIssue = (h: (typeof all)[number]) => SUGGESTED_RULE_BUGS.includes(bug) && h.c.kind === 'invariant' && h.hits === h.ids.length;
+    const holding = all.filter((h) => !isRuleIssue(h));
+    // The issue the bug is judged on holds most of its sessions; for SUGGESTED_RULE_BUGS it is the element issue.
+    const rank = (h: (typeof all)[number]) => (SUGGESTED_RULE_BUGS.includes(bug) && h.c.kind === 'element' ? 1 : 0);
+    const main = [...holding].sort((a, b) => rank(b) - rank(a) || b.hits - a.hits)[0];
     const score: BugScore = {
       bug,
       affected,
@@ -103,6 +116,7 @@ export function evaluate(truth: GroundTruth, clusters: readonly ClusterLike[], m
       recall: affected ? (main?.hits ?? 0) / affected : 1,
       precision: main ? main.hits / main.ids.length : 1,
       silent: RETRO_BUGS.includes(bug) && holding.length === 0,
+      rule_cluster_ids: all.filter(isRuleIssue).map((h) => h.c.cluster_id),
     };
     bugs.push(score);
     if (affected === 0 || score.silent) continue;

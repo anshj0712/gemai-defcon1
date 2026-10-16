@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BUGS, makePlans, reachesTrigger, type Bug } from '../src/plan.js';
+import { BUGS, makePlans, pressesRemove, reachesTrigger, SUGGESTED_RULE_BUGS, type Bug } from '../src/plan.js';
 import { evaluate, evaluateRetro, type ClusterLike, type GroundTruth, type TruthSession } from '../src/truth.js';
 
 describe('session plans', () => {
@@ -12,7 +12,7 @@ describe('session plans', () => {
 
   it('follows the bug mix exactly', () => {
     const count = (b: Bug | null) => plans.filter((p) => p.bug === b).length;
-    expect([count('dead_button'), count('cart_total'), count('checkout_error'), count('qty_price'), count(null)]).toEqual([60, 45, 45, 30, 120]);
+    expect([count('dead_button'), count('cart_total'), count('checkout_error'), count('qty_price'), count('ghost_line'), count(null)]).toEqual([60, 45, 45, 30, 30, 90]);
   });
 
   it('keeps the ground truth honest: affected plans reach their trigger, clean plans never do', () => {
@@ -46,6 +46,28 @@ describe('session plans', () => {
     for (const p of near) expect(p.qtyIncrements).toBe(0);
     for (const p of plans.filter((x) => x.bug === 'qty_price')) expect(p).toMatchObject({ persona: 'pair_buyer', codes: [], incrementFirstLine: true });
   });
+
+  it('sends ghost_line sessions to Remove, and never lets a clean session press it', () => {
+    const ghost = plans.filter((p) => p.bug === 'ghost_line');
+    expect(ghost.length).toBe(30);
+    for (const p of ghost) {
+      expect(p).toMatchObject({ persona: 'line_remover', flags: ['ghost_line'], codes: [], qtyIncrements: 0 });
+      expect(pressesRemove(p)).toBe(true);
+      expect(reachesTrigger(p)).toBe('ghost_line');
+      expect([2, 3]).toContain(p.removePresses);
+      // Two distinct products: Remove takes the last, and the first keeps the bag's value above zero.
+      expect(p.products).toHaveLength(2);
+      expect(new Set(p.products.map((x) => x.id)).size).toBe(2);
+      if (p.abandon) expect(p.abandonAt).toBe('bag');
+    }
+    expect(new Set(ghost.map((p) => p.removePresses)).size).toBe(2);
+    for (const p of plans.filter((x) => x.bug !== 'ghost_line')) {
+      expect(pressesRemove(p)).toBe(false);
+      expect(p.removePresses).toBe(0);
+    }
+    // Near misses: ghost_line on, but nobody presses Remove, so the session stays clean.
+    expect(plans.some((p) => p.bug === null && p.flags.includes('ghost_line'))).toBe(true);
+  });
 });
 
 describe('evaluate', () => {
@@ -72,10 +94,15 @@ describe('evaluate', () => {
     seed: 1,
     started_at: 0,
     finished_at: 1,
-    config: { mix: { dead_button: 0, cart_total: 0, checkout_error: 0, qty_price: 0 }, abandonment: { baseline: 0, dead_button: 0, cart_total: 0, checkout_error: 0, qty_price: 0 }, windowShoppers: 0, nearMiss: 0 },
+    config: {
+      mix: { dead_button: 0, cart_total: 0, checkout_error: 0, qty_price: 0, ghost_line: 0 },
+      abandonment: { baseline: 0, dead_button: 0, cart_total: 0, checkout_error: 0, qty_price: 0, ghost_line: 0 },
+      windowShoppers: 0,
+      nearMiss: 0,
+    },
     sessions,
   });
-  const c = (id: string, sessions: string[]): ClusterLike => ({ cluster_id: id, title: id, kind: 'element', anchor: 'a', route: '/', sessions, detectors: {} });
+  const c = (id: string, sessions: string[], kind = 'element'): ClusterLike => ({ cluster_id: id, title: id, kind, anchor: 'a', route: '/', sessions, detectors: {} });
 
   const sessions = [s(1, 'dead_button'), s(2, 'dead_button'), s(3, 'cart_total'), s(4, null, { abandoned: false, order_placed: true }), s(5, null)];
 
@@ -111,6 +138,67 @@ describe('evaluate', () => {
     expect(evaluateRetro(t, 'qty_price', ['s_7', 's_4'])).toMatchObject({ recall: 0.5, precision: 0.5, others: 1 });
   });
 
+  describe('a bug the agent suggests a rule for (SUGGESTED_RULE_BUGS)', () => {
+    const withGhost = [...sessions, s(9, 'ghost_line'), s(10, 'ghost_line')];
+    const base = [c('dead', ['s_1', 's_2']), c('total', ['s_3'])];
+
+    it('is ghost_line', () => expect(SUGGESTED_RULE_BUGS).toEqual(['ghost_line']));
+
+    it('is held to the bar on its element issue before any rule exists', () => {
+      const r = evaluate(truth(withGhost), [...base, c('remove', ['s_9', 's_10'])]);
+      expect(r.pass).toBe(true);
+      expect(r.bugs.find((b) => b.bug === 'ghost_line')).toMatchObject({ clusters: 1, cluster_id: 'remove', recall: 1, precision: 1, rule_cluster_ids: [] });
+    });
+
+    it("allows the approved rule's invariant issue next to it: not a second issue, not unexpected", () => {
+      const r = evaluate(truth(withGhost), [...base, c('remove', ['s_9', 's_10']), c('agent_rule', ['s_9', 's_10', 'old_run'], 'invariant')]);
+      expect(r.failures).toEqual([]);
+      expect(r.bugs.find((b) => b.bug === 'ghost_line')).toMatchObject({ clusters: 1, cluster_id: 'remove', recall: 1, precision: 1, rule_cluster_ids: ['agent_rule'] });
+      expect(r.unexpected_clusters).toEqual([]);
+    });
+
+    it('still fails a missing or leaky element issue, and clean sessions in the rule issue', () => {
+      const onlyRule = evaluate(truth(withGhost), [...base, c('agent_rule', ['s_9', 's_10'], 'invariant')]);
+      expect(onlyRule.failures.join('\n')).toMatch(/ghost_line: expected 1 issue, found 0/);
+      // Judged on the element issue even when the rule's issue holds more of its sessions.
+      const low = evaluate(truth(withGhost), [...base, c('remove', ['s_9']), c('agent_rule', ['s_9', 's_10'], 'invariant')]);
+      expect(low.bugs.find((b) => b.bug === 'ghost_line')).toMatchObject({ cluster_id: 'remove', recall: 0.5, rule_cluster_ids: ['agent_rule'] });
+      expect(low.failures.join('\n')).toMatch(/ghost_line: recall 50.0%/);
+      const leaky = evaluate(truth(withGhost), [...base, c('remove', ['s_9', 's_10']), c('agent_rule', ['s_9', 's_10', 's_5'], 'invariant')]);
+      expect(leaky.clean_in_clusters).toEqual(['s_5']);
+      expect(leaky.pass).toBe(false);
+    });
+
+    it('gives other bugs no such allowance', () => {
+      const r = evaluate(truth(withGhost), [...base, c('remove', ['s_9', 's_10']), c('some_rule', ['s_1'], 'invariant')]);
+      expect(r.failures.join('\n')).toMatch(/dead_button: expected 1 issue, found 2/);
+      expect(r.bugs.find((b) => b.bug === 'dead_button')?.rule_cluster_ids).toEqual([]);
+    });
+
+    it("keeps the merchant's qty_price rule issue at 100% precision when it holds no ghost sessions", () => {
+      const withRetro = [...withGhost, s(7, 'qty_price'), s(8, 'qty_price')];
+      const r = evaluate(truth(withRetro), [
+        ...base,
+        c('remove', ['s_9', 's_10']),
+        c('agent_rule', ['s_9', 's_10'], 'invariant'),
+        c('merchant_cap', ['s_7', 's_8', 'old_run'], 'invariant'),
+      ]);
+      expect(r.failures).toEqual([]);
+      expect(r.bugs.find((b) => b.bug === 'qty_price')).toMatchObject({ cluster_id: 'merchant_cap', clusters: 1, recall: 1, precision: 1, silent: false, rule_cluster_ids: [] });
+      expect(r.bugs.find((b) => b.bug === 'ghost_line')).toMatchObject({ cluster_id: 'remove', precision: 1, rule_cluster_ids: ['agent_rule'] });
+      expect(evaluateRetro(truth(withRetro), 'qty_price', ['s_7', 's_8'])).toMatchObject({ recall: 1, precision: 1, others: 0 });
+    });
+
+    it("fails when the agent rule's issue also holds another bug's sessions", () => {
+      const withRetro = [...withGhost, s(7, 'qty_price')];
+      const r = evaluate(truth(withRetro), [...base, c('remove', ['s_9', 's_10']), c('agent_rule', ['s_9', 's_10', 's_7'], 'invariant')]);
+      expect(r.failures.join('\n')).toMatch(/qty_price: precision 33.3%/);
+      // Not a pure rule issue any more, so it no longer gets the allowance: it is ghost_line's second issue.
+      expect(r.failures.join('\n')).toMatch(/ghost_line: expected 1 issue, found 2/);
+      expect(r.bugs.find((b) => b.bug === 'ghost_line')?.rule_cluster_ids).toEqual([]);
+    });
+  });
+
   it('leaves failed browser runs out of scoring', () => {
     const r = evaluate(truth([...sessions, s(6, 'cart_total', { error: 'timed out' })]), [c('dead', ['s_1', 's_2']), c('total', ['s_3'])]);
     expect(r).toMatchObject({ pass: true, scored_sessions: 5, failed_sessions: 1 });
@@ -119,7 +207,7 @@ describe('evaluate', () => {
 
 describe('Phase 3 exit test (findings)', async () => {
   const { evaluateFindings } = await import('../src/truth.js');
-  const bug = (b: Bug, cluster_id: string | null) => ({ bug: b, affected: 3, clusters: 1, cluster_id, title: 't', recall: 1, precision: 1, silent: false });
+  const bug = (b: Bug, cluster_id: string | null) => ({ bug: b, affected: 3, clusters: 1, cluster_id, title: 't', recall: 1, precision: 1, silent: false, rule_cluster_ids: [] });
   const finding = (over: object = {}) => ({
     finding_id: 'c1', cluster_id: 'c1', title: 'Coupon', tier: 'P2', status: 'open', model_version: 'offline-stand-in',
     triage: { summary: { text: 's' }, repro_steps: [{ step: 'a' }, { step: 'b' }] },

@@ -1,7 +1,7 @@
 import { BaseLlm, type LlmRequest, type LlmResponse } from '@google/adk';
 import type { RankOutput, RootCauseOutput, TriageOutput } from '@cp/schema';
 import { INPUT_MARKER } from '../agents/prompts.js';
-import { offlineRuleAuthor } from './offline-rules.js';
+import { offlineRuleAuthor, offlineRuleSuggester } from './offline-rules.js';
 
 /**
  * A deterministic stand-in for Gemini, used when no GOOGLE_API_KEY is configured (local demo, CI).
@@ -160,7 +160,9 @@ export class OfflineLlm extends BaseLlm {
             ? ranker(payload)
             : agent === 'rule_author'
               ? offlineRuleAuthor(payload as Parameters<typeof offlineRuleAuthor>[0])
-              : null;
+              : agent === 'rule_suggester'
+                ? offlineRuleSuggester(payload as Parameters<typeof offlineRuleSuggester>[0])
+                : null;
     if (!out) {
       yield { errorCode: 'UNSUPPORTED', errorMessage: `offline stand-in has no answer for agent "${agent}"` };
       return;

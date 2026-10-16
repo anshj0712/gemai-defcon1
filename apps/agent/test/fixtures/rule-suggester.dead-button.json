@@ -1,0 +1,9 @@
+{
+  "propose": false,
+  "sentence": "",
+  "assumptions": [],
+  "explanation": {
+    "text": "Apply Coupon stops responding after repeated presses (E2, E3); that is a control that ignores clicks, not a number a page reports, and the bag's probe values look ordinary, so no standing rule over them would catch it.",
+    "evidence_ids": ["E1", "E2", "E3"]
+  }
+}

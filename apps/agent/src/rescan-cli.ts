@@ -39,6 +39,7 @@ async function main(): Promise<void> {
     tenants: [tenant],
     dryRun: { sessions: cfg.RULE_DRY_RUN_SESSIONS, days: cfg.RULE_DRY_RUN_DAYS },
     rescan: { sessions: cfg.RESCAN_MAX_SESSIONS, days: cfg.RESCAN_WINDOW_DAYS, concurrency: cfg.RESCAN_CONCURRENCY },
+    revenue: { abandonAfterIdleMs: cfg.ABANDON_AFTER_IDLE_MS, minBaselineSessions: cfg.BASELINE_MIN_SESSIONS, minAffectedDecided: cfg.RAR_MIN_AFFECTED },
   });
   await rules.rescan(tenant, ruleId);
   await rules.idle();

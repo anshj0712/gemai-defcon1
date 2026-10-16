@@ -216,6 +216,7 @@ describe('rule service', () => {
       tenants: ['demo'],
       dryRun: { sessions: 100, days: 30 },
       rescan: { sessions: 100, days: 30, concurrency: 2 },
+      revenue: { abandonAfterIdleMs: 120_000, minBaselineSessions: 5, minAffectedDecided: 3 },
       runOptions: { sleep: async () => {}, backoffMs: 1 },
       now: () => clock,
     });

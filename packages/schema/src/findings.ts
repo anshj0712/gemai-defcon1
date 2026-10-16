@@ -140,7 +140,7 @@ export interface RevenueAtRisk {
 }
 
 export interface AgentRun {
-  agent: 'triage' | 'root_cause' | 'ranker' | 'rule_author';
+  agent: 'triage' | 'root_cause' | 'ranker' | 'rule_author' | 'rule_suggester';
   model: string;
   prompt_hash: string;
   attempts: number;
@@ -218,6 +218,11 @@ export interface Finding {
   updated_at: number;
   /** Phase 4: whether a retroactive re-scan surfaced some of this issue's sessions (absent on older findings). */
   discovery?: FindingDiscovery;
+  /**
+   * Whether the rule suggester was asked about this issue and what came of it (absent until the trigger
+   * trips). Hot copy only: not part of the version hash or the BigQuery row, so it never makes a version.
+   */
+  rule_suggestion?: FindingRuleSuggestion;
   /** All demo data is synthetic (AGENTS.md rule 10). */
   synthetic: true;
 }
@@ -229,6 +234,24 @@ export interface FindingDiscovery {
   /** Sessions a re-scan added to the issue. */
   found_later_sessions: number;
   rescan_ids: string[];
+}
+
+/**
+ * The rule suggester's memory for one issue. drafted: a draft was handed to the rule service, so the
+ * issue is never suggested again (whatever the merchant does with it). declined / failed: asked again
+ * only when `key` changes (the issue's nature or size class, or the suggester prompt).
+ */
+export interface FindingRuleSuggestion {
+  key: string;
+  status: 'drafted' | 'declined' | 'failed';
+  /** The drafted rule's id (drafted only). */
+  rule_id: string | null;
+  /** The proposed sentence, when there was one. */
+  sentence: string | null;
+  /** Why it declined or failed, in plain words (the suggester's cited explanation, or the rule service's error). */
+  reason: string | null;
+  run: AgentRun;
+  at: number;
 }
 
 /** Feed entry: the finding without its evidence pack and run log. */

@@ -1,0 +1,19 @@
+{
+  "propose": true,
+  "sentence": "Every line in the bag must hold at least one pair, so the number of pairs must never be less than the number of lines in the bag.",
+  "assumptions": [
+    "qty is the number of pairs on each bag line.",
+    "A line at quantity 0 should have left the bag."
+  ],
+  "explanation": {
+    "text": "Shoppers press the quantity-down button on the bag page with no effect (E2, E3), and in these sessions a bag line reports a quantity of 0 (P4 min 0) yet stays in the bag with its own line total (P3). A line at quantity 0 should have left the bag; no existing rule checks quantities (R1 compares totals), so a rule that every line holds at least one pair would catch it without any price.",
+    "evidence_ids": [
+      "E1",
+      "E2",
+      "E3",
+      "P3",
+      "P4",
+      "R1"
+    ]
+  }
+}

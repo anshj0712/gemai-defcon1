@@ -1,5 +1,6 @@
 import { createLogger, flushLogs, logsExplorerUrl, resolveLogFormat, serviceLogFilter } from '@cp/logger';
 import { createPlatform, loadDotEnv, loadPlatformConfig, loadReplay } from '@cp/platform';
+import type { RuleAuthorMeta } from '@cp/schema';
 import { loadAgentConfig } from './config.js';
 import { createModels } from './llm/models.js';
 import { DEFAULT_PRIORITY_RULES, parseRules, ruleSetVersion } from './scoring/index.js';
@@ -25,6 +26,24 @@ async function main(): Promise<void> {
   const rules = parseRules(cfg.PRIORITY_RULES ?? DEFAULT_PRIORITY_RULES);
   const screenshotter = cfg.VISUAL_CHECK ? new PlaywrightScreenshotter({ channel: cfg.SCREENSHOT_BROWSER === 'bundled' ? undefined : cfg.SCREENSHOT_BROWSER, timeoutMs: cfg.SCREENSHOT_TIMEOUT_MS }) : null;
   const lookbackMs = cfg.AGENT_LOOKBACK_DAYS * 86_400_000;
+  const revenue = { abandonAfterIdleMs: cfg.ABANDON_AFTER_IDLE_MS, minBaselineSessions: cfg.BASELINE_MIN_SESSIONS, minAffectedDecided: cfg.RAR_MIN_AFFECTED };
+
+  // Tenant rules (Phase 4): plain-English rule author, dry run, approval, and retroactive re-scan. Created
+  // first: the agent pipeline hands rule suggestions to it as agent-originated drafts.
+  const ruleService = createRuleService({
+    state: platform.state,
+    warehouse: platform.warehouse,
+    reader: platform.reader,
+    blob: platform.blob,
+    publisher: platform.publisher,
+    signalsTopic: pc.topics.signals,
+    models,
+    logger,
+    tenants: cfg.AGENT_TENANTS,
+    dryRun: { sessions: cfg.RULE_DRY_RUN_SESSIONS, days: cfg.RULE_DRY_RUN_DAYS },
+    rescan: { sessions: cfg.RESCAN_MAX_SESSIONS, days: cfg.RESCAN_WINDOW_DAYS, concurrency: cfg.RESCAN_CONCURRENCY },
+    revenue,
+  });
 
   const service = createAgentService({
     state: platform.state,
@@ -40,26 +59,29 @@ async function main(): Promise<void> {
     maxPerPass: cfg.AGENT_MAX_PER_PASS,
     lookbackMs,
     regressionWindowMs: cfg.REGRESSION_WINDOW_HOURS * 3_600_000,
-    revenue: { abandonAfterIdleMs: cfg.ABANDON_AFTER_IDLE_MS, minBaselineSessions: cfg.BASELINE_MIN_SESSIONS, minAffectedDecided: cfg.RAR_MIN_AFFECTED },
+    revenue,
     loadReplay: (tenant, session) => loadReplay(platform, tenant, session, { sinceMs: Date.now() - lookbackMs, maxChunks: cfg.MAX_REPLAY_CHUNKS }),
+    // Agent-suggested rules (ARCHITECTURE.md section 6): same rule service, origin agent, a person approves.
+    ...(cfg.RULE_SUGGEST
+      ? {
+          ruleSuggest: {
+            params: {
+              enabled: true,
+              minSessions: cfg.RULE_SUGGEST_MIN_SESSIONS,
+              minDays: cfg.RULE_SUGGEST_MIN_DAYS,
+              minDetectorShare: cfg.RULE_SUGGEST_MIN_DETECTOR_SHARE,
+              maxSessions: cfg.RULE_SUGGEST_MAX_SESSIONS,
+            },
+            activeRules: (tenant: string) => ruleService.activeRules(tenant),
+            probeStats: (tenant: string, sessionIds: string[]) => ruleService.probeStats(tenant, sessionIds),
+            draft: (tenant: string, sentence: string, meta: { cluster_id: string; suggester: RuleAuthorMeta }) => ruleService.draft(tenant, sentence, { origin: 'agent', ...meta }),
+          },
+        }
+      : {}),
   });
 
   await recordRules(platform.warehouse, cfg.AGENT_TENANTS, rules, Date.now());
 
-  // Tenant rules (Phase 4): plain-English rule author, dry run, approval, and retroactive re-scan.
-  const ruleService = createRuleService({
-    state: platform.state,
-    warehouse: platform.warehouse,
-    reader: platform.reader,
-    blob: platform.blob,
-    publisher: platform.publisher,
-    signalsTopic: pc.topics.signals,
-    models,
-    logger,
-    tenants: cfg.AGENT_TENANTS,
-    dryRun: { sessions: cfg.RULE_DRY_RUN_SESSIONS, days: cfg.RULE_DRY_RUN_DAYS },
-    rescan: { sessions: cfg.RESCAN_MAX_SESSIONS, days: cfg.RESCAN_WINDOW_DAYS, concurrency: cfg.RESCAN_CONCURRENCY },
-  });
   const interrupted = await ruleService.markInterrupted();
   if (interrupted) logger.warn({ rescans: interrupted }, 're-scans left running by a previous process were marked interrupted; re-run them from the Rules page');
 
@@ -67,6 +89,7 @@ async function main(): Promise<void> {
     llm: models.offline ? 'offline stand-in (no GOOGLE_API_KEY)' : `${models.bulk.model} + ${models.reasoning.model}`,
     rule_set: ruleSetVersion(rules),
     visual_check: cfg.VISUAL_CHECK,
+    rule_suggest: cfg.RULE_SUGGEST,
   };
   const app = buildAgentServer({ logger, runPass: () => service.runPass(), info, projectId: pc.projectId, rules: ruleService });
   await app.listen({ port: cfg.AGENT_PORT, host: cfg.HOST });

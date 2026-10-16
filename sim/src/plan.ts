@@ -4,7 +4,7 @@
  * seed and count always produce the same plans, whatever the browser timing.
  */
 
-export const BUGS = ['dead_button', 'cart_total', 'checkout_error', 'qty_price'] as const;
+export const BUGS = ['dead_button', 'cart_total', 'checkout_error', 'qty_price', 'ghost_line'] as const;
 export type Bug = (typeof BUGS)[number];
 
 /**
@@ -12,6 +12,13 @@ export type Bug = (typeof BUGS)[number];
  * that catches them, and a re-scan then finds the sessions they already hurt (Phase 4, found later).
  */
 export const RETRO_BUGS: readonly Bug[] = ['qty_price'];
+
+/**
+ * Bugs no built-in rule sees but the agent can: the rule suggester reads the recurring issue they cause and
+ * proposes a rule, which a person approves (`pnpm sim:suggest`). Its re-scan then builds a second issue (kind
+ * invariant, anchored on the approved rule) holding the same sessions; scoring allows that one.
+ */
+export const SUGGESTED_RULE_BUGS: readonly Bug[] = ['ghost_line'];
 
 /** The sentence `pnpm sim:rescan` gives the rule author; it catches qty_price (and the dashboard offers it). */
 export const RETRO_RULE_SENTENCE = 'No pair of shoes costs more than ₹17,000, so the bag subtotal must never be more than ₹17,000 times the number of pairs.';
@@ -25,6 +32,12 @@ export type Persona =
   | 'northeast_payer'
   /** qty_price: raises a line's quantity to 2+, and the bag shows that line at 100x its price (totals agree with it). */
   | 'pair_buyer'
+  /**
+   * ghost_line: bags two products, presses Remove on the last line, stares at a line that did not go away
+   * (quantity 0, ₹0), then presses Remove again 2 or 3 times fast; it no longer responds. The first line stays,
+   * so the bag keeps a real value (qty [1, 0], line_total [price, 0]).
+   */
+  | 'line_remover'
   /** Clean: looks at a few products and leaves without a bag. */
   | 'window_shopper'
   /** Clean: bags one or two products, maybe a coupon and a quantity change, then checks out or leaves. */
@@ -42,8 +55,8 @@ export interface SimConfig {
 }
 
 export const DEFAULT_CONFIG: SimConfig = {
-  mix: { dead_button: 0.2, cart_total: 0.15, checkout_error: 0.15, qty_price: 0.1 },
-  abandonment: { baseline: 0.25, dead_button: 0.6, cart_total: 0.4, checkout_error: 0.85, qty_price: 0.7 },
+  mix: { dead_button: 0.2, cart_total: 0.15, checkout_error: 0.15, qty_price: 0.1, ghost_line: 0.1 },
+  abandonment: { baseline: 0.25, dead_button: 0.6, cart_total: 0.4, checkout_error: 0.85, qty_price: 0.7, ghost_line: 0.75 },
   windowShoppers: 0.3,
   nearMiss: 0.5,
 };
@@ -76,6 +89,8 @@ export interface SessionPlan {
   region: (typeof REGIONS)[number];
   /** Retries after a failed payment (northeast_payer). */
   retries: number;
+  /** Presses on Remove after the first one, as a fast burst on the line that stayed (line_remover: 2 or 3; else 0). */
+  removePresses: number;
   /** Leaves without ordering once the bag is ready (or after the bug hits). */
   abandon: boolean;
   /** Where an abandoning shopper leaves: on the bag page or partway through checkout. */
@@ -129,6 +144,7 @@ export function makePlans(sessions: number, seed: number, config: SimConfig = DE
       qtyIncrements: 0,
       incrementFirstLine: false,
       retries: 0,
+      removePresses: 0,
       region: pick(r, REGIONS.filter((x) => x !== 'Northeast')),
       abandonAt: (chance(r, 0.5) ? 'bag' : 'checkout') as SessionPlan['abandonAt'],
     };
@@ -149,6 +165,10 @@ export function makePlans(sessions: number, seed: number, config: SimConfig = DE
       case 'qty_price':
         // A higher quantity on the first line is the trigger; no coupon, so no other rule is involved.
         return { ...base, persona: 'pair_buyer', flags: [bug], products: distinctProducts(r, chance(r, 0.6) ? 1 : 2), qtyIncrements: chance(r, 0.6) ? 1 : 2, incrementFirstLine: true, abandon: chance(r, config.abandonment.qty_price) };
+      case 'ghost_line':
+        // Remove on the last of two lines (quantity 1) is the trigger; no coupon and no quantity change, so no other rule
+        // is involved, and the line that stays keeps the bag's value above zero.
+        return { ...base, persona: 'line_remover', flags: [bug], products: distinctProducts(r, 2), removePresses: chance(r, 0.5) ? 2 : 3, abandon: chance(r, config.abandonment.ghost_line), abandonAt: 'bag' };
       default: {
         // Clean. A near miss carries one bug flag but stays clear of its trigger.
         const flags: Bug[] = chance(r, config.nearMiss) ? [pick(r, BUGS)] : [];
@@ -170,6 +190,9 @@ export function makePlans(sessions: number, seed: number, config: SimConfig = DE
   });
 }
 
+/** Only line_remover presses Remove; every other shopper only raises quantities, so ghost_line near misses stay clean. */
+export const pressesRemove = (p: Pick<SessionPlan, 'persona'>) => p.persona === 'line_remover';
+
 /** Quantity changes land on the first line when asked to, or when it is the only line. */
 export const touchesFirstLine = (p: Pick<SessionPlan, 'incrementFirstLine' | 'products'>) => p.incrementFirstLine || p.products.length === 1;
 
@@ -179,5 +202,6 @@ export function reachesTrigger(p: SessionPlan): Bug | null {
   if (p.flags.includes('cart_total') && p.codes.includes('SAVE10') && p.products.length + p.qtyIncrements >= 2) return 'cart_total';
   if (p.flags.includes('checkout_error') && p.region === 'Northeast' && p.persona !== 'window_shopper' && !(p.abandon && p.abandonAt === 'bag')) return 'checkout_error';
   if (p.flags.includes('qty_price') && p.persona !== 'window_shopper' && p.qtyIncrements > 0) return 'qty_price';
+  if (p.flags.includes('ghost_line') && pressesRemove(p)) return 'ghost_line';
   return null;
 }
