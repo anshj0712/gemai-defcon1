@@ -168,6 +168,8 @@ These thresholds are our own starting values, not industry standards; expose the
 
 Probes make invariants cheap and re-scannable. A tenant registers probe selectors once (cart total, line-item price, quantity, discount). The SDK emits their text values as custom events whenever the DOM under them changes. Invariants are then pure functions over probe values: no DOM rebuild, and any new rule over already-captured probes can be re-scanned from BigQuery alone. A rule that needs a selector nobody probed goes to the slower rebuild path (section 6).
 
+As built (17 Oct), probes have three sources, all `probe` events: declared in the SDK as above, request probes derived from every finished call, and recorded probes read server-side from a compact mirror of the recorded page, so a selector registered today reads past sessions with no headless browser. See section 6, "the churn watcher".
+
 Fingerprints are what let 400 sessions collapse into one finding. Normalize selectors before hashing: strip generated ids, hashed class names, and positional indexes, and replace dynamic route segments with templates.
 
 Implementation notes (25 Sep):
@@ -231,6 +233,7 @@ Build it with the Agent Development Kit, whose TypeScript 2.0 release has graph 
 | Triage | flash-lite | Cluster summary: fingerprint, count, route, top selectors, release, 3 to 5 sample evidence items | JSON: title, category, confidence, likely cause, repro steps |
 | Root cause and verify | flash (reasoning, vision) | Triage output plus tool calls: session samples, DOM diff at time t, error context, screenshot at time t, release diff | JSON: cause hypothesis, visual confirmation yes or no, evidence ids cited |
 | Rule author (built 15 Oct; see section 6) | flash | A merchant sentence such as "cart total must equal line items minus discount plus shipping", plus statistics of the recorded probes | Rule JSON (probes and invariant), a dry run on recent sessions, then human approval |
+| Churn analyst (built 17 Oct; see section 6) | flash | One segment the churn watcher's code found (a number, its threshold, both abandonment rates, p-value, a suggested limit), probes on that page, live rules, the merchant's past verdicts and notes | `{propose, churn_reason, title, hypothesis, probe_name, sentence, confidence}`; the sentence goes to the rule author with the proposed probe |
 | Rule suggester (built 17 Oct; see section 6) | flash-lite | Same evidence pack as triage and ranker plus probe statistics over the issue's own sessions, for a recurring issue not yet explained by any active rule (a deterministic trigger decides when) | `{propose, sentence, assumptions, explanation}`; the sentence is handed to the rule author, not compiled directly |
 | Ranker | Deterministic core with a bounded LLM step | Enriched finding and the priority rule set | Score, tier, and the priority rule ids that applied |
 
@@ -410,6 +413,50 @@ Output: `{propose, sentence, assumptions, explanation}` (`RuleSuggesterOutput`).
 
 **Risk.** A wrong agent-authored suggestion reads worse than a wrong human one: it looks like the model hallucinated a rule. Hence the conservative trigger, the narrow job (phrasing only, from numbers in the issue's own sessions), the same grounding validator, the zero-hit guard, and a person approving every rule.
 
+### Implemented (17 Oct): the churn watcher, probes read from the recording, and 13 churn bugs
+
+Before this, a finding came from behaviour detectors or from rules over four probes the shop declared in code. Most reasons shoppers leave (a surprise delivery fee, a 9-day delivery estimate, a slow bank, a slow page) break nothing and touch no declared probe, so nothing saw them, and the rule author refused any sentence about them. Three changes close that gap; none touches the SDK.
+
+**1. Probes are any number a session reports** (`packages/schema/src/probes.ts`). All three sources reach detectors as ordinary `probe` events (with a `source`), so rules, the dry run, re-scans, the clusterer and the dashboard need no new rule type:
+
+| Source | What | How it is read |
+| --- | --- | --- |
+| declared | The SDK probes in site code (cart total, line totals, discount, quantity) | In the browser, as before; only numbers leave it |
+| request | Every finished fetch or XHR: `req_<method>_<path>_ms` (duration) and `req_<method>_<path>_status` | By the normalizer from the `cp.net` end events the SDK already sends; a "speed rule" is an ordinary invariant, for example `req_post_api_payment_authorize_ms ≤ 3000` |
+| recorded | A name, a CSS selector, a page, and money or count, registered on the Rules tab or proposed by the agent | By the normalizer from a compact mirror of the recorded page (`packages/normalizer/src/mirror.ts`): rrweb's full snapshot and mutations, kept per session in the tail (at most 4,000 nodes, text capped at 80 characters, svg/script/style subtrees opaque). Selectors are a small subset: tag, `#id`, `.class`, `[attr]`, `[attr="v"]`, descendant and `>`. A probe is read once the page has been quiet for 250 ms (as the SDK snapshots), at chunk ends, and only when its value changed |
+
+A recorded probe reads only what the recording already holds, text that was pattern-masked in the browser and scrubbed again at the collector, so registering one collects nothing new from shoppers, and it reads sessions recorded before it existed: re-scans and dry runs normalize from raw with the tenant's registry. The parsers (`parseMoney`, `parseCount`) are shared by the SDK and the normalizer (`@cp/schema/probe-parse`). The processor keeps the mirror for every session (`RECORDED_PROBES`, on by default; the shop is a single-page app, so the mirror cannot wait for a page load) and reads active probes from the registry, cached `PROBES_CACHE_TTL_MS` (15 s).
+
+**Registry.** Firestore `probes/{tenant}__{name}` (`ProbeDoc`: spec, source merchant or agent, status active or disabled, version, approver, preview), written by the agent service only, plus one `rules` table row of kind `probe` per registered version (the bitemporal record). The agent previews a probe over recent sessions before it is saved (sessions with a value, range, samples with replay links), refuses one that reads nothing, refuses names that shadow declared or request probes (`req_` is reserved), and refuses to disable a probe a live rule reads.
+
+**2. The churn watcher** (`apps/agent/src/watch/`). It runs every `WATCH_INTERVAL_MS` (60 s) and on demand (`POST /v1/watch/run`, the dashboard's Look now):
+
+1. **Read** (code). The newest `WATCH_MAX_SESSIONS` sessions of the last `WATCH_WINDOW_DAYS`, from raw, cached by each session's last chunk so a pass reads only what changed. Per session: the largest value of every declared, request and recorded probe, and, in discover mode, of every short number on its recorded pages nobody probes yet ("₹499", "Arrives in 9–12 days"; deepest element, outside controls, with a stable selector).
+2. **Contrast** (code, `contrast.ts`). Per number, the threshold where shoppers at or past it abandon their settled cart most often relative to the rest: the baseline is decided cart sessions that reached the same page, not in the segment and not in any issue (rule 9's baseline, like for like). A segment must stand apart (its smallest value at least 1.5x the largest outside it: the watcher hunts defects, a fee that appears or a 6.5 s wait against 0.3 s, not trends such as bigger carts abandoning a little more), hold at least `WATCH_MIN_SEGMENT` sessions against a baseline of at least 12, beat the baseline by `WATCH_MIN_LIFT` (0.3) with a one-sided two-proportion p-value at most `WATCH_MAX_P` (0.01), and not be mostly in an issue already. Two passes, so silent problems do not hide each other: several can hurt shoppers at once (a fee, a slow bank, a slow page), none in an issue, and each would sit in the others' baselines. A loose first pass (half the lift, p at most 0.2) finds every suspicious segment; the final pass judges each number against shoppers no other suspected number explains. Segments of the same shoppers merge (a request's `_ms` and `_status`), preferring a number that is already a probe. Numbers a live rule reads, hypotheses still pending, and numbers a person rejected (unless the gap grew 1.5x) are skipped; an analyst decline is remembered per segment (number, side, threshold), so another segment of the same number can still be raised. A segment waits while more than half as many of its shoppers are still deciding as have decided, because a hypothesis is drafted once. Elements that are already declared probes are never "discovered". Revenue at risk is the existing formula over the segment.
+3. **Judge** (Gemini, the churn analyst, `agents/churn-analyst.ts`, `GEMINI_MODEL_REASONING`, prompt `w1`). Input: the candidate (H1: the number, its source, selector and page, threshold, a code-computed `suggested_limit` that separates the segment from everyone else, both abandonment rates, the p-value, revenue at risk), the probes on that page (P), the live rules (R), and the merchant's last 10 verdicts with notes (F). Output (`ChurnAnalystOutput`): propose or not, a churn reason from a fixed list (the reasons shoppers commonly leave), a title, a cited hypothesis, a probe name for a discovered number, and the rule as one sentence naming the probe. The validator rejects unknown ids, a hypothesis that does not cite H1, a bad or taken probe name, and a sentence that does not name its probe.
+4. **Draft** (code). The sentence goes to the rule author and dry run like any other (one pipeline), as an agent draft with `cluster_id: null`, the proposed probe (`proposed_probes`) and the hypothesis (`watch`: segment, baseline, lift, p-value, values, up to 500 segment session ids so it can be checked, churn reason, confidence).
+
+**3. People decide, and the agent remembers.** A hypothesis is not a finding: it writes no signal and registers no probe. Approving registers the proposed probe first, then approves the rule as before (live within 15 s, a 30-day re-scan, found later). Not a problem takes an optional note, kept on the rule doc as `feedback` (verdict, note, feature, churn reason, lift); the watcher does not raise that number again unless its gap grows 1.5x, and the analyst reads the notes next time. Change the rule re-drafts from an edited sentence, keeping the proposed probe and the hypothesis. Approvals are feedback too.
+
+**Offline.** The stand-in analyst labels a candidate from words in its name, selector and page (fee, delivery, payment, stock) and writes "The `<probe>` must never be more than `<limit>`", which the offline rule author understands as a fifth family; it declines anything it cannot place (a shoe size, a product count). With `GOOGLE_API_KEY`, Gemini judges.
+
+**Demo: 13 bugs across the churn reasons** (`apps/api/src/demo-bugs.ts`). The synthetic store's backend moved from the shop's dev server into the API (`apps/api/src/demo-store.ts`, local mode or `DEMO_STORE=true`), so a deployed shop has one too. Eight new bugs:
+
+| Bug | Churn reason | What happens | Caught by |
+| --- | --- | --- | --- |
+| slow_stock | Poor user experience | The stock check behind Add to Bag takes 4 s | The watcher: request probe `req_get_api_stock_ms` |
+| shipping_shock | Shipping cost | The bag says delivery is free; checkout adds ₹499 | The watcher: a recorded probe on `#delivery-fee` |
+| slow_delivery | Delivery time | The product page says 9–12 days instead of 2–4 | The watcher: a recorded probe on `#delivery-eta` |
+| slow_payment | Payment gateway | Authorisation hangs 6.5 s, then the bank times out | The watcher: request probe `req_post_api_payment_authorize_ms` |
+| returns_hidden | Returns hassle | The Returns policy button does nothing | dead_click |
+| support_down | Customer service | Chat with us fails (503 and a JS error) | error_correlation |
+| recs_sold_out | Personalization | Picked for you suggests sold-out shoes; Quick add does nothing | dead_click |
+| card_declined | Declined card | Every card is declined; Use another card does nothing | dead_click |
+
+Payment declines and timeouts answer 200 with `ok: false`, so they never merge into checkout_error's element issue. The shop templates its routes (`/product/:id`, `/order/:id`), so a product-page problem is one issue, not one per shoe. Competitor offers and discount-only shoppers are not page defects, and the demo says so.
+
+**Exit test.** `pnpm sim:watch` (after `pnpm sim -- --sessions 240`) waits for the run's carts to settle, asks the watcher to look until each of the four watch bugs has a hypothesis whose segment is that bug's shoppers (precision 100%, recall at least 90%), approves each as the dashboard does, and checks every rule's issue holds the bug's sessions (recall at least 90%, precision 100%), tagged found later.
+
 ## 7. Dashboard and API
 
 The dashboard is a ranked findings feed with one click from any finding to the exact replay moment, plus a time-travel control that makes the bitemporal model visible.
@@ -419,7 +466,7 @@ Views:
 - Overview: revenue at risk over the last 7 days, open findings by tier, sessions ingested, and measured detection latency.
 - Findings feed: ranked cards showing title, tier, revenue at risk, affected sessions, first and last seen, release, and a known-at-the-time or found-later tag.
 - Finding detail: Gemini summary and repro steps, the visual-verification screenshot, related errors, and evidence items that open the rrweb player at the signal time.
-- Rules: detector parameters, the probe registry, and plain-English rule authoring with a dry-run result before activation.
+- Rules: detector parameters, the probe registry, and plain-English rule authoring with a dry-run result before activation. As built (17 Oct): "The agent suspects" (the churn watcher's hypotheses: what it saw, why, the proposed probe and rule, the dry run; Approve, Change the rule, Not a problem with a note), Write a rule, Probes (declared, request, recorded; add one with a preview), your rules and the built-ins. A bell in the top bar counts open agent proposals and a toast announces new ones.
 - Time travel: an as-of date and a valid-time range that re-query the feed, so a viewer can watch the retroactive re-scan change the picture.
 
 API surface (REST on Cloud Run):
@@ -539,6 +586,7 @@ According to the rrweb guide, `maskAllInputs` defaults to false and only passwor
 | --- | --- | --- |
 | Capture | `maskAllInputs: true`; `blockSelector` for payment and identity elements; `maskTextSelector` for account, address, and order-confirmation text; `maskInputFn` and `maskTextFn` for pattern masking of emails, phone numbers, and card-like digit runs. As built (`apps/sdk`): every text node passes through the pattern mask, `[data-cp-mask]` text is fully masked, `[data-cp-block]` and `cc-*` fields are blocked, and page-load URLs lose their query and fragment before batching. The one-tag bundle is about 26 KB gzipped, including rrweb record. | Browser SDK |
 | Probes | Allowlisted selectors only, values parsed to numbers and currency before leaving the browser; probe text is never sent as text | Browser SDK |
+| Recorded probes and discovery | Read server-side from the recording already stored (text pattern-masked in the browser, scrubbed at the collector); nothing new is collected. Only numbers reach rules, the dashboard and Gemini; the churn analyst sees numbers, selectors, page routes and the merchant's own notes, never page text or HTML | Normalizer, agent |
 | URLs | Drop query strings and fragments from `url_path` by default | Browser SDK |
 | Ingest scrub | Second-pass scrubber over the batch JSON before it is written to Cloud Storage; reject unknown site keys; fail closed on parse errors. As built: every input `value` is masked; text and text-bearing attributes (`aria-label`, `title`, `alt`, ...) are pattern-scrubbed; URLs lose query and fragment. SVG and geometry attributes (`d`, `viewBox`, coordinates, transforms) are exempt from pattern scrubbing: they look like phone numbers to the regex, cannot hold typed input, and scrubbing them broke every icon in replays. | Collector |
 | LLM boundary | Gemini receives structured evidence and screenshots rendered from the already-masked replay, never raw HTML | Agent service |
@@ -592,7 +640,7 @@ Monorepo layout: see `AGENTS.md`. The `sim` folder matters as much as any servic
 
 Simulator (implemented 6 Oct). `pnpm sim -- --sessions 300 --seed 42 --concurrency 8` drives the demo shop in real Chrome, so the real SDK, probes, collector, processor, and clusterer all run.
 
-- **Plans.** Seeded plans (`sim/src/plan.ts`) give the mix: 20% dead_button, 15% cart_total, 15% checkout_error, 10% qty_price (since 15 Oct; abandons 70%), 10% ghost_line (since 17 Oct; abandons 75%), and 30% clean. qty_price is a retro bug: `sim:check` accepts it having no issue, and `pnpm sim:rescan` checks the merchant rule surfaces it. ghost_line's issue is live; once its agent-suggested rule is approved, the rule's own issue may also hold its sessions, and `sim:check` accepts that second issue. `pnpm sim:suggest` checks the suggestion end to end.
+- **Plans.** Seeded plans (`sim/src/plan.ts`) give the mix (since 17 Oct, 13 bugs, so run 240+ sessions): 8% dead_button, 7% cart_total, 7% checkout_error, 6% qty_price (abandons 70%), 6% ghost_line (75%), 5% each for slow_stock, shipping_shock, slow_delivery, slow_payment, returns_hidden, support_down, recs_sold_out and card_declined, and about 26% clean. The four watch bugs (`WATCH_BUGS`) and qty_price are silent until a rule exists; `sim:check` accepts that, and `pnpm sim:watch` checks the watcher finds the four. qty_price is a retro bug: `sim:check` accepts it having no issue, and `pnpm sim:rescan` checks the merchant rule surfaces it. ghost_line's issue is live; once its agent-suggested rule is approved, the rule's own issue may also hold its sessions, and `sim:check` accepts that second issue. `pnpm sim:suggest` checks the suggestion end to end.
 - **Near misses.** Half of the clean sessions carry a bug flag whose trigger they never reach: at most 2 coupon presses, a discounted bag kept at a single item, a region other than Northeast, quantities kept at 1, or never pressing Remove (only the ghost_line shopper does). A test asserts that affected plans reach their trigger and clean plans never do.
 - **Abandonment.** Affected shoppers abandon more often than the baseline by design (dead_button 60%, cart_total 40%, checkout_error 85%, qty_price 70%, ghost_line 75%, against 25%). Every session is recorded (sample rate 1), so the baseline is unbiased.
 - **Ground truth.** It goes to `sim/out/ground-truth.json`.
@@ -658,6 +706,7 @@ Demo shop bug flags:
 - `BUG_CHECKOUT_ERROR`: the payment step throws a JS error and a 500 for one region, producing rage clicks and abandonment.
 - `qty_price` (added 15 Oct for Phase 4): a bag line with quantity 2 or more shows 100x its price, and every total agrees with it. No built-in rule sees it; a merchant rule written later finds the sessions it already hurt.
 - `ghost_line` (added 17 Oct for agent-suggested rules): Remove leaves a bag line in the bag at quantity 0 (₹0), and then stops responding. The dead presses form a live issue; the rule suggester proposes the rule that catches a bag line with no pairs (section 6).
+- Eight churn-reason bugs (added 17 Oct for the churn watcher): `slow_stock`, `shipping_shock`, `slow_delivery`, `slow_payment` (the watcher proposes a probe and rule for each), and `returns_hidden`, `support_down`, `recs_sold_out`, `card_declined` (caught live by detectors). See the table in section 6.
 
 The `sim` generator runs several hundred scripted sessions with randomized behavior, where bug-affected sessions abandon at a higher rate than the rest. Those rates are parameters we choose, so say clearly in the demo and README that the data is synthetic.
 
@@ -677,7 +726,7 @@ The 3-minute video should spend about a third of its time on the retroactive re-
 | 0:00 to 0:20 | Demo shop cart where the total does not match its lines | Users do not report this; they leave | Problem alignment |
 | 0:20 to 0:50 | Click Apply Coupon six times; a quick architecture frame | One script tag streams rrweb sessions through Pub/Sub into our detectors | Technical merit |
 | 0:50 to 1:30 | Findings feed: three findings from hundreds of sessions; open one | Clustered, ranked by revenue at risk; Gemini explains it and confirms it visually; jump to the replay moment | Gen AI implementation |
-| 1:30 to 2:10 | Type a plain-English rule; dry run; approve; re-scan. Then the agent's own suggestion for the ghost line, with revenue lost to date; approve it | A new rule finds last week's sessions nobody knew were broken, and the agent proposes rules from what it sees, but a person still approves | Innovation and Gen AI |
+| 1:30 to 2:10 | The toast: "The agent suspects an unexpected ₹499 delivery fee at checkout". Open it: 83% of those shoppers left against 24%, a probe nobody wrote, the rule, the dry run; approve. Then type a plain-English rule yourself | The agent watches every session for what makes shoppers leave, finds the number, proposes the probe and rule; a person approves, and the re-scan finds last week's shoppers it already cost | Innovation and Gen AI |
 | 2:10 to 2:40 | Move the as-of control | What we believed then versus what we know now | Innovation and UX |
 | 2:40 to 2:55 | Funnel counts: sessions, signals, clusters, Gemini calls | The LLM only sees clusters, so cost stays flat as traffic grows | Technical merit and impact |
 
