@@ -128,6 +128,8 @@ export function dryRun(opts: {
   truncated: boolean;
   now: number;
   startedAt: number;
+  /** Called once per hit session with the route of its first hit (for example to estimate revenue lost over the hits). */
+  onHit?: (sessionId: string, route: string) => void;
 }): DryRun {
   let applicableSessions = 0;
   let snapshots = 0;
@@ -140,6 +142,7 @@ export function dryRun(opts: {
     if (check.signals.length === 0) continue;
     hitSessions.add(s.session_id);
     const first = check.signals[0]!;
+    opts.onHit?.(s.session_id, first.route);
     const v = (first.evidence.values ?? {}) as Record<string, unknown>;
     const num = (x: unknown) => (typeof x === 'number' ? x : null);
     hits.push({

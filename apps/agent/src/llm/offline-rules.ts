@@ -1,13 +1,18 @@
-import type { RuleAuthorOutput, RuleTerm } from '@cp/schema';
+import type { RuleAuthorOutput, RuleSuggesterOutput, RuleTerm } from '@cp/schema';
 
 /**
- * The offline stand-in's rule author: a small deterministic parser for three sentence families, so the
+ * The offline stand-in's rule author: a small deterministic parser for four sentence families, so the
  * local demo runs without a key. It is not a language model. Anything else comes back as not
  * understood, with a pointer to GOOGLE_API_KEY. Drafts it writes record the offline model id.
  *
  *   per-unit cap   "... the bag subtotal must never be more than ₹17,000 times the number of pairs"
  *   discount cap   "the discount must never be more than 10% of the bag"
  *   totals match   "the cart total must equal the line items minus the discount"
+ *   pairs per line "every line in the bag must hold at least one pair, so the number of pairs must never
+ *                   be less than the number of lines in the bag" (what the offline rule suggester proposes)
+ *
+ * The offline rule suggester (below) is a template too: it proposes that last sentence for a bag line
+ * left at quantity 0, and declines everything else with a grounded reason.
  */
 
 interface Item {
@@ -52,7 +57,7 @@ export function offlineRuleAuthor(payload: { evidence?: Item[] }): RuleAuthorOut
   const probes = new Map(items.filter((i) => i.kind === 'probe' && i.name).map((i) => [i.name!, i.id]));
   const need = (...names: string[]) => names.every((n) => probes.has(n));
   const cite = (...names: string[]) => [sid, ...names.map((n) => probes.get(n)!)];
-  const fallback = 'The offline stand-in only understands the example sentences (a per-pair price cap, a discount cap, or totals that add up). Set GOOGLE_API_KEY to draft any rule with Gemini.';
+  const fallback = 'The offline stand-in only understands the example sentences (a per-pair price cap, a discount cap, totals that add up, or at least one pair per bag line). Set GOOGLE_API_KEY to draft any rule with Gemini.';
 
   // 1. Per-unit cap: subtotal <= amount x number of pairs.
   const perUnit = /more than\s+(.+?)\s+(?:times|x|×|per)\s+(?:the\s+)?(?:number of\s+)?(pairs?|items?|units?|shoes?)/.exec(text);
@@ -114,5 +119,84 @@ export function offlineRuleAuthor(payload: { evidence?: Item[] }): RuleAuthorOut
     };
   }
 
+  // 4. At least one pair per line: sum(qty) >= count(qty). Checked last so it never takes an example above.
+  const perLine =
+    (/at least (?:one|1|a single)\b/.test(text) && /\b(?:pairs?|items?|units?|shoes?)\b/.test(text) && /\blines?\b/.test(text)) ||
+    /number of (?:pairs|items|units|shoes)\b.*\b(?:less|fewer) than\b.*\bnumber of (?:bag )?lines\b/.test(text);
+  if (perLine) {
+    if (!need('qty')) return notUnderstood('This needs a quantity probe (qty) with one value per bag line, and the store does not report one.', [sid]);
+    return {
+      understood: true,
+      rule_id: 'bag_lines_have_pairs',
+      title: 'A bag line holds no pairs but stays in the bag',
+      left: [term({ kind: 'sum', probe: 'qty' })],
+      op: 'gte',
+      right: [term({ kind: 'count', probe: 'qty' })],
+      tolerance_minor: 0,
+      routes: [],
+      highlight_probe: 'qty',
+      explanation: {
+        text: 'Each bag line reports its quantity in qty. If every line holds at least one pair, the number of pairs (the sum of qty) is never less than the number of lines (how many qty values there are).',
+        evidence_ids: cite('qty'),
+      },
+      assumptions: ['qty carries one value per bag line.', 'Each unit of qty is one pair.'],
+    };
+  }
+
   return notUnderstood(fallback, [sid]);
+}
+
+// ---------------------------------------------------------------------------------------------
+// The offline rule suggester.
+// ---------------------------------------------------------------------------------------------
+
+/** What the offline suggester proposes for a bag line left at quantity 0 (no merchant-only constant). */
+export const PAIRS_PER_LINE_SENTENCE = 'Every line in the bag must hold at least one pair, so the number of pairs must never be less than the number of lines in the bag.';
+
+interface SuggestItem {
+  id: string;
+  kind: string;
+  name?: string;
+  min?: number;
+  data?: Record<string, string | number | boolean | null>;
+}
+
+const OFFLINE_NOTE = 'This is the offline stand-in, which only recognises a bag line left at quantity 0; set GOOGLE_API_KEY to let Gemini decide.';
+
+export function offlineRuleSuggester(payload: { evidence?: SuggestItem[] }): RuleSuggesterOutput {
+  const items = payload.evidence ?? [];
+  const issue = items.find((i) => i.kind === 'issue');
+  const issueId = issue?.id ?? items[0]?.id ?? 'E1';
+  const signalIds = items.filter((i) => i.kind === 'signal').slice(0, 3).map((i) => i.id);
+  const probeItems = items.filter((i) => i.kind === 'probe' && i.name);
+  const probe = (name: string) => probeItems.find((p) => p.name === name);
+  const kind = typeof issue?.data?.kind === 'string' ? issue.data.kind : 'element';
+  const anchor = typeof issue?.data?.anchor === 'string' ? issue.data.anchor : 'the control';
+  const route = typeof issue?.data?.route === 'string' ? issue.data.route : 'the page';
+  const qty = probe('qty');
+  const line = probe('line_total');
+
+  if (kind === 'element' && qty && qty.min === 0) {
+    return {
+      propose: true,
+      sentence: PAIRS_PER_LINE_SENTENCE,
+      assumptions: ['qty is the number of pairs on each bag line.', 'A line at quantity 0 should have left the bag.'],
+      explanation: {
+        text: `Shoppers keep pressing ${anchor} on ${route} with no effect, and in these sessions a bag line reports quantity 0 (qty min 0) yet stays in the bag${line ? ' with its own line total' : ''}. A line at quantity 0 should have left the bag, so a rule that every line holds at least one pair catches it without any price.`.slice(0, 600),
+        evidence_ids: [issueId, ...signalIds, qty.id, ...(line ? [line.id] : [])],
+      },
+    };
+  }
+
+  const probeIds = probeItems.slice(0, 4).map((p) => p.id);
+  const why =
+    kind === 'invariant'
+      ? `This issue is already a data rule (${anchor}), so a second rule would add nothing.`
+      : probeItems.length === 0
+        ? `No probe values were recorded in this issue's sessions, so there is no number a rule could check; ${anchor} not responding on ${route} is a behaviour, not a value.`
+        : `The probe values in this issue's sessions (${probeItems
+            .slice(0, 4)
+            .map((p) => p.name)
+            .join(', ')}) show nothing impossible for a shop, so a rule over them would not catch ${anchor} failing on ${route}.`;
+  return { propose: false, sentence: '', assumptions: [], explanation: { text: `${why} ${OFFLINE_NOTE}`.slice(0, 600), evidence_ids: [issueId, ...probeIds] } };
 }

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Claim } from './findings.js';
+import { Claim, type RevenueAtRisk } from './findings.js';
 
 /**
  * Invariant rules: declarative checks over probe values (ARCHITECTURE.md section 4). Rules are data,
@@ -136,6 +136,24 @@ export const RuleAuthorOutput = z.object({
 });
 export type RuleAuthorOutput = z.infer<typeof RuleAuthorOutput>;
 
+/**
+ * What the rule suggester returns for one recurring issue: whether the pattern deserves a standing rule
+ * and, if so, one plain-English sentence. It is not a rule: the sentence goes to the rule author exactly
+ * as a merchant's sentence would (ARCHITECTURE.md section 6, agent-suggested rules).
+ */
+export const RuleSuggesterOutput = z.object({
+  propose: z.boolean(),
+  /** One sentence a merchant would write; empty when propose is false. */
+  sentence: z.string().max(500),
+  assumptions: z.array(z.string().max(200)).max(5),
+  /** Why (or why not), citing the input ids (E evidence, P probe statistics, R existing rules). */
+  explanation: Claim,
+});
+export type RuleSuggesterOutput = z.infer<typeof RuleSuggesterOutput>;
+
+/** Where a draft came from: a merchant's sentence, or the rule suggester's (still approved by a person). */
+export type RuleOrigin = 'human' | 'agent';
+
 export interface RuleAuthorMeta {
   model: string;
   prompt_hash: string;
@@ -209,6 +227,17 @@ export interface RuleDraft {
   author: RuleAuthorMeta;
   dry_run: DryRun | null;
   created_at: number;
+  /** Who wrote the sentence. Drafts stored before this field existed have none and are human. */
+  origin: RuleOrigin;
+  /** Agent drafts: the issue (cluster id) whose evidence prompted the suggestion. Null for human drafts. */
+  cluster_id: string | null;
+  /** Agent drafts: the rule suggester's run and its cited reasoning (same shape as the author's). */
+  suggester: RuleAuthorMeta | null;
+  /**
+   * Revenue already lost to the pattern: the revenue-at-risk formula (AGENTS.md rule 9) over the dry
+   * run's hit sessions instead of an issue's affected sessions. Synthetic in the demo.
+   */
+  revenue_lost: RevenueAtRisk | null;
 }
 
 export interface ActiveRule {

@@ -1,10 +1,13 @@
-import type { PriorityRule, RankOutput, RootCauseOutput, TriageOutput } from '@cp/schema';
+import type { PriorityRule, RankOutput, RootCauseOutput, RuleSuggesterOutput, TriageOutput } from '@cp/schema';
 
 /**
  * The grounding validator (AGENTS.md: "every LLM claim must cite evidence ids we supplied"). It runs
  * on every agent output after schema validation. A non-empty result rejects the output: the agent
  * is retried once with these messages, then fails closed.
  */
+
+/** Length of a rule sentence, whoever writes it (a merchant, or the rule suggester). */
+export const SENTENCE_LIMITS = { min: 8, max: 500 } as const;
 
 /** Every `evidence_ids` array anywhere in an output, flattened. */
 export function citedIds(output: unknown): string[] {
@@ -53,5 +56,26 @@ export function validateRank(out: RankOutput, supplied: ReadonlySet<string>, rul
   if (unknownRules.length) errors.push(`cites priority rules that do not exist: ${unknownRules.join(', ')} (allowed: ${[...known].join(', ')})`);
   if (out.tier_move === 'none' && out.move_rule_id !== '') errors.push('move_rule_id must be empty when tier_move is none');
   if (out.tier_move !== 'none' && !out.rule_ids.includes(out.move_rule_id)) errors.push('a tier move must name one of the cited rule_ids in move_rule_id');
+  return errors;
+}
+
+/**
+ * The rule suggester: a proposal is one sentence of rule length whose explanation cites the probe
+ * statistics it rests on (when any were supplied); a decline carries no sentence.
+ */
+export function validateRuleSuggestion(out: RuleSuggesterOutput, supplied: ReadonlySet<string>, probeIds: ReadonlySet<string>): string[] {
+  const errors = citationErrors(out, supplied);
+  const sentence = out.sentence.trim();
+  if (out.propose) {
+    if (sentence.length < SENTENCE_LIMITS.min || sentence.length > SENTENCE_LIMITS.max) {
+      errors.push(`sentence must be one sentence of ${SENTENCE_LIMITS.min} to ${SENTENCE_LIMITS.max} characters when propose is true`);
+    }
+    if (probeIds.size === 0) errors.push('propose must be false: no probe statistics were supplied, so no rule could check this issue');
+    else if (!out.explanation.evidence_ids.some((id) => probeIds.has(id))) {
+      errors.push(`a proposal must cite the probe statistics it rests on (one of ${[...probeIds].join(', ')}) in explanation.evidence_ids`);
+    }
+  } else if (sentence !== '') {
+    errors.push('sentence must be an empty string when propose is false');
+  }
   return errors;
 }
