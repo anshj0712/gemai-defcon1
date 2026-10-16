@@ -4,7 +4,21 @@
  * seed and count always produce the same plans, whatever the browser timing.
  */
 
-export const BUGS = ['dead_button', 'cart_total', 'checkout_error', 'qty_price', 'ghost_line'] as const;
+export const BUGS = [
+  'dead_button',
+  'cart_total',
+  'checkout_error',
+  'qty_price',
+  'ghost_line',
+  'shipping_shock',
+  'slow_delivery',
+  'slow_payment',
+  'slow_stock',
+  'card_declined',
+  'returns_hidden',
+  'support_down',
+  'recs_sold_out',
+] as const;
 export type Bug = (typeof BUGS)[number];
 
 /**
@@ -12,6 +26,24 @@ export type Bug = (typeof BUGS)[number];
  * that catches them, and a re-scan then finds the sessions they already hurt (Phase 4, found later).
  */
 export const RETRO_BUGS: readonly Bug[] = ['qty_price'];
+
+/**
+ * Bugs the churn watcher finds on its own: nothing in the declared probes or detectors sees them, but the
+ * recording does (a page element nobody probed, or a slow request). The agent proposes a probe and a rule
+ * from how much more often affected shoppers leave; once a person approves, a re-scan finds them later
+ * (`pnpm sim:watch`).
+ */
+export const WATCH_BUGS: readonly Bug[] = ['shipping_shock', 'slow_delivery', 'slow_payment', 'slow_stock'];
+
+/** Silent until some rule exists: `sim:check` accepts no issue for these. */
+export const SILENT_BUGS: readonly Bug[] = [...RETRO_BUGS, ...WATCH_BUGS];
+
+/**
+ * Bugs a clean shopper can carry as a flag without ever reaching it (a near miss). The others trigger on any
+ * product view or any order (slow_stock, slow_delivery, shipping_shock, slow_payment, card_declined), so a
+ * clean session never carries them.
+ */
+export const NEAR_MISS_BUGS: readonly Bug[] = ['dead_button', 'cart_total', 'checkout_error', 'qty_price', 'ghost_line', 'returns_hidden', 'support_down', 'recs_sold_out'];
 
 /**
  * Bugs no built-in rule sees but the agent can: the rule suggester reads the recurring issue they cause and
@@ -38,6 +70,22 @@ export type Persona =
    * so the bag keeps a real value (qty [1, 0], line_total [price, 0]).
    */
   | 'line_remover'
+  /** shipping_shock: reaches checkout, reads a ₹499 delivery fee the bag called free, and usually leaves. */
+  | 'fee_shocked'
+  /** slow_delivery: reads a 9–12 day delivery estimate on the product page, bags it anyway, and usually leaves. */
+  | 'eta_reader'
+  /** slow_payment: places an order, waits 6.5 s for the bank, gets a timeout; leaves or tries once more. */
+  | 'slow_bank'
+  /** slow_stock: waits 4 s for Add to Bag on each shoe; often leaves. */
+  | 'stock_waiter'
+  /** card_declined: the card is declined; presses Use another card 2 or 3 times (dead) and leaves. */
+  | 'declined_card'
+  /** returns_hidden: presses Returns policy 2 or 3 times on a product page (dead) before deciding. */
+  | 'returns_checker'
+  /** support_down: at checkout, presses Chat with us once or twice (it fails), then decides. */
+  | 'help_seeker'
+  /** recs_sold_out: presses Quick add on a pick in the bag 2 or 3 times (dead). */
+  | 'rec_clicker'
   /** Clean: looks at a few products and leaves without a bag. */
   | 'window_shopper'
   /** Clean: bags one or two products, maybe a coupon and a quantity change, then checks out or leaves. */
@@ -55,8 +103,39 @@ export interface SimConfig {
 }
 
 export const DEFAULT_CONFIG: SimConfig = {
-  mix: { dead_button: 0.2, cart_total: 0.15, checkout_error: 0.15, qty_price: 0.1, ghost_line: 0.1 },
-  abandonment: { baseline: 0.25, dead_button: 0.6, cart_total: 0.4, checkout_error: 0.85, qty_price: 0.7, ghost_line: 0.75 },
+  // 13 bugs and about a quarter clean sessions: run 240+ sessions so each bug has a dozen shoppers.
+  mix: {
+    dead_button: 0.08,
+    cart_total: 0.07,
+    checkout_error: 0.07,
+    qty_price: 0.06,
+    ghost_line: 0.06,
+    shipping_shock: 0.05,
+    slow_delivery: 0.05,
+    slow_payment: 0.05,
+    slow_stock: 0.05,
+    card_declined: 0.05,
+    returns_hidden: 0.05,
+    support_down: 0.05,
+    recs_sold_out: 0.05,
+  },
+  abandonment: {
+    baseline: 0.25,
+    dead_button: 0.6,
+    cart_total: 0.4,
+    checkout_error: 0.85,
+    qty_price: 0.7,
+    ghost_line: 0.75,
+    shipping_shock: 0.8,
+    slow_delivery: 0.7,
+    slow_payment: 0.75,
+    slow_stock: 0.65,
+    // Moot: a declined card can never order.
+    card_declined: 1,
+    returns_hidden: 0.55,
+    support_down: 0.7,
+    recs_sold_out: 0.5,
+  },
   windowShoppers: 0.3,
   nearMiss: 0.5,
 };
@@ -91,6 +170,11 @@ export interface SessionPlan {
   retries: number;
   /** Presses on Remove after the first one, as a fast burst on the line that stayed (line_remover: 2 or 3; else 0). */
   removePresses: number;
+  /**
+   * Presses on the bug's own control: Returns policy (returns_checker), Chat with us (help_seeker), Quick add
+   * (rec_clicker), Use another card (declined_card). 0 for everyone else.
+   */
+  presses: number;
   /** Leaves without ordering once the bag is ready (or after the bug hits). */
   abandon: boolean;
   /** Where an abandoning shopper leaves: on the bag page or partway through checkout. */
@@ -145,6 +229,7 @@ export function makePlans(sessions: number, seed: number, config: SimConfig = DE
       incrementFirstLine: false,
       retries: 0,
       removePresses: 0,
+      presses: 0,
       region: pick(r, REGIONS.filter((x) => x !== 'Northeast')),
       abandonAt: (chance(r, 0.5) ? 'bag' : 'checkout') as SessionPlan['abandonAt'],
     };
@@ -169,9 +254,28 @@ export function makePlans(sessions: number, seed: number, config: SimConfig = DE
         // Remove on the last of two lines (quantity 1) is the trigger; no coupon and no quantity change, so no other rule
         // is involved, and the line that stays keeps the bag's value above zero.
         return { ...base, persona: 'line_remover', flags: [bug], products: distinctProducts(r, 2), removePresses: chance(r, 0.5) ? 2 : 3, abandon: chance(r, config.abandonment.ghost_line), abandonAt: 'bag' };
+      // The churn-reason bugs: no coupon and no quantity change, so no other rule or bug is involved.
+      case 'shipping_shock':
+        // The fee shows at checkout, so an abandoning shopper leaves there, after reading it.
+        return { ...base, persona: 'fee_shocked', flags: [bug], products: distinctProducts(r, chance(r, 0.6) ? 1 : 2), abandon: chance(r, config.abandonment.shipping_shock), abandonAt: 'checkout' };
+      case 'slow_delivery':
+        return { ...base, persona: 'eta_reader', flags: [bug], products: distinctProducts(r, chance(r, 0.6) ? 1 : 2), abandon: chance(r, config.abandonment.slow_delivery) };
+      case 'slow_payment':
+        // Every one of them places an order and meets the slow bank; abandoning ones leave after the timeout.
+        return { ...base, persona: 'slow_bank', flags: [bug], products: distinctProducts(r, chance(r, 0.6) ? 1 : 2), abandon: chance(r, config.abandonment.slow_payment), abandonAt: 'checkout' };
+      case 'slow_stock':
+        return { ...base, persona: 'stock_waiter', flags: [bug], products: distinctProducts(r, chance(r, 0.6) ? 1 : 2), abandon: chance(r, config.abandonment.slow_stock) };
+      case 'card_declined':
+        return { ...base, persona: 'declined_card', flags: [bug], products: distinctProducts(r, chance(r, 0.6) ? 1 : 2), presses: chance(r, 0.5) ? 2 : 3, abandon: true, abandonAt: 'checkout' };
+      case 'returns_hidden':
+        return { ...base, persona: 'returns_checker', flags: [bug], products: distinctProducts(r, chance(r, 0.6) ? 1 : 2), presses: chance(r, 0.5) ? 2 : 3, abandon: chance(r, config.abandonment.returns_hidden) };
+      case 'support_down':
+        return { ...base, persona: 'help_seeker', flags: [bug], products: distinctProducts(r, chance(r, 0.6) ? 1 : 2), presses: chance(r, 0.5) ? 1 : 2, abandon: chance(r, config.abandonment.support_down), abandonAt: 'checkout' };
+      case 'recs_sold_out':
+        return { ...base, persona: 'rec_clicker', flags: [bug], products: distinctProducts(r, 1), presses: chance(r, 0.5) ? 2 : 3, abandon: chance(r, config.abandonment.recs_sold_out) };
       default: {
         // Clean. A near miss carries one bug flag but stays clear of its trigger.
-        const flags: Bug[] = chance(r, config.nearMiss) ? [pick(r, BUGS)] : [];
+        const flags: Bug[] = chance(r, config.nearMiss) ? [pick(r, NEAR_MISS_BUGS)] : [];
         if (chance(r, config.windowShoppers)) {
           return { ...base, persona: 'window_shopper', flags, products: distinctProducts(r, 1 + Math.floor(r() * 3)), abandon: true, abandonAt: 'bag' };
         }
@@ -203,5 +307,24 @@ export function reachesTrigger(p: SessionPlan): Bug | null {
   if (p.flags.includes('checkout_error') && p.region === 'Northeast' && p.persona !== 'window_shopper' && !(p.abandon && p.abandonAt === 'bag')) return 'checkout_error';
   if (p.flags.includes('qty_price') && p.persona !== 'window_shopper' && p.qtyIncrements > 0) return 'qty_price';
   if (p.flags.includes('ghost_line') && pressesRemove(p)) return 'ghost_line';
+  // Every shopper opens a product page, which shows the delivery estimate and runs the stock check.
+  if (p.flags.includes('slow_delivery')) return 'slow_delivery';
+  if (p.flags.includes('slow_stock')) return 'slow_stock';
+  if (p.flags.includes('shipping_shock') && reachesCheckout(p)) return 'shipping_shock';
+  if (p.flags.includes('slow_payment') && placesOrder(p)) return 'slow_payment';
+  if (p.flags.includes('card_declined') && placesOrder(p)) return 'card_declined';
+  if (p.flags.includes('returns_hidden') && p.persona === 'returns_checker' && p.presses > 0) return 'returns_hidden';
+  if (p.flags.includes('support_down') && p.persona === 'help_seeker' && p.presses > 0) return 'support_down';
+  if (p.flags.includes('recs_sold_out') && p.persona === 'rec_clicker' && p.presses > 0) return 'recs_sold_out';
   return null;
 }
+
+/** The shopper gets as far as the checkout page (a bag, and not leaving from the bag). */
+export const reachesCheckout = (p: Pick<SessionPlan, 'persona' | 'abandon' | 'abandonAt'>) => p.persona !== 'window_shopper' && !(p.abandon && p.abandonAt === 'bag');
+
+/**
+ * The shopper presses Place Order at least once. Abandoning shoppers who reach checkout leave before ordering,
+ * except the personas whose story is the payment step itself.
+ */
+export const placesOrder = (p: Pick<SessionPlan, 'persona' | 'abandon' | 'abandonAt'>) =>
+  p.persona === 'northeast_payer' || p.persona === 'slow_bank' || p.persona === 'declined_card' || (reachesCheckout(p) && !p.abandon);

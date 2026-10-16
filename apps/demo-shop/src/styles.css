@@ -265,3 +265,18 @@ main { min-height: 60vh; }
   .toast { left: 16px; right: 16px; width: auto; }
   .demo-panel { width: calc(100vw - 32px); }
 }
+
+/* ---------- churn scenarios: delivery estimate, returns, picks, support, payment ---------- */
+.eta { margin: -8px 0 20px; font-size: 14px; color: var(--ink-2); }
+.link-btn { margin: 20px 0 0; padding: 0; border: 0; background: none; font-size: 15px; font-weight: 500; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.returns-panel { margin: 12px 0 0; padding: 16px; background: var(--soft); border-radius: 8px; font-size: 14px; line-height: 1.6; }
+.returns-panel p { margin: 0; }
+.recs { margin-top: 40px; }
+.rec-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; margin-top: 16px; }
+.rec-card { display: grid; gap: 8px; font-size: 14px; }
+.rec-card p { margin: 0; }
+.rec-card .pill { justify-self: start; }
+.help-box { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--line); font-size: 14px; }
+.help-box p { margin: 0 0 10px; }
+.chat-msg { min-height: 20px; margin-top: 10px !important; color: var(--success); }
+#retry-card { margin-bottom: 12px; }

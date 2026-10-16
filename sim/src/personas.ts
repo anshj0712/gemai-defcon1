@@ -41,14 +41,23 @@ async function viewProduct(c: Ctx, id: string): Promise<void> {
   await pause(c, 300, 900);
 }
 
-async function addToBag(c: Ctx, id: string, size: string): Promise<void> {
-  await viewProduct(c, id);
+/** Pick a size and add the shoe on the open product page. Add to Bag waits for the stock check (4 s with slow_stock). */
+async function chooseAndAdd(c: Ctx, size: string): Promise<void> {
   await click(c, `[data-testid="size-${size}"]`);
   await pause(c, 150, 400);
+  await c.page.waitForSelector('#add-to-bag:not([disabled])', { timeout: 15_000 });
   await click(c, '#add-to-bag');
   await c.page.waitForSelector('[data-testid="toast-close"]');
   await pause(c, 200, 500);
   await click(c, '[data-testid="toast-close"]');
+}
+
+/** Presses on one control, about a second apart, so each press is judged on its own (a dead control stays dead). */
+async function pressRepeatedly(c: Ctx, selector: string, times: number): Promise<void> {
+  for (let i = 0; i < times; i++) {
+    await click(c, selector);
+    await pause(c, 1000, 1300);
+  }
 }
 
 async function openBag(c: Ctx): Promise<number | null> {
@@ -131,17 +140,17 @@ async function fillCheckout(c: Ctx): Promise<void> {
 /** The page's document, typed minimally: these scripts compile without the DOM library. */
 type PageDocument = { document: { getElementById(id: string): { textContent: string | null } | null } };
 
-/** Press Place Order; true when the order went through. */
+/** Press Place Order; true when the order went through. The bank answers first (6.5 s with slow_payment). */
 async function placeOrder(c: Ctx, inPlace = false): Promise<boolean> {
   await c.page.waitForSelector('#place-order:not([disabled])');
   if (inPlace) await clickInPlace(c.page, '#place-order');
   else await click(c, '#place-order');
   const outcome = await Promise.race([
-    c.page.waitForURL(/\/order\//, { timeout: 8000 }).then(() => 'ordered' as const),
+    c.page.waitForURL(/\/order\//, { timeout: 15_000 }).then(() => 'ordered' as const),
     // Runs in the page (serialized, so no outside references); polls every animation frame, so the
     // retry follows the error as fast as a frustrated shopper would.
     c.page
-      .waitForFunction(() => ((globalThis as unknown as PageDocument).document.getElementById('checkout-error')?.textContent ?? '').length > 0, undefined, { timeout: 8000 })
+      .waitForFunction(() => ((globalThis as unknown as PageDocument).document.getElementById('checkout-error')?.textContent ?? '').length > 0, undefined, { timeout: 15_000 })
       .then(() => 'failed' as const),
   ]);
   return outcome === 'ordered';
@@ -168,9 +177,19 @@ export async function runPlan(page: Page, plan: SessionPlan): Promise<SessionOut
     return out;
   }
 
-  for (const p of plan.products) await addToBag(c, p.id, p.size);
+  for (const [i, p] of plan.products.entries()) {
+    await viewProduct(c, p.id);
+    if (i === 0 && plan.persona === 'returns_checker') await pressRepeatedly(c, '#returns-info', plan.presses);
+    if (i === 0 && plan.persona === 'eta_reader') await pause(c, 1500, 2500); // reads the delivery estimate
+    await chooseAndAdd(c, p.size);
+  }
   out.has_cart = true;
   out.cart_value_minor = await openBag(c);
+
+  if (plan.persona === 'rec_clicker') {
+    await pause(c, 600, 1200); // looks at the picks
+    await pressRepeatedly(c, '[data-testid="rec-add"]', plan.presses);
+  }
 
   if (plan.persona === 'pair_buyer') {
     // The prices at quantity 1 are right; afterwards the bag shows the raised line at 100x (qty_price), so the
@@ -214,8 +233,28 @@ export async function runPlan(page: Page, plan: SessionPlan): Promise<SessionOut
       ok = await placeOrder(c);
     }
     out.order_placed = ok;
-  } else if (!plan.abandon) {
+  } else if (plan.persona === 'slow_bank') {
+    // The bank hangs 6.5 s and times out; an abandoning shopper leaves, the others try once more (it goes through).
+    let ok = await placeOrder(c);
+    if (!ok && !plan.abandon) {
+      await pause(c, 1000, 2000);
+      ok = await placeOrder(c);
+    }
+    out.order_placed = ok;
+  } else if (plan.persona === 'declined_card') {
+    // Declined; Use another card does nothing, however often it is pressed, so the order never happens.
     out.order_placed = await placeOrder(c);
+    if (!out.order_placed) {
+      await pause(c, 600, 1200);
+      await pressRepeatedly(c, '#retry-card', plan.presses);
+    }
+  } else {
+    if (plan.persona === 'fee_shocked') await pause(c, 1500, 3000); // reads the ₹499 delivery fee
+    if (plan.persona === 'help_seeker') {
+      await pressRepeatedly(c, '#chat-help', plan.presses);
+      await pause(c, 800, 1500);
+    }
+    if (!plan.abandon) out.order_placed = await placeOrder(c);
   }
   await finish(c);
   return out;

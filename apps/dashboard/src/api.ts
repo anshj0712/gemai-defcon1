@@ -146,7 +146,9 @@ export const fetchHistory = (asOf: number, from: number, to: number) => getJson<
 /** Demo shop bug switches (local mode only; the routes are absent on GCP and these reject). */
 export interface DemoBugsView {
   bugs: string[];
-  known: { id: string; label: string; detail: string }[];
+  known: { id: string; label: string; detail: string; reason?: string; caught?: string; caught_detail?: string }[];
+  /** Churn reason id -> label, for grouping the switches. */
+  reasons?: Record<string, string>;
 }
 export const fetchDemoBugs = () => getJson<DemoBugsView>('/v1/demo/bugs');
 export async function putDemoBugs(bugs: string[]): Promise<DemoBugsView> {

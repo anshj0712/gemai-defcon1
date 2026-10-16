@@ -66,6 +66,7 @@ async function main(): Promise<void> {
     await moveAndClick(shop, '[data-testid="product-velocity-runner"]');
     await shop.waitForSelector('#add-to-bag');
     await moveAndClick(shop, '[data-testid="size-9"]');
+    await shop.waitForSelector('#add-to-bag:not([disabled])'); // the stock check
     await moveAndClick(shop, '#add-to-bag');
     await shop.waitForSelector('[data-testid="toast-close"]');
     await moveAndClick(shop, '[data-testid="toast-close"]');
@@ -73,6 +74,7 @@ async function main(): Promise<void> {
     await moveAndClick(shop, '[data-testid="product-court-classic"]');
     await shop.waitForSelector('#add-to-bag');
     await moveAndClick(shop, '[data-testid="size-8"]');
+    await shop.waitForSelector('#add-to-bag:not([disabled])'); // the stock check
     await moveAndClick(shop, '#add-to-bag');
     await moveAndClick(shop, '[data-testid="toast-view-bag"]');
     await shop.waitForSelector('#apply-coupon');
