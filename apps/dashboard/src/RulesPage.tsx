@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { DryRun, RescanStatus, RevenueAtRisk } from '@cp/schema';
-import { ApiError, approveRule, draftRule, fetchClusters, fetchRules, rejectRule, rescanRule, type BuiltinRuleView, type ClusterSummary, type RuleView } from './api';
+import type { ChurnReason, DryRun, RescanStatus, RevenueAtRisk, WatchMeta } from '@cp/schema';
+import { ApiError, approveRule, draftRule, fetchClusters, fetchRules, redraftRule, rejectRule, rescanRule, runWatch, type BuiltinRuleView, type ClusterSummary, type RuleView } from './api';
 import { ago, formulaLine, money, pct, time } from './format';
-import { ProbesPanel } from './ProbesPanel';
+import { probeValue, ProbesPanel } from './ProbesPanel';
 
 /** Example sentences. The first one finds the demo shop's silent quantity-price bug (synthetic data). */
 export const EXAMPLES = [
@@ -14,6 +14,21 @@ export const EXAMPLES = [
 ];
 
 const REFRESH_MS = 2000;
+
+/** Churn reason labels (the schema's CHURN_REASONS; typed against it so the two cannot drift). */
+export const CHURN_REASONS: Record<ChurnReason, string> = {
+  ux: 'Poor user experience',
+  shipping_cost: 'Shipping cost',
+  delivery_time: 'Delivery time',
+  returns: 'Returns hassle',
+  price: 'Price',
+  support: 'Customer service',
+  personalization: 'Personalization',
+  discount: 'Discounts and promotions',
+  payment_declined: 'Declined card',
+  payment_gateway: 'Payment gateway',
+  other: 'Other',
+};
 
 /** "Model gemini-3.8-flash" or the offline stand-in, said plainly. */
 function authorLine(a: { model: string; offline: boolean }): string {
@@ -62,13 +77,15 @@ function RevenueLost({ r, prominent, at }: { r: RevenueAtRisk; prominent: boolea
  * The two sides of a flagged snapshot. Probe values carry no unit, so whole numbers under 1,000 on both
  * sides are shown as counts (for example 1 pair against 2 lines): no amount in the shop is below ₹10.
  */
-function sideText(left: number | null, right: number | null, currency: string | null): string {
+function sideText(left: number | null, right: number | null, currency: string | null, probe?: string): string {
+  // Request probes carry milliseconds or an HTTP status, not money.
+  if (probe && /_(ms|status)$/.test(probe)) return `${left === null ? '?' : probeValue(probe, left)} against ${right === null ? '?' : probeValue(probe, right)}`;
   const small = (v: number | null) => v === null || (Number.isInteger(v) && Math.abs(v) < 1000);
   if (small(left) && small(right)) return `${left ?? '?'} against ${right ?? '?'}`;
   return `${money(left, currency)} against ${money(right, currency)}`;
 }
 
-function DryRunBlock({ d }: { d: DryRun }) {
+function DryRunBlock({ d, probe }: { d: DryRun; probe?: string | undefined }) {
   return (
     <>
       <p className="small-p">
@@ -84,7 +101,7 @@ function DryRunBlock({ d }: { d: DryRun }) {
                 <td>{time(s.event_time)}</td>
                 <td>{s.route}</td>
                 <td title="Left side of the rule against its right side">
-                  {sideText(s.left, s.right, s.currency)}
+                  {sideText(s.left, s.right, s.currency, probe)}
                 </td>
                 <td>{s.in_issue ? <span className="muted">in an issue</span> : <span className="found-later">new</span>}</td>
                 <td>
@@ -192,7 +209,7 @@ function DraftCard({ r, busy, error, onApprove, onDiscard }: { r: RuleView; busy
         </ul>
       )}
       <h4>Dry run (nothing written)</h4>
-      {d.dry_run ? <DryRunBlock d={d.dry_run} /> : <p className="muted">No dry run.</p>}
+      {d.dry_run ? <DryRunBlock d={d.dry_run} probe={d.rule.highlight_probe} /> : <p className="muted">No dry run.</p>}
       {!agent && lost && <RevenueLost r={lost} prominent={false} at={d.created_at} />}
       <div className="row-actions">
         <button className="btn primary" disabled={busy !== null} onClick={onApprove}>
@@ -202,6 +219,152 @@ function DraftCard({ r, busy, error, onApprove, onDiscard }: { r: RuleView; busy
           Discard
         </button>
       </div>
+      {error && (
+        <div className="notice">
+          <b>That did not work.</b> {error.message}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** One line on what a watch pass looked at and what it raised. */
+export function watchSummary(r: { results: unknown }): string {
+  const x = r.results as { sessions?: number; decided?: number; numbers?: number; candidates?: { outcome: string }[] } | null;
+  if (!x || typeof x !== 'object') return 'The agent looked at the latest sessions.';
+  const drafted = (x.candidates ?? []).filter((c) => c.outcome === 'drafted').length;
+  const declined = (x.candidates ?? []).length - drafted;
+  return `Looked at ${x.sessions ?? 0} sessions (${x.decided ?? 0} with a settled cart) and ${x.numbers ?? 0} numbers: ${drafted ? `${drafted} new hypothes${drafted === 1 ? 'is' : 'es'}` : 'nothing new'}${declined ? `, ${declined} judged not worth a rule` : ''}.`;
+}
+
+/** "very unlikely to be chance (p < 0.001)": a p-value said plainly. */
+export function chanceText(p: number): string {
+  if (p < 0.001) return 'very unlikely to be chance (p < 0.001)';
+  if (p < 0.01) return `unlikely to be chance (p = ${p.toFixed(3)})`;
+  return `p = ${p.toFixed(2)}`;
+}
+
+/** A value of the number a hypothesis is about, in its unit. */
+export function watchValue(unit: WatchMeta['feature']['unit'], v: number | null): string {
+  if (v === null) return 'none';
+  if (unit === 'money') return money(v, 'INR');
+  if (unit === 'ms') return v >= 1000 ? `${(v / 1000).toFixed(1)} s` : `${Math.round(v)} ms`;
+  return v.toLocaleString('en-IN');
+}
+
+/**
+ * The churn watcher's hypothesis: a number code found that shoppers leave over, the agent's reading of it, the
+ * probe and rule it proposes, and the dry run. Visibly not a finding: nothing is flagged until a person approves,
+ * changes the rule, or says it is not a problem (the agent reads that note next time).
+ */
+function HypothesisCard({
+  r,
+  busy,
+  error,
+  onApprove,
+  onRedraft,
+  onReject,
+}: {
+  r: RuleView;
+  busy: string | null;
+  error: Error | null;
+  onApprove: () => void;
+  onRedraft: (sentence: string) => void;
+  onReject: (note: string) => void;
+}) {
+  const d = r.draft!;
+  const w = d.watch!;
+  const [mode, setMode] = useState<'none' | 'edit' | 'reject'>('none');
+  const [sentence, setSentence] = useState(d.sentence);
+  const [note, setNote] = useState('');
+  const page = w.feature.route ?? 'the store';
+  const probe = d.proposed_probes?.[0] ?? null;
+  const suggester = d.suggester;
+  return (
+    <div className="panel rule-card hypothesis">
+      <div className="finding-head">
+        <span className="hyp-badge">Hypothesis · not a finding yet</span>
+        <span className="reason-chip">{CHURN_REASONS[w.churn_reason] ?? w.churn_reason}</span>
+        <span className={`confidence ${w.confidence}`}>{w.confidence} confidence</span>
+        <span className="muted small-inline">{suggester ? (suggester.offline ? 'offline stand-in (templated)' : suggester.model) : 'agent'} · found {ago(w.found_at)}</span>
+      </div>
+      <h3 className="rule-title">{w.title}</h3>
+      <div className="hyp-stats">
+        <div className="hyp-stat bad">
+          <b>{pct(w.segment.abandonment)}</b>
+          <span>
+            left without ordering after {w.feature.unit === 'ms' ? 'waiting' : 'seeing'} {w.direction === 'gte' ? '≥' : '≤'} {watchValue(w.feature.unit, w.threshold)} ({w.segment.sessions} sessions)
+          </span>
+        </div>
+        <div className="hyp-stat">
+          <b>{pct(w.baseline.abandonment)}</b>
+          <span>
+            of other shoppers who reached {page} left ({w.baseline.sessions})
+          </span>
+        </div>
+        <div className="hyp-stat">
+          <b>+{Math.round(w.lift * 100)} pts</b>
+          <span>{chanceText(w.p_value)}</span>
+        </div>
+      </div>
+      {d.revenue_lost && <RevenueLost r={d.revenue_lost} prominent at={d.created_at} />}
+      <p className="small-p">
+        <b>Why I think so:</b> {w.hypothesis}
+      </p>
+      <div className="hyp-number">
+        {probe ? (
+          <>
+            <span className="src recorded">New probe</span> <code>{probe.name}</code> reads <code>{probe.selector}</code> on {probe.routes?.join(', ') ?? 'every page'} as {probe.kind === 'money' ? 'money' : 'a number'}. Nobody probed it: the agent found it on the recorded pages. Approving registers it.
+          </>
+        ) : (
+          <>
+            <span className={`src ${w.feature.source === 'request' ? 'request' : 'declared'}`}>{w.feature.source === 'request' ? 'Request probe' : 'Probe'}</span> <code>{w.feature.name}</code> on {page}.
+          </>
+        )}{' '}
+        <span className="muted">
+          In the segment: {watchValue(w.feature.unit, w.values.segment_min)}
+          {w.values.segment_max !== w.values.segment_min ? ` – ${watchValue(w.feature.unit, w.values.segment_max)}` : ''}; everyone else: up to {watchValue(w.feature.unit, w.values.others_max)}.
+        </span>
+      </div>
+      <p className="sentence">“{d.sentence}”</p>
+      <p className="rule-text">
+        <code>{r.text.draft}</code> <span className="muted small">(money in minor units)</span>
+      </p>
+      <h4>Dry run (nothing written)</h4>
+      {d.dry_run ? <DryRunBlock d={d.dry_run} probe={d.rule.highlight_probe} /> : <p className="muted">No dry run.</p>}
+      <p className="small-p muted">Nothing is flagged until you approve. Approving {probe ? 'registers the probe, ' : ''}runs the rule on live traffic, and re-scans the last 30 days.</p>
+      <div className="row-actions">
+        <button className="btn primary" disabled={busy !== null} onClick={onApprove}>
+          {busy === `approve-${r.rule_id}` ? 'Approving…' : probe ? 'Approve probe and rule' : 'Approve rule'}
+        </button>
+        <button className="btn" disabled={busy !== null} onClick={() => setMode(mode === 'edit' ? 'none' : 'edit')}>
+          Change the rule
+        </button>
+        <button className="btn" disabled={busy !== null} onClick={() => setMode(mode === 'reject' ? 'none' : 'reject')}>
+          Not a problem
+        </button>
+      </div>
+      {mode === 'edit' && (
+        <div className="hyp-form">
+          <textarea rows={2} value={sentence} onChange={(e) => setSentence(e.target.value)} maxLength={500} />
+          <div className="row-actions">
+            <button className="btn primary" disabled={busy !== null || sentence.trim().length < 8} onClick={() => onRedraft(sentence)}>
+              {busy === `redraft-${r.rule_id}` ? 'Drafting again…' : 'Draft again'}
+            </button>
+            <span className="muted small-inline">Keep the probe name ({probe?.name ?? w.feature.name}) in the sentence.</span>
+          </div>
+        </div>
+      )}
+      {mode === 'reject' && (
+        <div className="hyp-form">
+          <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder="Why is this expected? For example: express delivery costs ₹499 by design. The agent reads this next time." />
+          <div className="row-actions">
+            <button className="btn" disabled={busy !== null} onClick={() => onReject(note)}>
+              {busy === `reject-${r.rule_id}` ? 'Telling the agent…' : 'Discard and tell the agent'}
+            </button>
+          </div>
+        </div>
+      )}
       {error && (
         <div className="notice">
           <b>That did not work.</b> {error.message}
@@ -226,6 +389,7 @@ export function RulesPage() {
   /** The action that failed, so a draft card shows its own error instead of the composer. */
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [watchNote, setWatchNote] = useState<string | null>(null);
 
   const load = useCallback(
     () =>
@@ -269,8 +433,10 @@ export function RulesPage() {
 
   const drafts = rules.filter((r) => r.draft);
   // Drafts stored before origin existed have none: they are the merchant's.
-  const suggested = drafts.filter((r) => r.draft!.origin === 'agent');
+  const hypotheses = drafts.filter((r) => r.draft!.origin === 'agent' && r.draft!.watch);
+  const suggested = drafts.filter((r) => r.draft!.origin === 'agent' && !r.draft!.watch);
   const own = drafts.filter((r) => r.draft!.origin !== 'agent');
+  const errorFor = (r: RuleView) => (['approve', 'reject', 'redraft'].some((a) => errorKey === `${a}-${r.rule_id}`) ? error : null);
   const active = rules.filter((r) => r.active);
   const card = (r: RuleView) => (
     <DraftCard
@@ -290,10 +456,40 @@ export function RulesPage() {
         <span className="muted small">Synthetic data: demo sessions only</span>
       </div>
       <p className="muted lead">
-        Describe something that must always be true in your store. Gemini turns it into a check over the numbers your pages report (probes), a dry run shows what it would flag, and approving it runs it on live traffic and
-        re-scans the last 30 days. Shoppers it already hurt show up as <span className="found-later">found later</span>.
+        Describe something that must always be true in your store, or let the agent find what makes shoppers leave. Gemini turns it into a check over the numbers your sessions report (probes), a dry run shows what it would
+        flag, and approving it runs it on live traffic and re-scans the last 30 days. Shoppers it already hurt show up as <span className="found-later">found later</span>.
       </p>
 
+      <section className="suggested suspects" id="agent-suspects">
+        <div className="suggested-head">
+          <h2 className="section-title">The agent suspects</h2>
+          <span className="muted small-inline">It watches every session for numbers shoppers leave over. These are hypotheses: nothing is flagged until you approve.</span>
+          <button className="btn tiny" disabled={busy !== null} onClick={() => void act('watch', async () => setWatchNote(watchSummary(await runWatch())))}>
+            {busy === 'watch' ? 'Looking…' : 'Look now'}
+          </button>
+        </div>
+        {watchNote && <p className="small-p muted">{watchNote}</p>}
+        {hypotheses.length === 0 && suggested.length === 0 ? (
+          <p className="muted small-p">Nothing suspected yet. The agent proposes a probe and a rule when shoppers who meet some number (a fee, a wait, a delivery estimate) leave far more often than everyone else.</p>
+        ) : (
+          <>
+            {hypotheses.map((r) => (
+              <HypothesisCard
+                key={`hyp-${r.rule_id}`}
+                r={r}
+                busy={busy}
+                error={errorFor(r)}
+                onApprove={() => void act(`approve-${r.rule_id}`, () => approveRule(r.rule_id, r.draft!.rule.version))}
+                onRedraft={(s) => void act(`redraft-${r.rule_id}`, () => redraftRule(r.rule_id, s))}
+                onReject={(note) => void act(`reject-${r.rule_id}`, () => rejectRule(r.rule_id, note))}
+              />
+            ))}
+            {suggested.map(card)}
+          </>
+        )}
+      </section>
+
+      <h2 className="section-title">Write a rule</h2>
       <div className="panel composer">
         <textarea
           value={sentence}
@@ -326,18 +522,6 @@ export function RulesPage() {
       {own.map(card)}
 
       <ProbesPanel onChanged={() => void load()} />
-
-      <section className="suggested">
-        <div className="suggested-head">
-          <h2 className="section-title">Suggested by the agent</h2>
-          <span className="muted small-inline">You approve these the same way; nothing runs until you do.</span>
-        </div>
-        {suggested.length === 0 ? (
-          <p className="muted small-p">No suggestions yet. The agent suggests a rule when a recurring issue's recorded numbers show a defect a rule could catch.</p>
-        ) : (
-          suggested.map(card)
-        )}
-      </section>
 
       <h2 className="section-title">Your rules</h2>
       {active.length === 0 ? (
