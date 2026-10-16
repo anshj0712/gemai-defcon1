@@ -4,7 +4,7 @@ Finds friction and silent data bugs in checkout sessions recorded with rrweb, an
 
 **All demo data is synthetic.** Sessions come from the test kit and the simulator, never from real shoppers.
 
-## Progress (updated 15 Oct 2026)
+## Progress (updated 17 Oct 2026)
 
 | Phase | Status | Evidence |
 | --- | --- | --- |
@@ -13,7 +13,10 @@ Finds friction and silent data bugs in checkout sessions recorded with rrweb, an
 | 2. Detectors, clusterer, simulator | Done | `pnpm sim:check`: each injected bug is one issue, precision 100%, recall at least 90%, no clean session in an issue |
 | 3. Agents, revenue at risk, ranked findings | Done, running on live Gemini locally | Triage, root cause with a screenshot check, and ranker answered for all three issues with no retries. Scoring is deterministic code |
 | 4. Bitemporal, rule author, re-scan | Done (fast path), verified locally on the offline stand-in | `pnpm sim:rescan`: a merchant sentence becomes a rule, the re-scan finds all 12 past sessions of the silent qty_price bug (recall and precision 100%), the issue is tagged found later, and time travel as of the approval differs from now by exactly that finding. The rebuild path (a selector nobody probed) is not built, and the rule author has not been run on live Gemini yet |
+| 4b. Churn watcher, probes from the recording, 13 churn bugs | Built 17 Oct on branch `churn-watcher`, verified locally on the offline stand-in | `pnpm sim:watch` on 240 sessions: the agent found all four silent churn bugs on its own (a ₹499 fee, a 9-day estimate, a 6.5 s bank, a 4 s stock check), proposed a probe and rule for each (two probes discovered on the recorded page), and after approval each issue holds that bug's sessions only (recall and precision 100%), found later. Not yet run on live Gemini |
 | 5. Deploy and package | Not done | Deploy scripts exist for the collector, processor, clusterer and agent but have not been run against a GCP project by us. API and dashboard are not deployed. No video or deck yet |
+
+Verified locally on 17 Oct (offline stand-in, no key, a fresh 240-session run): `pnpm typecheck`, `pnpm test` (490 passed, 1 skipped), `pnpm sim:check`, `pnpm sim:watch`, `pnpm sim:rescan`, `pnpm sim:suggest` and `pnpm e2e` all pass, and the Rules page (hypotheses, toast, probes) loads in Chrome with no console errors.
 
 Verified locally on 15 Oct (offline stand-in, no key):
 
@@ -210,7 +213,7 @@ Most reasons shoppers leave break nothing: a surprise delivery fee, a 9-day deli
 1. **Every number is a probe.** Besides the probes the shop declares, every network call becomes one (`req_post_api_payment_authorize_ms`, `..._status`), and any number on a recorded page can be read by a CSS selector, from the recording already stored. Nothing new is collected from shoppers, and a probe added today also reads last week's sessions.
 2. **Code finds the segment.** Every minute (or on **Look now**), it reads recent sessions and, for every number, finds the threshold past which shoppers abandon their cart far more often than others who reached the same page, and checks the gap is very unlikely to be chance. Numbers that issues or live rules already explain are skipped.
 3. **Gemini judges it.** The churn analyst decides whether the number plausibly drives shoppers away, labels the churn reason, names a probe for a page element nobody probed, and writes the rule as a sentence. The rule author and dry run turn it into a draft.
-4. **You decide.** A bell and a toast announce it. On the **Rules** tab, **The agent suspects** shows what it saw (for example "83% left after seeing ₹499, against 24% of other shoppers who reached checkout"), why, the new probe, the rule and the dry run. **Approve probe and rule** registers the probe, runs the rule live, and re-scans the last 30 days: the issue is tagged **Found later**. **Change the rule** re-drafts from your sentence. **Not a problem** takes a note; the agent does not raise that number again unless it grows, and reads your note next time.
+4. **You decide.** A bell and a toast announce it. On the **Rules** tab, **The agent suspects** shows what it saw (for example "71% left after seeing ₹499, against 15% of other shoppers who reached checkout", synthetic), why, the new probe, the rule and the dry run. **Approve probe and rule** registers the probe, runs the rule live, and re-scans the last 30 days: the issue is tagged **Found later**. **Change the rule** re-drafts from your sentence. **Not a problem** takes a note; the agent does not raise that number again unless it grows, and reads your note next time.
 
 The shop's 13 bugs cover the common churn reasons (switch them on, grouped by reason, from the red bar):
 
