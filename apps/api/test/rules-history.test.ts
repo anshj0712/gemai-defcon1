@@ -91,6 +91,33 @@ describe('rules routes', () => {
     expect((await app.inject({ method: 'POST', url: '/v1/rules/draft', payload: {} })).statusCode).toBe(400);
   });
 
+  it('forwards a reject note, a redraft, the probe actions, and a watch run', async () => {
+    const app = api();
+    await app.inject({ method: 'POST', url: '/v1/rules/fee_cap/reject', payload: { note: 'Express delivery is meant to cost ₹199' } });
+    expect(calls[0]).toEqual({ url: 'http://agent.test/rules/fee_cap/reject', body: { tenant: 'demo', by: 'dashboard', note: 'Express delivery is meant to cost ₹199' } });
+    await app.inject({ method: 'POST', url: '/v1/rules/fee_cap/reject' });
+    expect(calls[1]?.body).toEqual({ tenant: 'demo', by: 'dashboard' });
+    await app.inject({ method: 'POST', url: '/v1/rules/fee_cap/redraft', payload: { sentence: 'shipping_fee must never be more than ₹199' } });
+    expect(calls[2]).toEqual({ url: 'http://agent.test/rules/fee_cap/redraft', body: { tenant: 'demo', sentence: 'shipping_fee must never be more than ₹199' } });
+
+    agentReply = { status: 200, body: { catalog: { probes: [] }, registry: [] } };
+    const list = await app.inject({ url: '/v1/probes' });
+    expect(list.json()).toMatchObject({ registry: [], synthetic: true });
+    expect(calls[3]).toEqual({ url: 'http://agent.test/probes?tenant=demo', body: null });
+    const spec = { name: 'shipping_fee', selector: '#delivery-fee', kind: 'money' };
+    await app.inject({ method: 'POST', url: '/v1/probes/preview', payload: { spec } });
+    await app.inject({ method: 'POST', url: '/v1/probes', payload: { spec } });
+    await app.inject({ method: 'POST', url: '/v1/probes/shipping_fee/disable' });
+    expect(calls.slice(4).map((c) => [c.url, c.body])).toEqual([
+      ['http://agent.test/probes/preview', { tenant: 'demo', spec }],
+      ['http://agent.test/probes', { tenant: 'demo', spec, by: 'dashboard' }],
+      ['http://agent.test/probes/shipping_fee/disable', { tenant: 'demo', by: 'dashboard' }],
+    ]);
+    expect((await app.inject({ method: 'POST', url: '/v1/probes/Bad-Name/disable' })).statusCode).toBe(400);
+    await app.inject({ method: 'POST', url: '/v1/watch/run' });
+    expect(calls.at(-1)).toEqual({ url: 'http://agent.test/watch/run', body: { tenant: 'demo' } });
+  });
+
   it('answers 502 with a hint when the agent is down', async () => {
     agentReply = new Error('connect ECONNREFUSED');
     const res = await api().inject({ method: 'POST', url: '/v1/rules/draft', payload: { sentence: 'Discount at most 10%' } });

@@ -2,12 +2,15 @@ import { useCallback, useEffect, useState } from 'react';
 import type { DryRun, RescanStatus, RevenueAtRisk } from '@cp/schema';
 import { ApiError, approveRule, draftRule, fetchClusters, fetchRules, rejectRule, rescanRule, type BuiltinRuleView, type ClusterSummary, type RuleView } from './api';
 import { ago, formulaLine, money, pct, time } from './format';
+import { ProbesPanel } from './ProbesPanel';
 
 /** Example sentences. The first one finds the demo shop's silent quantity-price bug (synthetic data). */
 export const EXAMPLES = [
   'No pair of shoes costs more than ₹17,000, so the bag subtotal must never be more than ₹17,000 times the number of pairs.',
   'The discount must never be more than 10% of the bag.',
   'The cart total must equal the line items minus the discount.',
+  // A speed rule over a request probe (every network call is one, automatically).
+  'Payment authorisation (req_post_api_payment_authorize_ms) must answer within 3 seconds.',
 ];
 
 const REFRESH_MS = 2000;
@@ -321,6 +324,8 @@ export function RulesPage() {
       </div>
 
       {own.map(card)}
+
+      <ProbesPanel onChanged={() => void load()} />
 
       <section className="suggested">
         <div className="suggested-head">

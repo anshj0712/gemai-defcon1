@@ -1,12 +1,13 @@
-import { emptyState, normalize } from '@cp/normalizer';
+import { emptyState, normalize, type DiscoveredValues } from '@cp/normalizer';
 import { loadStoredChunk, type BlobStore, type WarehouseReader } from '@cp/platform';
-import type { NormalizerState, ProbeEvent, RawChunkRow } from '@cp/schema';
+import type { NormalizerState, ProbeEvent, RawChunkRow, RecordedProbeSpec } from '@cp/schema';
 
 /**
  * Reads a valid-time window of sessions back from raw (rule 3: raw chunks are the record) and keeps
  * their probe snapshots: the fast path of ARCHITECTURE.md section 6. Chunks are normalized in seq
  * order with carried state and the same skew correction as the processor, so a rule evaluated here
- * sees exactly what live detection would have seen.
+ * sees exactly what live detection would have seen. Recorded probes (selectors read from the recorded
+ * page) are read here too, so a probe registered today applies to sessions recorded before it existed.
  */
 
 /** One stored chunk's probe snapshots, with what a signal row needs from its chunk. */
@@ -23,9 +24,17 @@ export interface ProbeChunk {
 export interface SessionProbes {
   session_id: string;
   chunks: ProbeChunk[];
+  /** Discover mode: the numbers on each settled page nobody probes yet (the churn watcher's candidates). */
+  discovered?: DiscoveredValues[];
 }
 
-export interface ScanOptions {
+/** How sessions are read: which recorded probes to read, and whether to collect unprobed numbers. */
+export interface ReadOptions {
+  recordedProbes?: readonly RecordedProbeSpec[];
+  discover?: boolean;
+}
+
+export interface ScanOptions extends ReadOptions {
   tenantId: string;
   fromMs: number;
   toMs: number;
@@ -47,17 +56,19 @@ export interface ScanSummary {
 }
 
 /** Load, normalize, and keep the probes of one session's chunks (seq order). */
-export async function sessionProbes(blob: BlobStore, tenantId: string, sessionId: string, rows: readonly RawChunkRow[]): Promise<SessionProbes> {
+export async function sessionProbes(blob: BlobStore, tenantId: string, sessionId: string, rows: readonly RawChunkRow[], opts: ReadOptions = {}): Promise<SessionProbes> {
   let state: NormalizerState = emptyState();
   const chunks: ProbeChunk[] = [];
+  const discovered: DiscoveredValues[] = [];
   for (const row of [...rows].sort((a, b) => a.seq - b.seq)) {
     const stored = await loadStoredChunk(blob, row.gcs_uri, tenantId);
     const env = stored.envelope;
     if (env.session_id !== sessionId || env.seq !== row.seq) throw new Error('stored chunk does not match its index row');
     // Valid time = client time + (collector receive time - client send time), as in the processor.
     const skewMs = stored.collector_received_at - env.client_sent_at;
-    const norm = normalize(env.events, { seq: row.seq, skewMs, state });
+    const norm = normalize(env.events, { seq: row.seq, skewMs, state, ...(opts.recordedProbes?.length ? { recordedProbes: opts.recordedProbes } : {}), ...(opts.discover ? { discover: true } : {}) });
     state = norm.state;
+    if (norm.discovered) discovered.push(...norm.discovered);
     chunks.push({
       seq: row.seq,
       pageRoute: env.page.route,
@@ -67,7 +78,7 @@ export async function sessionProbes(blob: BlobStore, tenantId: string, sessionId
       probes: norm.events.filter((e): e is ProbeEvent => e.kind === 'probe'),
     });
   }
-  return { session_id: sessionId, chunks };
+  return { session_id: sessionId, chunks, ...(opts.discover ? { discovered } : {}) };
 }
 
 /** Stream every session in the window (newest first, capped) through `onSession`, `concurrency` at a time. */
@@ -82,11 +93,12 @@ export async function scanWindow(deps: { reader: WarehouseReader; blob: BlobStor
   const queue = [...bySession.entries()];
   const summary: ScanSummary = { sessions_total: queue.length, sessions_scanned: 0, sessions_failed: 0, chunks_scanned: 0, truncated: listed.truncated };
   await opts.onListed?.(queue.length, listed.truncated);
+  const read: ReadOptions = { ...(opts.recordedProbes ? { recordedProbes: opts.recordedProbes } : {}), ...(opts.discover ? { discover: true } : {}) };
   const worker = async () => {
     for (let next = queue.shift(); next; next = queue.shift()) {
       const [sessionId, rows] = next;
       try {
-        const session = await sessionProbes(deps.blob, opts.tenantId, sessionId, rows);
+        const session = await sessionProbes(deps.blob, opts.tenantId, sessionId, rows, read);
         await opts.onSession(session);
         summary.sessions_scanned += 1;
         summary.chunks_scanned += rows.length;

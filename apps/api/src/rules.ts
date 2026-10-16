@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { BUILTIN_RULES } from '@cp/detectors';
 import type { StateStore } from '@cp/platform';
-import { RULE_ID, ruleText, ruleVersionOf, TENANT_ID, type RuleDoc } from '@cp/schema';
+import { PROBE_NAME, RULE_ID, ruleText, ruleVersionOf, TENANT_ID, type RuleDoc } from '@cp/schema';
 
 /**
  * Tenant rules (Phase 4). Reads come from the rule hot docs in the state store. The three write
@@ -27,6 +27,11 @@ const TenantQuery = z.object({ tenant: z.string().regex(TENANT_ID).optional() })
 const RuleParams = z.object({ id: z.string().regex(RULE_ID) });
 const DraftBody = z.object({ sentence: z.string().min(1).max(1000) });
 const ApproveBody = z.object({ version: z.int().min(1) });
+const RejectBody = z.object({ note: z.string().max(500).optional() }).default({});
+const ProbeBody = z.object({ spec: z.unknown() });
+const ProbeParams = z.object({ name: z.string().regex(PROBE_NAME) });
+/** Who acts from the dashboard. No sign-in yet, so every action is recorded as the dashboard's. */
+const ACTOR = 'dashboard';
 
 /** How long a forwarded action may take: the rule author calls Gemini and dry-runs up to 1000 sessions. */
 const AGENT_TIMEOUT_MS = 120_000;
@@ -50,13 +55,14 @@ export function registerRuleRoutes(app: FastifyInstance, deps: RuleRouteDeps): v
     return t.success ? (t.data.tenant ?? deps.defaultTenant) : null;
   };
 
-  async function forward(reply: FastifyReply, path: string, body: Record<string, unknown>) {
+  /** POST `body` to the agent (or GET `path` when body is null) and relay its answer. */
+  async function forward(reply: FastifyReply, path: string, body: Record<string, unknown> | null) {
     const url = `${deps.agentUrl.replace(/\/$/, '')}${path}`;
     let res: Response;
     try {
-      const headers: Record<string, string> = { 'content-type': 'application/json' };
+      const headers: Record<string, string> = body ? { 'content-type': 'application/json' } : {};
       if (deps.agentAuth === 'metadata') headers.authorization = `Bearer ${await metadataIdToken(fetchImpl, deps.agentUrl)}`;
-      res = await fetchImpl(url, { method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(AGENT_TIMEOUT_MS) });
+      res = await fetchImpl(url, { method: body ? 'POST' : 'GET', headers, ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(AGENT_TIMEOUT_MS) });
     } catch (err) {
       return reply.code(502).send({ error: 'agent_unavailable', message: `the agent service did not answer (${err instanceof Error ? err.message : String(err)}). Is it running? Try pnpm dev.` });
     }
@@ -100,15 +106,63 @@ export function registerRuleRoutes(app: FastifyInstance, deps: RuleRouteDeps): v
     const body = ApproveBody.safeParse(req.body);
     if (!p.success || !tenant || !body.success) return reply.code(400).send({ error: 'invalid_request' });
     // No sign-in yet (the API is loopback-only until Phase 5), so the approver is recorded as the dashboard.
-    return forward(reply, `/rules/${p.data.id}/approve`, { tenant, version: body.data.version, approved_by: 'dashboard' });
+    return forward(reply, `/rules/${p.data.id}/approve`, { tenant, version: body.data.version, approved_by: ACTOR });
   });
 
-  for (const action of ['reject', 'rescan'] as const) {
-    app.post(`/v1/rules/:id/${action}`, async (req, reply) => {
-      const p = RuleParams.safeParse(req.params);
-      const tenant = tenantOf(req.query);
-      if (!p.success || !tenant) return reply.code(400).send({ error: 'invalid_request' });
-      return forward(reply, `/rules/${p.data.id}/${action}`, { tenant });
-    });
-  }
+  // Reject takes an optional note: why the merchant says no. The churn watcher reads it next time.
+  app.post('/v1/rules/:id/reject', async (req, reply) => {
+    const p = RuleParams.safeParse(req.params);
+    const tenant = tenantOf(req.query);
+    const body = RejectBody.safeParse(req.body ?? {});
+    if (!p.success || !tenant || !body.success) return reply.code(400).send({ error: 'invalid_request' });
+    return forward(reply, `/rules/${p.data.id}/reject`, { tenant, by: ACTOR, ...(body.data.note ? { note: body.data.note } : {}) });
+  });
+
+  app.post('/v1/rules/:id/rescan', async (req, reply) => {
+    const p = RuleParams.safeParse(req.params);
+    const tenant = tenantOf(req.query);
+    if (!p.success || !tenant) return reply.code(400).send({ error: 'invalid_request' });
+    return forward(reply, `/rules/${p.data.id}/rescan`, { tenant });
+  });
+
+  // Change the rule: a new draft from an edited sentence, keeping its origin and any probe it proposes.
+  app.post('/v1/rules/:id/redraft', async (req, reply) => {
+    const p = RuleParams.safeParse(req.params);
+    const tenant = tenantOf(req.query);
+    const body = DraftBody.safeParse(req.body);
+    if (!p.success || !tenant || !body.success) return reply.code(400).send({ error: 'invalid_request' });
+    return forward(reply, `/rules/${p.data.id}/redraft`, { tenant, sentence: body.data.sentence });
+  });
+
+  // Probes: what sessions report (declared, request, recorded), and recorded probes added from the dashboard.
+  app.get('/v1/probes', async (req, reply) => {
+    const tenant = tenantOf(req.query);
+    if (!tenant) return reply.code(400).send({ error: 'invalid_query' });
+    return forward(reply, `/probes?tenant=${encodeURIComponent(tenant)}`, null);
+  });
+  app.post('/v1/probes/preview', async (req, reply) => {
+    const tenant = tenantOf(req.query);
+    const body = ProbeBody.safeParse(req.body);
+    if (!tenant || !body.success) return reply.code(400).send({ error: 'invalid_request' });
+    return forward(reply, '/probes/preview', { tenant, spec: body.data.spec });
+  });
+  app.post('/v1/probes', async (req, reply) => {
+    const tenant = tenantOf(req.query);
+    const body = ProbeBody.safeParse(req.body);
+    if (!tenant || !body.success) return reply.code(400).send({ error: 'invalid_request' });
+    return forward(reply, '/probes', { tenant, spec: body.data.spec, by: ACTOR });
+  });
+  app.post('/v1/probes/:name/disable', async (req, reply) => {
+    const p = ProbeParams.safeParse(req.params);
+    const tenant = tenantOf(req.query);
+    if (!p.success || !tenant) return reply.code(400).send({ error: 'invalid_request' });
+    return forward(reply, `/probes/${p.data.name}/disable`, { tenant, by: ACTOR });
+  });
+
+  // Ask the churn watcher to look at the stream now (it also runs on its own timer).
+  app.post('/v1/watch/run', async (req, reply) => {
+    const tenant = tenantOf(req.query);
+    if (!tenant) return reply.code(400).send({ error: 'invalid_query' });
+    return forward(reply, '/watch/run', { tenant });
+  });
 }

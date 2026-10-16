@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Claim, type RevenueAtRisk } from './findings.js';
+import type { RecordedProbeSpec } from './probes.js';
 
 /**
  * Invariant rules: declarative checks over probe values (ARCHITECTURE.md section 4). Rules are data,
@@ -238,6 +239,11 @@ export interface RuleDraft {
    * run's hit sessions instead of an issue's affected sessions. Synthetic in the demo.
    */
   revenue_lost: RevenueAtRisk | null;
+  /**
+   * Recorded probes the draft reads that are not registered yet (proposed by the agent, or named by a merchant
+   * with the rule). Approving the draft registers them first. Absent on drafts that use only existing probes.
+   */
+  proposed_probes?: RecordedProbeSpec[];
 }
 
 export interface ActiveRule {

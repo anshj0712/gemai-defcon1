@@ -69,6 +69,11 @@ export interface ProbeEvent extends EventBase {
   currency: string | null;
   /** Route the page was on when the snapshot was taken. */
   route: string | null;
+  /**
+   * Where the numbers came from (see probes.ts): the SDK's declared probes (absent on events written before
+   * there were other sources), a finished request, or recorded probes read from the recorded page.
+   */
+  source?: 'declared' | 'request' | 'recorded';
 }
 
 export type NormalizedEvent =
@@ -109,6 +114,41 @@ export interface NormalizerState {
   path: string | null;
   /** Current route, updated by page loads and SPA navigations, so each click knows where it happened. */
   route?: string | null;
+  /** A compact copy of the recorded page, kept when recorded probes are read (normalizer mirror.ts). */
+  mirror?: MirrorState;
+  /** Recorded-probe snapshot bookkeeping, carried across chunks. */
+  probe_memo?: ProbeMemo;
+}
+
+/**
+ * One node of the recorded-page mirror: parent id, tag ("#text" for text), the attributes selectors use,
+ * text (text nodes, capped), child ids in document order, and `s` when the subtree is not kept (svg, script).
+ */
+export interface MirrorNode {
+  p: number | null;
+  t: string;
+  a?: Record<string, string>;
+  x?: string;
+  c?: number[];
+  s?: 1;
+}
+
+export interface MirrorState {
+  /** rrweb node id -> node. */
+  n: Record<string, MirrorNode>;
+  root: number | null;
+  size: number;
+  /** The page had more nodes than the mirror keeps; later additions were dropped. */
+  truncated?: boolean;
+}
+
+export interface ProbeMemo {
+  /** The last recorded-probe snapshot emitted (route and values), so an unchanged page emits nothing. */
+  last: string | null;
+  /** Time of the last page change not yet read, or null. */
+  pending: number | null;
+  /** Currency of the session's declared probes, reused for recorded money probes. */
+  currency: string | null;
 }
 
 export interface SessionContext {

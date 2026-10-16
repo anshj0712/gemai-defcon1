@@ -107,7 +107,13 @@ export async function seedRawSession(stores: { blob: BlobStore; warehouse: Wareh
   const script = new SessionScript(start).meta(0).snapshot(5);
   probes.forEach((p, i) => script.probe(1000 + i * 1000, p));
   const times: number[] = probes.map((_, i) => start + 1000 + i * 1000 + 40);
-  for (const env of toEnvelopes(script.events, { sessionId, batchMs: 5000 })) {
+  await seedScript(stores, sessionId, script);
+  return times;
+}
+
+/** Store any scripted session's batches as raw chunks with index rows (+40 ms skew), on `route`. */
+export async function seedScript(stores: { blob: BlobStore; warehouse: Warehouse }, sessionId: string, script: SessionScript, route = '/cart'): Promise<void> {
+  for (const env of toEnvelopes(script.events, { sessionId, batchMs: 5000, route, urlPath: route })) {
     const { site_key: _k, ...envelope } = env;
     const receivedAt = env.client_sent_at + 40;
     const doc: StoredChunk = { v: 1, tenant_id: 'demo', collector_received_at: receivedAt, envelope };
@@ -136,7 +142,6 @@ export async function seedRawSession(stores: { blob: BlobStore; warehouse: Wareh
       },
     ]);
   }
-  return times;
 }
 
 /** A cart (and an order when `ordered`) for a seeded session, so the reader folds its outcome (synthetic). */

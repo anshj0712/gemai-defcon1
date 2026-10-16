@@ -12,6 +12,7 @@ import {
   type NormalizedEvent,
   type RawChunkMessage,
   type RawChunkRow,
+  type RecordedProbeSpec,
   type SessionTail,
   type SignalRow,
 } from '@cp/schema';
@@ -41,6 +42,10 @@ export interface ChunkHandlerDeps {
   overrides: Record<string, ParamOverrides>;
   /** The tenant's active invariant rules (see rules.ts); undefined means the built-in rules. */
   rulesFor?: (tenantId: string) => Promise<InvariantRule[] | undefined>;
+  /** The tenant's active recorded probes (see probes.ts), read from the recorded page. */
+  probesFor?: (tenantId: string) => Promise<RecordedProbeSpec[]>;
+  /** Keep the recorded-page mirror for every session, so a probe added mid-session is read at once. */
+  mirror?: boolean;
   lookbackMs: number;
   tailMaxEvents: number;
   markerTtlMs: number;
@@ -170,7 +175,8 @@ async function processChunk(deps: ChunkHandlerDeps, msg: RawChunkMessage, meta: 
 
   if (!stale) {
     const rules = await deps.rulesFor?.(msg.tenant_id);
-    const norm = normalize(env.events, { seq: msg.seq, skewMs, state: tail?.state ?? emptyState() });
+    const recordedProbes = (await deps.probesFor?.(msg.tenant_id)) ?? [];
+    const norm = normalize(env.events, { seq: msg.seq, skewMs, state: tail?.state ?? emptyState(), recordedProbes, mirror: deps.mirror ?? false });
     stats = norm.stats;
     const lastEvent = norm.events.reduce((m, e) => Math.max(m, eventEnd(e)), Number.NEGATIVE_INFINITY);
     const chunk: NormalizedChunk = {

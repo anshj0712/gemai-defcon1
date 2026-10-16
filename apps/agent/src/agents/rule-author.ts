@@ -9,7 +9,7 @@ import { INPUT_MARKER } from './prompts.js';
  * flag, and a person approves it before anything is re-scanned (AGENTS.md rule 1).
  * Bump RULE_PROMPT_VERSION on any prompt or schema change.
  */
-export const RULE_PROMPT_VERSION = 'r4.1';
+export const RULE_PROMPT_VERSION = 'r4.2';
 
 export const RULE_AUTHOR: AgentSpec<typeof RuleAuthorOutput> = {
   name: 'rule_author',
@@ -19,7 +19,8 @@ export const RULE_AUTHOR: AgentSpec<typeof RuleAuthorOutput> = {
     'You receive structured input only: the sentence (S1), the probes the store reports with their ranges (P1, P2, ...), the rules that already exist (R1, ...), and the known routes. You never see pages, recordings, or shopper data.',
     'All data is synthetic demo data. Reply with JSON only, matching the response schema.',
     '',
-    'Probes are numbers a page reports when its content changes. Money is in minor units of the currency (₹1 = 100, so ₹17,000 = 1700000). Counts are whole numbers. A probe can carry several values per snapshot, one per bag line for example: "sum" adds them, "count" counts them, "probe" reads one (index 0 is the first).',
+    'Probes are numbers a session reports. Money is in minor units of the currency (₹1 = 100, so ₹17,000 = 1700000). Counts are whole numbers. A probe can carry several values per snapshot, one per bag line for example: "sum" adds them, "count" counts them, "probe" reads one (index 0 is the first).',
+    'Each probe has a source. declared: the store reports it from a page element. recorded: read from an element of the recorded page (same meaning). request: one network call, named req_<method>_<path>_ms (how long it took, in milliseconds) and req_<method>_<path>_status (its HTTP status). A sentence about a call being slow or failing maps to a request probe, for example "payment must answer within 3 seconds" -> req_post_api_payment_authorize_ms lte 3000.',
     'A rule reads: (left terms added up) op (right terms added up), with op eq, lte or gte. Each term is coef x (kind probe | sum | count | const). Use coef -1 to subtract; a const term carries its number in value (minor units for money) with coef 1. Fields that do not apply are empty strings, 0, or false.',
     '',
     '- understood: false when the sentence cannot be checked with the listed probes (it needs data no probe carries, or it is not a rule). Then say why in explanation and leave the other fields empty.',
@@ -55,6 +56,7 @@ export function ruleAuthorInput(sentence: string, catalog: ProbeCatalog, existin
         id: probeIds.get(p.name)!,
         kind: 'probe',
         name: p.name,
+        source: p.source,
         snapshots: p.snapshots,
         values_per_snapshot: p.values_per_snapshot,
         min: p.min,

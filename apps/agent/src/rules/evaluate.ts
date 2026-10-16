@@ -1,5 +1,5 @@
 import { checkRule, invariantCheck, runDetectors, toSignalRows } from '@cp/detectors';
-import { ruleVersionOf, type DryRun, type DryRunSample, type InvariantRule, type SignalRow } from '@cp/schema';
+import { ruleVersionOf, type DryRun, type DryRunSample, type InvariantRule, type ProbePreview, type ProbeSource, type SignalRow } from '@cp/schema';
 import type { SessionProbes } from './scan.js';
 
 /**
@@ -45,6 +45,8 @@ export function checkSession(tenantId: string, session: SessionProbes, rules: In
 
 export interface ProbeStats {
   name: string;
+  /** Declared in the site's SDK setup, a request (automatic), or recorded (read from the recorded page). */
+  source: ProbeSource;
   /** Snapshots carrying this probe. */
   snapshots: number;
   /** How many values one snapshot carries (for example one per bag line). */
@@ -66,7 +68,7 @@ export interface ProbeCatalog {
 const MAX_SAMPLE = 5_000;
 
 export function buildCatalog(sessions: readonly SessionProbes[]): ProbeCatalog {
-  const acc = new Map<string, { snapshots: number; perMin: number; perMax: number; min: number; max: number; sample: number[]; routes: Set<string> }>();
+  const acc = new Map<string, { source: ProbeSource; snapshots: number; perMin: number; perMax: number; min: number; max: number; sample: number[]; routes: Set<string> }>();
   const routes = new Set<string>();
   const currencies = new Set<string>();
   let withProbes = 0;
@@ -80,7 +82,7 @@ export function buildCatalog(sessions: readonly SessionProbes[]): ProbeCatalog {
         if (p.currency) currencies.add(p.currency);
         for (const [name, values] of Object.entries(p.values)) {
           let a = acc.get(name);
-          if (!a) acc.set(name, (a = { snapshots: 0, perMin: Infinity, perMax: 0, min: Infinity, max: -Infinity, sample: [], routes: new Set() }));
+          if (!a) acc.set(name, (a = { source: p.source ?? 'declared', snapshots: 0, perMin: Infinity, perMax: 0, min: Infinity, max: -Infinity, sample: [], routes: new Set() }));
           a.snapshots += 1;
           a.perMin = Math.min(a.perMin, values.length);
           a.perMax = Math.max(a.perMax, values.length);
@@ -100,6 +102,7 @@ export function buildCatalog(sessions: readonly SessionProbes[]): ProbeCatalog {
       const sorted = [...a.sample].sort((x, y) => x - y);
       return {
         name,
+        source: a.source,
         snapshots: a.snapshots,
         values_per_snapshot: { min: a.perMin === Infinity ? 0 : a.perMin, max: a.perMax },
         min: a.min === Infinity ? 0 : a.min,
@@ -172,5 +175,49 @@ export function dryRun(opts: {
     truncated: opts.truncated,
     ms: opts.now - opts.startedAt,
     at: opts.now,
+  };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Recorded probe preview: what a selector would read over recent sessions, before anyone saves it.
+// ---------------------------------------------------------------------------------------------
+
+const MAX_PREVIEW_SAMPLES = 5;
+
+/** What the recorded probe `name` read over sessions scanned with it. Numbers, routes and session ids only. */
+export function previewProbe(name: string, sessions: readonly SessionProbes[], window: { from: number; to: number }, now: number): ProbePreview {
+  let withValue = 0;
+  let snapshots = 0;
+  const values: number[] = [];
+  const routes = new Set<string>();
+  const samples: ProbePreview['samples'] = [];
+  for (const s of sessions) {
+    let first: ProbePreview['samples'][number] | null = null;
+    for (const c of s.chunks) {
+      for (const p of c.probes) {
+        const v = p.values[name];
+        if (!v || v.length === 0) continue;
+        snapshots += 1;
+        const route = p.route ?? c.pageRoute;
+        routes.add(route);
+        if (values.length < MAX_SAMPLE) values.push(...v.slice(0, 10));
+        first ??= { session_id: s.session_id, event_time: p.t, route, value: v[0]! };
+      }
+    }
+    if (first) {
+      withValue += 1;
+      if (samples.length < MAX_PREVIEW_SAMPLES) samples.push(first);
+    }
+  }
+  const sorted = [...values].sort((a, b) => a - b);
+  return {
+    sessions_scanned: sessions.length,
+    sessions_with_value: withValue,
+    snapshots,
+    values: sorted.length ? { min: sorted[0]!, median: sorted[Math.floor(sorted.length / 2)]!, max: sorted[sorted.length - 1]! } : null,
+    routes: [...routes].sort(),
+    samples,
+    window,
+    at: now,
   };
 }

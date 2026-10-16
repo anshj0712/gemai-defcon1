@@ -1,4 +1,4 @@
-import type { Cluster, Finding, FindingSummary, RuleAuthorMeta, RuleDoc } from '@cp/schema';
+import type { Cluster, Finding, FindingSummary, ProbeDoc, ProbePreview, ProbeSource, RecordedProbeSpec, RuleAuthorMeta, RuleDoc } from '@cp/schema';
 import type { Marker, TimedEvent } from './markers';
 
 /** An issue in the live feed (the session list is only on the detail endpoint). */
@@ -100,8 +100,37 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
 export const fetchRules = () => getJson<{ rules: RuleView[]; builtin: BuiltinRuleView[] }>('/v1/rules');
 export const draftRule = (sentence: string) => postJson<{ rule: RuleDoc }>('/v1/rules/draft', { sentence });
 export const approveRule = (id: string, version: number) => postJson<{ rule: RuleDoc }>(`/v1/rules/${encodeURIComponent(id)}/approve`, { version });
-export const rejectRule = (id: string) => postJson<{ rule: RuleDoc }>(`/v1/rules/${encodeURIComponent(id)}/reject`, {});
+export const rejectRule = (id: string, note?: string) => postJson<{ rule: RuleDoc }>(`/v1/rules/${encodeURIComponent(id)}/reject`, note ? { note } : {});
 export const rescanRule = (id: string) => postJson<{ rule: RuleDoc }>(`/v1/rules/${encodeURIComponent(id)}/rescan`, {});
+export const redraftRule = (id: string, sentence: string) => postJson<{ rule: RuleDoc }>(`/v1/rules/${encodeURIComponent(id)}/redraft`, { sentence });
+export const runWatch = () => postJson<{ results: unknown }>('/v1/watch/run', {});
+
+// ---------------------------------------------------------------------------------------------
+// Probes: numbers sessions report (declared in site code, requests, recorded from the page).
+// ---------------------------------------------------------------------------------------------
+
+export interface ProbeStatsView {
+  name: string;
+  source: ProbeSource;
+  snapshots: number;
+  values_per_snapshot: { min: number; max: number };
+  min: number;
+  median: number;
+  max: number;
+  routes: string[];
+}
+
+export interface ProbesView {
+  catalog: { probes: ProbeStatsView[]; routes: string[]; currencies: string[]; sessions: number };
+  registry: ProbeDoc[];
+  window: { from: number; to: number };
+  sessions: number;
+}
+
+export const fetchProbes = () => getJson<ProbesView>('/v1/probes');
+export const previewProbe = (spec: RecordedProbeSpec) => postJson<{ preview: ProbePreview }>('/v1/probes/preview', { spec });
+export const addProbe = (spec: RecordedProbeSpec) => postJson<{ probe: ProbeDoc }>('/v1/probes', { spec });
+export const disableProbe = (name: string) => postJson<{ probe: ProbeDoc }>(`/v1/probes/${encodeURIComponent(name)}/disable`, {});
 
 /** One finding version as the record held it (from the findings table, not the live feed). */
 export interface HistoryFindingView {

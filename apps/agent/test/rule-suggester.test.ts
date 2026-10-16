@@ -69,10 +69,10 @@ const ghost = (i: number) => {
 /** Probe statistics of the ghost_line sessions (P1 cart_total, P2 discount, P3 line_total, P4 qty). */
 const ghostCatalog: ProbeCatalog = {
   probes: [
-    { name: 'cart_total', snapshots: 20, values_per_snapshot: { min: 1, max: 1 }, min: 499_500, median: LINE, max: LINE, routes: ['/cart'] },
-    { name: 'discount', snapshots: 20, values_per_snapshot: { min: 1, max: 1 }, min: 0, median: 0, max: 0, routes: ['/cart'] },
-    { name: 'line_total', snapshots: 20, values_per_snapshot: { min: 1, max: 2 }, min: 0, median: LINE, max: LINE, routes: ['/cart'] },
-    { name: 'qty', snapshots: 20, values_per_snapshot: { min: 1, max: 2 }, min: 0, median: 1, max: 1, routes: ['/cart'] },
+    { name: 'cart_total', source: 'declared', snapshots: 20, values_per_snapshot: { min: 1, max: 1 }, min: 499_500, median: LINE, max: LINE, routes: ['/cart'] },
+    { name: 'discount', source: 'declared', snapshots: 20, values_per_snapshot: { min: 1, max: 1 }, min: 0, median: 0, max: 0, routes: ['/cart'] },
+    { name: 'line_total', source: 'declared', snapshots: 20, values_per_snapshot: { min: 1, max: 2 }, min: 0, median: LINE, max: LINE, routes: ['/cart'] },
+    { name: 'qty', source: 'declared', snapshots: 20, values_per_snapshot: { min: 1, max: 2 }, min: 0, median: 1, max: 1, routes: ['/cart'] },
   ],
   routes: ['/cart'],
   currencies: ['INR'],

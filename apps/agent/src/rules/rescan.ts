@@ -1,6 +1,6 @@
 import type { Logger } from '@cp/logger';
 import type { BlobStore, Publisher, Warehouse, WarehouseReader } from '@cp/platform';
-import { ruleVersionOf, type InvariantRule, type RescanStatus } from '@cp/schema';
+import { ruleVersionOf, type InvariantRule, type RecordedProbeSpec, type RescanStatus } from '@cp/schema';
 import { checkSession } from './evaluate.js';
 import { scanWindow } from './scan.js';
 
@@ -33,6 +33,8 @@ export interface RescanRequest {
   window: { from: number; to: number };
   maxSessions: number;
   concurrency: number;
+  /** The tenant's recorded probes, read from each session as it is re-scanned (the rule may use them). */
+  recordedProbes?: readonly RecordedProbeSpec[];
   /** Called with the running totals, at most every `progressMs`, and once at the end. */
   onProgress?: (status: RescanStatus) => Promise<void> | void;
   progressMs?: number;
@@ -77,6 +79,7 @@ export async function runRescan(deps: RescanDeps, req: RescanRequest): Promise<R
       toMs: req.window.to,
       maxSessions: req.maxSessions,
       concurrency: req.concurrency,
+      ...(req.recordedProbes?.length ? { recordedProbes: req.recordedProbes } : {}),
       onListed: async (sessions, truncated) => {
         status.sessions_total = sessions;
         status.truncated = truncated;
