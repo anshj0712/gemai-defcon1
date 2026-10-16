@@ -7,8 +7,8 @@ import type { GroundTruth, TruthSession } from './truth.js';
 
 /**
  * `pnpm sim`: synthetic shoppers on the demo shop in a real browser, each with known ground truth.
- * The mix is 20% dead_button, 15% cart_total, 15% checkout_error, and 50% clean (half of the clean
- * sessions carry a bug flag they never trigger). Affected shoppers abandon more often than the
+ * The mix is 20% dead_button, 15% cart_total, 15% checkout_error, 10% qty_price, 10% ghost_line, and 30%
+ * clean (half of the clean sessions carry a bug flag they never trigger). Affected shoppers abandon more often than the
  * baseline, by design. Writes sim/out/ground-truth.json; then `pnpm sim:check` scores the issues.
  * Needs `pnpm dev` running. Every session and number is synthetic.
  *

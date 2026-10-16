@@ -1,6 +1,6 @@
 import type { Page } from 'playwright';
 import { clickInPlace, flushSdk, moveAndClick, sessionIdOf, typeInto, URLS, waitFor } from './browser.js';
-import { rng, touchesFirstLine, type SessionPlan } from './plan.js';
+import { pressesRemove, rng, touchesFirstLine, type SessionPlan } from './plan.js';
 
 /** What a session did, for the ground truth. All shoppers and details are synthetic. */
 export interface SessionOutcome {
@@ -72,6 +72,24 @@ async function changeQuantity(c: Ctx): Promise<void> {
     await click(c, `[data-action="inc"] >> nth=${index}`);
     await pause(c, 350, 700);
   }
+}
+
+/**
+ * Remove on the last line. With ghost_line on, the line stays in the bag at quantity 0 (₹0); the shopper stares
+ * at it, then presses Remove again in a fast burst, and it no longer responds.
+ */
+async function removeLastLine(c: Ctx): Promise<void> {
+  const dec = '[data-testid="qty-dec"]';
+  // The bag re-renders after a change, so the button is looked up again before each use.
+  const last = async () => `${dec} >> nth=${(await c.page.locator(dec).count()) - 1}`;
+  await click(c, await last());
+  await pause(c, 1500, 2500); // stares at a line that did not go away
+  const target = await last();
+  for (let i = 0; i < c.plan.removePresses; i++) {
+    await clickInPlace(c.page, target);
+    await c.page.waitForTimeout(250 + Math.round(c.r() * 150));
+  }
+  await pause(c, 1000, 2000);
 }
 
 /** One press per code; then extra presses (and maybe a fast burst) on whatever state the button is in. */
@@ -161,6 +179,10 @@ export async function runPlan(page: Page, plan: SessionPlan): Promise<SessionOut
     await changeQuantity(c);
     await pause(c, 1500, 3000); // stares at the price
     out.cart_value_minor = prices.reduce((a, b) => a + b, 0) + (prices[0] ?? 0) * plan.qtyIncrements;
+  } else if (pressesRemove(plan)) {
+    // line_remover, the only shopper who presses Remove. The subtotal read below is the line that stays
+    // (the ghost line adds ₹0).
+    await removeLastLine(c);
   } else if (plan.persona === 'bulk_buyer') {
     // Reach 2+ items (a second product, or a higher quantity), then the coupon: the bug drops the last item from the total.
     await changeQuantity(c);

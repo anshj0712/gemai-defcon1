@@ -43,6 +43,7 @@ async function main(): Promise<void> {
       continue;
     }
     say(`  ${b.bug.padEnd(15)} ${String(b.affected).padStart(8)}  ${String(b.clusters).padStart(6)}  ${pct(b.recall).padStart(6)}  ${pct(b.precision).padStart(9)}   ${b.title ?? '-'}`);
+    if (b.rule_cluster_ids.length) say(`  ${''.padEnd(15)} also in ${b.rule_cluster_ids.length} invariant issue(s) from the approved agent-suggested rule (expected after pnpm sim:suggest)`);
   }
   say(`  clean sessions in an issue: ${report.clean_in_clusters.length}`);
   say(`  unexpected issues: ${report.unexpected_clusters.length}${report.unexpected_clusters.map((u) => `\n    - ${u.title} (${u.sessions} sessions)`).join('')}`);
