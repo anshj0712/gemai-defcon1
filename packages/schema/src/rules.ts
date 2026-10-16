@@ -155,6 +155,103 @@ export type RuleSuggesterOutput = z.infer<typeof RuleSuggesterOutput>;
 /** Where a draft came from: a merchant's sentence, or the rule suggester's (still approved by a person). */
 export type RuleOrigin = 'human' | 'agent';
 
+// ---------------------------------------------------------------------------------------------
+// The churn watcher: code finds a segment of shoppers who leave far more often, Gemini judges it.
+// ---------------------------------------------------------------------------------------------
+
+/** Why shoppers leave, the reasons a store hears about most (the watcher labels each hypothesis with one). */
+export const CHURN_REASONS = {
+  ux: 'Poor user experience',
+  shipping_cost: 'Shipping cost',
+  delivery_time: 'Delivery time',
+  returns: 'Returns hassle',
+  price: 'Price',
+  support: 'Customer service',
+  personalization: 'Personalization',
+  discount: 'Discounts and promotions',
+  payment_declined: 'Declined card',
+  payment_gateway: 'Payment gateway',
+  other: 'Other',
+} as const;
+export const CHURN_REASON_IDS = Object.keys(CHURN_REASONS) as [keyof typeof CHURN_REASONS, ...(keyof typeof CHURN_REASONS)[]];
+export type ChurnReason = keyof typeof CHURN_REASONS;
+
+/**
+ * What the churn analyst returns for one candidate segment. It decides whether the number plausibly drives
+ * shoppers away (code already showed they leave more often), names a probe for an unprobed element, and writes
+ * the rule as one sentence that goes to the rule author like a merchant's would. It is not a rule.
+ */
+export const ChurnAnalystOutput = z.object({
+  propose: z.boolean(),
+  churn_reason: z.enum(CHURN_REASON_IDS),
+  /** The suspected problem as a merchant would read it, at most 90 characters. */
+  title: z.string().max(120),
+  /** Why this number plausibly drives shoppers away, citing the input ids (H candidate, P probes, R rules, F feedback). */
+  hypothesis: Claim,
+  /** snake_case name for a page element nobody probes yet; empty when the candidate is already a probe. */
+  probe_name: z.string().max(64),
+  /** The rule in plain English, naming the probe; empty when propose is false. */
+  sentence: z.string().max(500),
+  confidence: z.enum(['low', 'medium', 'high']),
+  assumptions: z.array(z.string().max(200)).max(5),
+});
+export type ChurnAnalystOutput = z.infer<typeof ChurnAnalystOutput>;
+
+/** A segment of shoppers and how often they left (synthetic in the demo). */
+export interface SegmentStats {
+  sessions: number;
+  abandoned: number;
+  abandonment: number;
+}
+
+/** The number a watch hypothesis is about: an existing probe, or a page element the agent proposes to probe. */
+export interface WatchFeature {
+  /** Stable key: `probe:<name>` or `dom:<route>|<selector>`. */
+  key: string;
+  /** The probe name (proposed for a page element). */
+  name: string;
+  source: 'declared' | 'request' | 'recorded' | 'discovered';
+  selector: string | null;
+  route: string | null;
+  unit: 'money' | 'count' | 'ms' | 'status';
+}
+
+/** What the churn watcher found and why the agent thinks it matters: kept on its draft for the merchant. */
+export interface WatchMeta {
+  feature: WatchFeature;
+  /** Sessions in the segment have a value >= (gte) or <= (lte) this. */
+  direction: 'gte' | 'lte';
+  threshold: number;
+  segment: SegmentStats;
+  baseline: SegmentStats;
+  /** Segment abandonment minus baseline abandonment. */
+  lift: number;
+  /** One-sided two-proportion test: how likely a gap this large is by chance. */
+  p_value: number;
+  /** Values inside and outside the segment, for the card. */
+  values: { segment_min: number; segment_max: number; others_max: number | null; others_median: number | null };
+  /** Session ids in the segment (capped at 500): the hypothesis is checkable, not taken on trust. */
+  session_ids: string[];
+  churn_reason: ChurnReason;
+  title: string;
+  hypothesis: string;
+  confidence: 'low' | 'medium' | 'high';
+  found_at: number;
+}
+
+/** A person's verdict on a draft (approve or reject, with an optional note); the watcher reads these. */
+export interface RuleFeedback {
+  verdict: 'approved' | 'rejected';
+  note: string | null;
+  by: string;
+  at: number;
+  title: string;
+  /** Watch drafts: the feature, its churn reason, and the lift at the time (a rejected key is not raised again unless it grows). */
+  feature_key: string | null;
+  churn_reason: ChurnReason | null;
+  lift: number | null;
+}
+
 export interface RuleAuthorMeta {
   model: string;
   prompt_hash: string;
@@ -244,6 +341,8 @@ export interface RuleDraft {
    * with the rule). Approving the draft registers them first. Absent on drafts that use only existing probes.
    */
   proposed_probes?: RecordedProbeSpec[];
+  /** Churn watcher drafts: the segment it found and the agent's hypothesis. */
+  watch?: WatchMeta;
 }
 
 export interface ActiveRule {
@@ -269,6 +368,8 @@ export interface RuleDoc {
   rescan: RescanStatus | null;
   /** Approved versions, oldest first. */
   versions: { version: number; approved_at: number }[];
+  /** Verdicts on this rule's drafts, oldest first (absent on docs written before feedback existed). */
+  feedback?: RuleFeedback[];
   created_at: number;
   updated_at: number;
   synthetic: true;

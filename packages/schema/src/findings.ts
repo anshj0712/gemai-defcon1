@@ -140,7 +140,7 @@ export interface RevenueAtRisk {
 }
 
 export interface AgentRun {
-  agent: 'triage' | 'root_cause' | 'ranker' | 'rule_author' | 'rule_suggester';
+  agent: 'triage' | 'root_cause' | 'ranker' | 'rule_author' | 'rule_suggester' | 'churn_analyst';
   model: string;
   prompt_hash: string;
   attempts: number;

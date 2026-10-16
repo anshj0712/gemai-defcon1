@@ -15,6 +15,8 @@ import {
   type RevenueAtRisk,
   type RuleAuthorMeta,
   type RuleDoc,
+  type RuleFeedback,
+  type WatchMeta,
 } from '@cp/schema';
 import { RULE_AUTHOR, ruleAuthorInput } from '../agents/rule-author.js';
 import { SENTENCE_LIMITS } from '../grounding.js';
@@ -82,6 +84,8 @@ export interface RuleServiceDeps {
   rescan: { sessions: number; days: number; concurrency: number };
   /** The revenue-at-risk parameters, for revenue already lost over a draft's dry-run hits. */
   revenue: RevenueParams;
+  /** Shoppers the churn watcher suspects: kept out of the revenue baseline like shoppers in an issue. */
+  suspected?: (tenantId: string) => ReadonlySet<string>;
   runOptions?: RunOptions;
   now?: () => number;
 }
@@ -94,12 +98,17 @@ export interface AgentDraftOptions {
   suggester: RuleAuthorMeta;
   /** Recorded probes the rule needs that are not registered yet (registered when the draft is approved). */
   proposedProbes?: RecordedProbeSpec[];
+  /** Churn watcher drafts: the segment it found and the hypothesis. */
+  watch?: WatchMeta;
+  /** Redraft: replace this rule's pending draft (a person edited the sentence). */
+  replaceDraft?: boolean;
 }
 
 /** A merchant's draft, optionally naming a recorded probe to register with it. */
 export interface HumanDraftOptions {
   origin?: 'human';
   proposedProbes?: RecordedProbeSpec[];
+  replaceDraft?: boolean;
 }
 
 export { SENTENCE_LIMITS };
@@ -122,6 +131,20 @@ export function probeSpecProblem(spec: unknown, taken: ReadonlySet<string> = new
   if (!compileSelector(s.selector)) return 'the selector uses something outside the supported subset (tag, #id, .class, [attr], [attr="value"], descendant and > combinators)';
   if (s.routes?.some((r) => !r.startsWith('/'))) return 'routes are page paths such as /checkout or /product/:id';
   return null;
+}
+
+/** A person's verdict on a draft, as the churn watcher reads it next time. */
+function feedbackOf(draft: NonNullable<RuleDoc['draft']>, verdict: RuleFeedback['verdict'], note: string | null, by: string, at: number): RuleFeedback {
+  return {
+    verdict,
+    note: note?.trim() ? note.trim().slice(0, 500) : null,
+    by,
+    at,
+    title: draft.watch?.title ?? draft.rule.title,
+    feature_key: draft.watch?.feature.key ?? null,
+    churn_reason: draft.watch?.churn_reason ?? null,
+    lift: draft.watch?.lift ?? null,
+  };
 }
 
 /** Whether a rule reads a probe (in what it requires, or anywhere in its two sides). */
@@ -334,10 +357,12 @@ export function createRuleService(deps: RuleServiceDeps) {
 
       const agent = opts?.origin === 'agent' ? (opts as AgentDraftOptions) : null;
       const issueSessions = await sessionsInIssues(tenantId);
+      const suspected = deps.suspected?.(tenantId);
+      const notBaseline = suspected?.size ? new Set([...issueSessions, ...suspected]) : issueSessions;
       const outcomes = await deps.reader.sessionOutcomes(tenantId, window.from);
       const unchanged: { doc?: RuleDoc } = {};
       const written = await update(tenantId, out.rule_id, (doc) => {
-        if (agent && doc) {
+        if (agent && doc && !opts?.replaceDraft) {
           // The same issue's own pending suggestion: nothing to do (idempotent, so the caller records drafted).
           if (doc.draft?.origin === 'agent' && doc.draft.cluster_id === agent.cluster_id) {
             unchanged.doc = doc;
@@ -365,7 +390,7 @@ export function createRuleService(deps: RuleServiceDeps) {
         const revenueLost: RevenueAtRisk | null =
           hits.size > 0
             ? revenueAtRisk(
-                { affectedSessionIds: [...hits.keys()], affectedSessionCount: hits.size, route: commonestRoute(hits.values()), sessionsInAnyIssue: issueSessions, outcomes, now: t },
+                { affectedSessionIds: [...hits.keys()], affectedSessionCount: hits.size, route: commonestRoute(hits.values()), sessionsInAnyIssue: notBaseline, outcomes, now: t },
                 deps.revenue,
               )
             : null;
@@ -401,9 +426,11 @@ export function createRuleService(deps: RuleServiceDeps) {
             revenue_lost: revenueLost,
             // Only probes the compiled rule actually reads need registering with it.
             ...(proposed.some((p) => ruleReads(rule, p.name)) ? { proposed_probes: proposed.filter((p) => ruleReads(rule, p.name)) } : {}),
+            ...(agent?.watch ? { watch: agent.watch } : {}),
           },
           rescan: doc?.rescan ?? null,
           versions: doc?.versions ?? [],
+          ...(doc?.feedback ? { feedback: doc.feedback } : {}),
           created_at: doc?.created_at ?? t,
           updated_at: t,
           synthetic: true,
@@ -462,6 +489,7 @@ export function createRuleService(deps: RuleServiceDeps) {
           draft: null,
           rescan: startRescan(tenantId, draft.rule, await registeredProbes(tenantId)),
           versions: [...current.versions, { version: draft.rule.version, approved_at: t }],
+          feedback: [...(current.feedback ?? []), feedbackOf(draft, 'approved', null, approvedBy, t)],
           updated_at: t,
         };
       });
@@ -469,13 +497,37 @@ export function createRuleService(deps: RuleServiceDeps) {
       return doc ?? (await deps.state.getRule(tenantId, ruleId))!;
     },
 
-    async reject(tenantId: string, ruleId: string): Promise<RuleDoc> {
+    /**
+     * Discard the pending draft, with an optional note on why. The verdict stays on the doc: the churn watcher
+     * does not raise the same number again unless it grows, and the analyst reads the note next time.
+     */
+    async reject(tenantId: string, ruleId: string, by = 'merchant', note: string | null = null): Promise<RuleDoc> {
       requireTenant(tenantId);
       const doc = await update(tenantId, ruleId, (current) => {
         if (!current) throw new RuleError('not_found', `no rule ${ruleId}`, 404);
-        return { ...current, draft: null, updated_at: now() };
+        const t = now();
+        const feedback = current.draft ? [...(current.feedback ?? []), feedbackOf(current.draft, 'rejected', note, by, t)] : current.feedback;
+        return { ...current, draft: null, ...(feedback ? { feedback } : {}), updated_at: t };
       });
       return doc!;
+    },
+
+    /**
+     * Change the rule: draft again from an edited sentence, keeping the draft's origin, its proposed probes and
+     * the watcher's hypothesis. When the new sentence names a different rule, the old draft is cleared.
+     */
+    async redraft(tenantId: string, ruleId: string, sentence: string): Promise<RuleDoc> {
+      requireTenant(tenantId);
+      const current = await deps.state.getRule(tenantId, ruleId);
+      const d = current?.draft;
+      if (!d) throw new RuleError('not_found', `rule ${ruleId} has no draft to change`, 404);
+      const opts: AgentDraftOptions | HumanDraftOptions =
+        d.origin === 'agent'
+          ? { origin: 'agent', cluster_id: d.cluster_id, suggester: d.suggester ?? d.author, replaceDraft: true, ...(d.proposed_probes ? { proposedProbes: d.proposed_probes } : {}), ...(d.watch ? { watch: d.watch } : {}) }
+          : { origin: 'human', replaceDraft: true, ...(d.proposed_probes ? { proposedProbes: d.proposed_probes } : {}) };
+      const next = await this.draft(tenantId, sentence, opts);
+      if (next.rule_id !== ruleId) await update(tenantId, ruleId, (doc) => (doc?.draft ? { ...doc, draft: null, updated_at: now() } : null));
+      return next;
     },
 
     /** Re-scan history with the approved version again (for example after an interrupted run). */

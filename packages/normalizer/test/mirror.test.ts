@@ -44,10 +44,12 @@ describe('the recorded-page mirror', () => {
         { parentId: NODE.app, nextId: null, node: el(501, 'p', { class: 'line' }, [text(502, '₹499')]) },
       ],
       texts: [{ id: NODE.totalText, value: '1,798.00' }],
-      attributes: [{ id: NODE.total, attributes: { id: 'cart-total', 'data-cp-probe': 'cart_total', style: 'color:red' } }],
+      attributes: [{ id: NODE.total, attributes: { id: 'cart-total', 'data-cp-probe': 'cart_total', style: 'color:red', 'aria-label': 'Total for Jane', 'data-email': 'jane@example.com', 'data-phone': '9000012345' } }],
     });
     expect(queryMirror(m, compileSelector('p.line')!)).toEqual([500, 501]);
-    expect(textOf(m, 500)).toBe('Shipping');
+    // Words are not kept, only text with a digit (numbers are all a probe reads).
+    expect(textOf(m, 500)).toBe('');
+    expect(textOf(m, 501)).toBe('₹499');
     expect(textOf(m, NODE.total)).toBe('1,798.00');
     expect(m.n[NODE.total]!.a).toEqual({ class: 'cart-total', id: 'cart-total', 'data-cp-probe': 'cart_total' });
     applyMirrorMutation(m, { removes: [{ id: 501 }] });
@@ -89,6 +91,8 @@ describe('the recorded-page mirror', () => {
           el(7, 'button', { id: 'pay' }, [el(8, 'span', { class: 'amount' }, [text(9, '₹1,299')])]),
           el(10, 'div', { class: 'row' }, [el(11, 'span', {}, [text(12, '42')])]),
           el(13, 'p', {}, [text(14, 'A long paragraph that mentions 3 things and runs well past forty characters')]),
+          // A declared probe is already reported by the SDK: not a new number.
+          el(15, 'span', { id: 'cart-total', 'data-cp-probe': 'cart_total' }, [text(16, '₹1,299')]),
         ]),
       ],
     });

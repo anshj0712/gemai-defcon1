@@ -5,8 +5,9 @@ import { parseProbeValue, type MirrorNode, type MirrorState, type ProbeKind, typ
  * A compact copy of the recorded page, rebuilt from rrweb's full snapshot and mutations, so recorded probes
  * (a CSS selector registered after the fact) can be read from sessions server-side: live in the processor
  * and retroactively in re-scans. It holds only what the recording already holds (text was masked in the
- * browser and scrubbed again at the collector), and only the parts a selector needs: tags, a few attributes,
- * text, and the tree. Pure and JSON-serializable, so it is carried across chunks in the session tail.
+ * browser and scrubbed again at the collector), and only the parts a selector needs: tags, structural
+ * attributes, text that has a digit, and the tree. Pure and JSON-serializable, so it is carried across chunks in
+ * the session tail.
  */
 
 /** Past this many nodes, additions are dropped (and `truncated` is set); demo pages hold a few hundred. */
@@ -15,9 +16,12 @@ export const MAX_MIRROR_NODES = 4000;
 export const MAX_TEXT = 80;
 /** Subtrees kept as one opaque node: nothing a probe reads lives in them, and they are large. */
 const SKIPPED_TAGS = new Set(['svg', 'script', 'style', 'noscript', 'iframe', 'canvas', 'video', 'audio', 'template', 'head', 'picture']);
-const KEPT_ATTRS = new Set(['id', 'class', 'name', 'role', 'type', 'hidden', 'aria-label']);
+/** Structure only. rrweb does not mask attributes, so free-text ones (aria-label, title, alt) are never kept. */
+const KEPT_ATTRS = new Set(['id', 'class', 'name', 'role', 'type', 'hidden']);
 const MAX_ATTRS = 12;
 const MAX_ATTR_VALUE = 64;
+/** An attribute value that could be an email or a long number (an account or phone) is dropped, not kept. */
+const UNSAFE_VALUE = /@|\d{8,}/;
 
 export function emptyMirror(): MirrorState {
   return { n: {}, root: null, size: 0 };
@@ -42,13 +46,22 @@ function keptAttrs(raw: Record<string, unknown> | undefined): Record<string, str
     if (n >= MAX_ATTRS) break;
     if (!(KEPT_ATTRS.has(k) || k.startsWith('data-'))) continue;
     if (v === null || v === undefined || v === false) continue;
-    out[k] = (v === true ? '' : String(v)).slice(0, MAX_ATTR_VALUE);
+    const value = (v === true ? '' : String(v)).slice(0, MAX_ATTR_VALUE);
+    if (UNSAFE_VALUE.test(value)) continue;
+    out[k] = value;
     n += 1;
   }
   return n > 0 ? out : undefined;
 }
 
-const capText = (s: string | null | undefined) => (s ?? '').slice(0, MAX_TEXT);
+/**
+ * Text kept for a text node: only text with a digit (numbers are all a probe reads), capped. Words never reach the
+ * session tail, so the mirror holds no more of the page than its numbers and its structure.
+ */
+const capText = (s: string | null | undefined) => {
+  const t = (s ?? '').slice(0, MAX_TEXT);
+  return /\d/.test(t) ? t : '';
+};
 
 function removeSubtree(m: MirrorState, id: number): void {
   const node = m.n[id];
@@ -180,8 +193,9 @@ export function applyMirrorMutation(m: MirrorState, data: MirrorMutation): void 
     const attrs = { ...node.a };
     for (const [k, v] of Object.entries(a.attributes)) {
       if (!(KEPT_ATTRS.has(k) || k.startsWith('data-'))) continue;
-      if (v === null || v === undefined || v === false) delete attrs[k];
-      else attrs[k] = (v === true ? '' : String(v)).slice(0, MAX_ATTR_VALUE);
+      const value = v === null || v === undefined || v === false ? null : (v === true ? '' : String(v)).slice(0, MAX_ATTR_VALUE);
+      if (value === null || UNSAFE_VALUE.test(value)) delete attrs[k];
+      else attrs[k] = value;
     }
     if (Object.keys(attrs).length > 0) node.a = attrs;
     else delete node.a;
@@ -453,6 +467,8 @@ export function numericCandidates(m: MirrorState, limit = 150): NumericCandidate
     if (node.t.startsWith('#') || node.s) continue;
     const i = info.get(id);
     if (!i || !i.digit || i.childDigit || i.len > 40) continue;
+    // A declared probe (the SDK already reports it) is not a new number, whatever selector would name it.
+    if (node.a && 'data-cp-probe' in node.a) continue;
     // Not inside a control, and not hidden.
     let skip = false;
     for (let cur: number | null = id; cur !== null; cur = m.n[cur]?.p ?? null) {

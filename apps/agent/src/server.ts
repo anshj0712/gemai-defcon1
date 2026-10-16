@@ -4,6 +4,7 @@ import { traceBindings, type Logger } from '@cp/logger';
 import { PROBE_NAME, RecordedProbeSpecSchema, RULE_ID, TENANT_ID } from '@cp/schema';
 import { probeSpecProblem, RuleError, SENTENCE_LIMITS, type RuleService } from './rules/service.js';
 import type { PassResult } from './service.js';
+import type { ChurnWatcher } from './watch/watcher.js';
 
 const DraftBody = z.object({ tenant: z.string().regex(TENANT_ID), sentence: z.string().min(1).max(SENTENCE_LIMITS.max * 2) });
 const ApproveBody = z.object({ tenant: z.string().regex(TENANT_ID), version: z.int().min(1), approved_by: z.string().min(1).max(120).default('merchant') });
@@ -13,6 +14,7 @@ const TenantQuery = z.object({ tenant: z.string().regex(TENANT_ID) });
 const ProbeBody = z.object({ tenant: z.string().regex(TENANT_ID), spec: z.unknown(), by: z.string().min(1).max(120).default('merchant') });
 const ProbeParams = z.object({ name: z.string().regex(PROBE_NAME) });
 const ByBody = z.object({ tenant: z.string().regex(TENANT_ID), by: z.string().min(1).max(120).default('merchant') });
+const RejectBody = ByBody.extend({ note: z.string().max(500).optional() });
 
 /**
  * HTTP surface of the agent service: health, POST /run to trigger a pass now (the local timer, or
@@ -25,6 +27,7 @@ export function buildAgentServer(deps: {
   info: Record<string, unknown>;
   projectId?: string | undefined;
   rules?: RuleService;
+  watcher?: Pick<ChurnWatcher, 'run'>;
 }): FastifyInstance {
   const app = Fastify({
     loggerInstance: deps.logger as FastifyBaseLogger,
@@ -33,6 +36,20 @@ export function buildAgentServer(deps: {
   });
   app.get('/healthz', async () => ({ ok: true, service: 'agent', ...deps.info }));
   app.post('/run', async () => ({ results: await deps.runPass() }));
+
+  // One churn watch pass now (it also runs on its own timer).
+  const watcher = deps.watcher;
+  if (watcher) {
+    app.post('/watch/run', async (req, reply) => {
+      const body = TenantBody.safeParse(req.body);
+      if (!body.success) return reply.code(400).send({ error: 'invalid_request' });
+      try {
+        return { results: await watcher.run(body.data.tenant) };
+      } catch (err) {
+        return reply.code(404).send({ error: 'unknown_tenant', message: err instanceof Error ? err.message : String(err) });
+      }
+    });
+  }
 
   const rules = deps.rules;
   if (rules) {
@@ -61,10 +78,20 @@ export function buildAgentServer(deps: {
     });
     app.post('/rules/:id/reject', async (req, reply) => {
       const p = RuleParams.safeParse(req.params);
-      const body = TenantBody.safeParse(req.body);
+      const body = RejectBody.safeParse(req.body);
       if (!p.success || !body.success) return reply.code(400).send({ error: 'invalid_request' });
       try {
-        return { rule: await rules.reject(body.data.tenant, p.data.id) };
+        return { rule: await rules.reject(body.data.tenant, p.data.id, body.data.by, body.data.note ?? null) };
+      } catch (err) {
+        return fail(reply, err);
+      }
+    });
+    app.post('/rules/:id/redraft', async (req, reply) => {
+      const p = RuleParams.safeParse(req.params);
+      const body = DraftBody.safeParse(req.body);
+      if (!p.success || !body.success) return reply.code(400).send({ error: 'invalid_request' });
+      try {
+        return { rule: await rules.redraft(body.data.tenant, p.data.id, body.data.sentence) };
       } catch (err) {
         return fail(reply, err);
       }

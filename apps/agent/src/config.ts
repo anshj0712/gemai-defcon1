@@ -54,6 +54,19 @@ const AgentEnv = z.object({
   RULE_SUGGEST_MIN_DETECTOR_SHARE: z.coerce.number().min(0).max(1).default(0.5),
   /** Most of the issue's sessions read back from raw for the suggester's probe statistics. */
   RULE_SUGGEST_MAX_SESSIONS: z.coerce.number().int().min(1).default(25),
+  /** The churn watcher: look at recent sessions for numbers that make shoppers leave, and draft a probe and rule (a person approves). */
+  WATCH: boolEnv.default(true),
+  /** How often it looks (ms); 0 disables the timer (POST /watch/run still works). */
+  WATCH_INTERVAL_MS: z.coerce.number().int().min(0).default(60_000),
+  WATCH_WINDOW_DAYS: z.coerce.number().positive().default(7),
+  /** Newest sessions one pass reads (each read once from raw, then cached). */
+  WATCH_MAX_SESSIONS: z.coerce.number().int().positive().default(1000),
+  /** The bar a segment must clear: decided cart sessions in it, abandonment gap, and one-sided p-value. */
+  WATCH_MIN_SEGMENT: z.coerce.number().int().min(2).default(6),
+  WATCH_MIN_LIFT: z.coerce.number().min(0).max(1).default(0.3),
+  WATCH_MAX_P: z.coerce.number().positive().max(1).default(0.01),
+  /** Most hypotheses one pass hands to the churn analyst. */
+  WATCH_MAX_CANDIDATES: z.coerce.number().int().min(1).default(3),
 });
 
 export type AgentConfig = z.infer<typeof AgentEnv>;
