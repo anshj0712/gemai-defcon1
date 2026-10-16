@@ -155,7 +155,7 @@ pnpm sim -- --sessions 300 --seed 42 --concurrency 8   # about 12 minutes; watch
 pnpm sim:check                                          # scores the issues against the ground truth
 ```
 
-The simulator drives the shop in real Chrome. It runs a seeded mix: 20% dead_button, 15% cart_total, 15% checkout_error, 10% qty_price, and 40% clean shoppers. Half of the clean shoppers have a bug flag on but never reach its trigger. qty_price is silent on purpose (see the next section): `sim:check` reports it as "silent until a merchant rule catches it" rather than failing.
+The simulator drives the shop in real Chrome. It runs a seeded mix: 20% dead_button, 15% cart_total, 15% checkout_error, 10% qty_price, 10% ghost_line, and 30% clean shoppers. Half of the clean shoppers have a bug flag on but never reach its trigger. qty_price is silent on purpose (see the next section): `sim:check` reports it as "silent until a merchant rule catches it" rather than failing.
 
 It writes the ground truth to `sim/out/ground-truth.json`, recording for each session its bug, persona, cart value, and whether it ordered or abandoned.
 
@@ -187,6 +187,21 @@ pnpm sim:rescan    # drafts and approves the rule, waits for the re-scan, checks
 ```
 
 `pnpm rescan -- --tenant demo --rule <rule_id>` re-scans history with a rule's approved version from the command line, and is the command a Cloud Run Job would run for large windows.
+
+## The agent suggests a rule (synthetic)
+
+The demo shop's fifth bug, `ghost_line`, makes Remove leave a bag line in the bag at quantity 0 (₹0), and then stop responding. The dead Remove presses open an issue live, but no built-in rule sees the bad state, because every total agrees with the shown lines.
+
+1. **The agent notices.** After the ranker scores a recurring issue, a deterministic trigger (enough sessions, one consistent symptom, no active rule explains it, revenue at risk estimated) asks the rule suggester whether a standing rule would catch it. It sees the issue's evidence and the probe statistics of the issue's own sessions: a bag line's `qty` reads 0.
+2. **It drafts, a person decides.** It proposes one sentence, "Every line in the bag must hold at least one pair, so the number of pairs must never be less than the number of lines in the bag." The same rule author, compiler and dry run as a merchant's sentence turn it into `sum(qty) ≥ count(qty)`. The draft appears on the **Rules** tab under **Suggested by the agent**, with why it was suggested, a link to the issue, and the estimated revenue lost to date over the sessions the dry run flags.
+3. **Approve it.** Exactly as for a merchant's rule: it runs live and re-scans the last 30 days, and the rule's issue is tagged **Found later**.
+
+The other issues (dead coupon button, failing payment) also reach the suggester, but their sessions' numbers are normal, so it declines them. Each issue is asked at most once per change in its nature or size, and a drafted issue never again.
+
+```powershell
+pnpm sim:check     # five bugs: ghost_line is one live issue (qty_price stays silent)
+pnpm sim:suggest   # waits for the agent's draft, checks it, approves it, checks the found-later issue
+```
 
 ## 2. Your laptop against real GCP: supply the keys
 
@@ -236,6 +251,7 @@ Each deploy prints a Logs Explorer link. Services scale to zero by default. Use 
 | `pnpm sim` | Synthetic shoppers with ground truth (`-- --sessions 300 --seed 42 --concurrency 8`) |
 | `pnpm sim:check` | Phase 2 and 3 exit tests: scores the issues against the last run's ground truth, then checks each bug's finding |
 | `pnpm sim:rescan` | Phase 4 exit test: a merchant rule surfaces past qty_price sessions, tagged found later, and time travel shows the difference |
+| `pnpm sim:suggest` | Agent-suggested rules exit test: the agent drafts a rule for the ghost_line issue (origin agent, revenue lost to date), approval surfaces its past sessions tagged found later |
 | `pnpm rescan -- --tenant demo --rule <id>` | Re-scan history with a rule's approved version (the Cloud Run Job command) |
 | `pnpm build:sdk` | Build the one-tag SDK bundle (`apps/sdk/bundle/cp-sdk.js`) |
 | `pnpm smoke` | Phase 1 exit test on a synthetic session |

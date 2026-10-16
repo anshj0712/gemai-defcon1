@@ -31,7 +31,7 @@ apps/
   collector/      Cloud Run: validate, scrub, write to GCS, publish to Pub/Sub
   processor/      Cloud Run: subscription shell, session tail state, run detectors, write signals
   clusterer/      Cloud Run: groups signals into issues (route + element, or rule id) in Firestore, idempotent per signal
-  agent/          ADK agents: triage, root cause, rule author, ranker; scoring lives in src/scoring
+  agent/          ADK agents: triage, root cause, rule author, rule suggester, ranker; scoring lives in src/scoring
   api/            Cloud Run REST API
   dashboard/      React + Vite on Firebase Hosting
   demo-shop/      e-commerce demo with switchable bug flags
@@ -59,7 +59,7 @@ docs/             ARCHITECTURE.md
 
 ## Commands (keep this list current)
 
-Available: `pnpm install`, `pnpm build`, `pnpm typecheck`, `pnpm test` (one package: `pnpm --filter @cp/detectors test`), `pnpm dev` (collector, processor, clusterer, agent, api, demo shop, dashboard; merged logs), `pnpm dev:backend`, `pnpm dev:shop`, `pnpm dev:dashboard`, `pnpm smoke` (Phase 1 exit test on a synthetic session), `pnpm e2e` (real Chrome drives the demo shop and checks the replay and its issue), `pnpm sim -- --sessions 300 --seed 42 --concurrency 8` (synthetic shoppers with ground truth), `pnpm sim:check` (Phase 2 and 3 exit tests), `pnpm sim:rescan` (Phase 4 exit test: a merchant rule surfaces past sessions tagged found later), `pnpm rescan -- --tenant demo --rule <rule_id>` (re-scan history with an approved rule; the Cloud Run Job command), `pnpm build:sdk` (one-tag bundle), `pnpm infra:up` (`-- --dry-run` to preview), `pnpm deploy:collector`, `pnpm deploy:processor`, `pnpm deploy:clusterer`, `pnpm deploy:agent`, `pnpm dev:agent`, `pnpm logs:tail`, `pnpm clean`.
+Available: `pnpm install`, `pnpm build`, `pnpm typecheck`, `pnpm test` (one package: `pnpm --filter @cp/detectors test`), `pnpm dev` (collector, processor, clusterer, agent, api, demo shop, dashboard; merged logs), `pnpm dev:backend`, `pnpm dev:shop`, `pnpm dev:dashboard`, `pnpm smoke` (Phase 1 exit test on a synthetic session), `pnpm e2e` (real Chrome drives the demo shop and checks the replay and its issue), `pnpm sim -- --sessions 300 --seed 42 --concurrency 8` (synthetic shoppers with ground truth), `pnpm sim:check` (Phase 2 and 3 exit tests), `pnpm sim:rescan` (Phase 4 exit test: a merchant rule surfaces past sessions tagged found later), `pnpm sim:suggest` (agent-suggested rules exit test: the agent drafts a rule for the ghost_line issue, then approval surfaces its past sessions tagged found later), `pnpm rescan -- --tenant demo --rule <rule_id>` (re-scan history with an approved rule; the Cloud Run Job command), `pnpm build:sdk` (one-tag bundle), `pnpm infra:up` (`-- --dry-run` to preview), `pnpm deploy:collector`, `pnpm deploy:processor`, `pnpm deploy:clusterer`, `pnpm deploy:agent`, `pnpm dev:agent`, `pnpm logs:tail`, `pnpm clean`.
 
 Runtime mode is one switch: `CP_MODE=local` (default; `.data/` stands in for GCP, no credentials) or `CP_MODE=gcp`. Every setting is documented in `.env.example`.
 
@@ -70,7 +70,7 @@ Runtime mode is one switch: `CP_MODE=local` (default; `.data/` stands in for GCP
 | triage | `GEMINI_MODEL_BULK` | Evidence pack: issue facts, up to 5 signals, error signatures, releases, impact numbers | JSON: title, category, confidence, summary, likely cause, repro steps (built) |
 | root-cause | `GEMINI_MODEL_REASONING` | Triage output plus the evidence pack and a screenshot of the masked replay at the flag (gathered by code before the call, not via tool calls) | JSON: hypothesis, visual check, notes, where to look first (built) |
 | rule-author | `GEMINI_MODEL_REASONING` | A merchant sentence in plain English, plus statistics of the recorded probes (no session data) | Rule JSON (a flat linear form code compiles into probes and an invariant), a dry run, then human approval and a retroactive re-scan (built) |
-| rule-suggester | `GEMINI_MODEL_BULK` | Same evidence pack as triage and the ranker, for a recurring issue not yet explained by an active rule | `{propose, sentence, assumptions, explanation}`; the sentence is handed to rule-author, not compiled directly (planned) |
+| rule-suggester | `GEMINI_MODEL_BULK` | Same evidence pack as triage and the ranker, plus probe statistics over the issue's own sessions, for a recurring issue a deterministic trigger picks (`RULE_SUGGEST_*`) that no active rule explains | `{propose, sentence, assumptions, explanation}`; the sentence is handed to rule-author, not compiled directly; the draft is marked `origin: agent` and still needs human approval (built) |
 | ranker | deterministic core, bounded LLM step | Enriched finding and the priority rule set | Score, tier, and the priority rule ids applied (the LLM may move a finding at most one tier, and only with a cited rule id) (built) |
 
 Every LLM claim must cite evidence ids we supplied; a validator rejects unknown ids. Each finding stores prompt hash, model id, and rule version. Without `GOOGLE_API_KEY` the agents run an offline stand-in (templated, labelled as such); see section 5 of the architecture doc.
@@ -80,4 +80,4 @@ Every LLM claim must cite evidence ids we supplied; a validator rejects unknown 
 - `pnpm test` passes and new logic has tests.
 - No rule above is violated. For SDK, collector, storage, logging, or LLM-input changes, run the `privacy-check` skill.
 - `docs/ARCHITECTURE.md` is updated when an interface, table, or behavior changes.
-- The demo path still works end to end: seeded sessions produce the three expected findings.
+- The demo path still works end to end: seeded sessions produce the expected findings (`pnpm sim:check`), and the retro and suggested-rule paths pass (`pnpm sim:rescan`, `pnpm sim:suggest`).

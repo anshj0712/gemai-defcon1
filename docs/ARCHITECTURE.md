@@ -231,7 +231,7 @@ Build it with the Agent Development Kit, whose TypeScript 2.0 release has graph 
 | Triage | flash-lite | Cluster summary: fingerprint, count, route, top selectors, release, 3 to 5 sample evidence items | JSON: title, category, confidence, likely cause, repro steps |
 | Root cause and verify | flash (reasoning, vision) | Triage output plus tool calls: session samples, DOM diff at time t, error context, screenshot at time t, release diff | JSON: cause hypothesis, visual confirmation yes or no, evidence ids cited |
 | Rule author (built 15 Oct; see section 6) | flash | A merchant sentence such as "cart total must equal line items minus discount plus shipping", plus statistics of the recorded probes | Rule JSON (probes and invariant), a dry run on recent sessions, then human approval |
-| Rule suggester (planned; see section 6) | flash-lite | Same evidence pack as triage and ranker, for a recurring issue not yet explained by any active rule | `{propose, sentence, assumptions, explanation}`; the sentence is handed to the rule author, not compiled directly |
+| Rule suggester (built 17 Oct; see section 6) | flash-lite | Same evidence pack as triage and ranker plus probe statistics over the issue's own sessions, for a recurring issue not yet explained by any active rule (a deterministic trigger decides when) | `{propose, sentence, assumptions, explanation}`; the sentence is handed to the rule author, not compiled directly |
 | Ranker | Deterministic core with a bounded LLM step | Enriched finding and the priority rule set | Score, tier, and the priority rule ids that applied |
 
 Ranking against a rule set. The priority rule set is versioned data in the `rules` table, for example: checkout and payment blockers outrank pricing errors, pricing errors outrank browse-page friction, and a regression appearing right after a release gets a multiplier. Gemini classifies each finding into these buckets and cites the rule ids. The score itself is computed in code:
@@ -373,25 +373,42 @@ A re-scan runs in-process in the agent, capped by `RESCAN_MAX_SESSIONS` (newest 
 - the issue and its finding are tagged found later;
 - time travel as of the approval does not have the finding, now it does, and that finding is the only difference.
 
-### Planned: agent-suggested rules (origination lane)
+### Implemented (17 Oct): agent-suggested rules (a second origination lane)
 
-Not yet built. Today a rule exists only because a person typed the sentence; the agent service explains and ranks issues on its own (section 5) but never proposes that one deserves a standing rule. This closes that gap without a second pipeline: one more way a draft gets created, not a second place rules live.
+Before this, a rule existed only because a person typed the sentence; the agent service explained and ranked issues (section 5) but never proposed that one deserves a standing rule. This closes that gap without a second pipeline: one more way a draft gets created, not a second place rules live. The draft, approve, live, re-scan lifecycle above does not change. An agent-originated draft is a draft like any other: same hot doc, same rule author, same dry run, same human approval before it reaches live traffic or a `rules` row.
 
-The draft, approve, live, re-scan lifecycle above does not change. An agent-originated draft is a draft like any other: same hot doc, same dry run, same human approval before it reaches live traffic or a `rules` row.
+**Trigger** (code, `shouldSuggestRule` in `apps/agent/src/pipeline.ts`, right after the ranker step of `analyze()`). Deterministic, not scheduled (AGENTS rule 1). An issue qualifies only when all hold:
 
-**Trigger** (code, `apps/agent/src/pipeline.ts`, after the ranker step for a cluster). Deterministic, not scheduled, consistent with "code decides, Gemini drafts" (AGENTS rule 1): on a recurring issue — at least `RULE_SUGGEST_MIN_SESSIONS` sessions over at least `RULE_SUGGEST_MIN_DAYS`, same detector and route or region, not already explained by an active `InvariantRule` for the tenant — call the rule suggester once per issue per re-score pass, never per signal.
+- at least `RULE_SUGGEST_MIN_SESSIONS` sessions (default 10) over at least `RULE_SUGGEST_MIN_DAYS` between first and last signal (default 0, because demo sessions span minutes; raise to 1 or more in production);
+- one consistent symptom: the dominant detector holds at least `RULE_SUGGEST_MIN_DETECTOR_SHARE` of its signals (default 0.5). The route is fixed per issue by the clusterer's key; region is not a recorded dimension;
+- not already explained by an active rule: an invariant issue whose anchor is an active rule id (built-in or approved tenant rule) is skipped;
+- its revenue at risk is estimated (`status: ok`), so a suggestion always carries a revenue figure.
 
-**Rule suggester** (`apps/agent/src/agents/rule-suggester.ts`, `GEMINI_MODEL_BULK`, planned prompt `s1`). Input: the same evidence pack triage and the ranker already receive for that issue (selectors, detector, route, region if probed, session and revenue figures); no new evidence plumbing. Output: `{propose: boolean, sentence, assumptions, explanation}`, grounded the same way every other agent is (section 5). It does not emit a compiled rule: a proposal's `sentence` is handed to the existing rule author (`ruleAuthorInput` / `RULE_AUTHOR`) exactly as a merchant's sentence would be, so compiling, validating, and the dry run stay the single code path above.
+`RULE_SUGGEST=false` turns the lane off.
 
-**Draft record.** `RuleDraft` (`packages/schema/src/rules.ts`) gains `origin: 'human' | 'agent'` and, when agent-originated, the triggering `cluster_id` (section 3). Nothing else in the lifecycle table changes.
+**Memory and cost.** The outcome is kept on the finding's hot copy as `rule_suggestion` (`drafted`, `declined`, or `failed`, with the run record). It is not part of the version hash or the BigQuery row, so it never makes a finding version. A `drafted` issue is never suggested again, whatever the merchant does with the draft, and the rule service never lets the agent re-draft a rule id that already has a doc (pending, live, or discarded), so a rejected suggestion does not come back from another issue either. `declined` and `failed` are asked again only when the key changes: the issue's `llm_key` (its nature, or its session count doubling) or the suggester prompt version. So the suggester runs at most once per issue per key, never per signal or per re-score pass. A transient failure (a store read, or the model call itself after its back-off) is not remembered, so the next re-score pass tries again; a step failure never fails the finding.
 
-**Revenue lost so far, not just at risk.** The existing `revenueAtRisk()` (section 5) runs a second time over the draft's own dry-run hits (`sessions_hit`), rather than the forward-looking affected population, so a suggestion carries an estimate of money already lost to the pattern before anyone wrote a rule for it, from the one formula in section 5, not a new one.
+**Rule suggester** (`apps/agent/src/agents/rule-suggester.ts`, `GEMINI_MODEL_BULK`, prompt `s1`). Input, all structured and numeric (AGENTS rule 2):
 
-**Dashboard** (planned; section 7). The Rules tab shows agent-originated drafts in their own panel, separate from a merchant's own sentence box, each with the existing Approve and Reject actions. Approve behaves identically either way: it is still the only thing that writes a `rules` row and starts a re-scan.
+- the same evidence pack triage and the ranker receive (E ids), with the triage summary and revenue figures;
+- probe statistics over this issue's own sessions (P ids): name, snapshots, values per snapshot, min, median, max, routes, read back from raw for at most `RULE_SUGGEST_MAX_SESSIONS` (default 25) of its sessions, the same kind of catalog the rule author sees;
+- the active rules (R ids).
+
+Output: `{propose, sentence, assumptions, explanation}` (`RuleSuggesterOutput`). It proposes only when a recorded number in the issue's sessions is impossible or inconsistent and a rule over the probes would catch it; otherwise it declines with a cited reason. The grounding validator (`validateRuleSuggestion`) rejects unknown ids, a proposal without a sentence or without a P citation, and a decline with a sentence; a rejected answer is retried once, then fails closed. It does not emit a compiled rule: the sentence goes to `ruleService.draft()` and the rule author exactly as a merchant's sentence would, so compiling, validating, and the dry run stay the single code path above.
+
+**Draft record.** `RuleDraft` (`packages/schema/src/rules.ts`) gains `origin: 'human' | 'agent'`, the triggering `cluster_id`, the suggester's run (`suggester`: model, prompt hash, cited explanation), and `revenue_lost`. Drafts stored before 17 Oct have no `origin` and read as human. Two guards apply to agent drafts only: one is refused if that rule id already has a pending draft or a live version (a merchant's draft is never overwritten, and the agent never proposes an edit to a live rule), and one whose dry run flags no session is refused (a rule that flags nothing is noise).
+
+**Revenue lost so far, not just at risk.** Computed once, when the draft and its dry run are made (the dashboard shows the time). For every draft, human or agent, the existing `revenueAtRisk()` (section 5) runs over the dry run's hit sessions instead of an issue's affected sessions: hit sessions with a cart x their average cart x (their abandonment minus the baseline's). The hit set comes from the dry run's own evaluation (an `onHit` callback on `dryRun()`), not a second implementation, so hit count and revenue cannot disagree. Synthetic in the demo.
+
+**Offline.** Without `GOOGLE_API_KEY` the stand-in suggester is a template: it proposes "every line in the bag must hold at least one pair" when an element issue's probe statistics show a bag line with a quantity of 0, and declines otherwise. The offline rule author understands that sentence as a fourth family (`sum(qty) ≥ count(qty)`, rule `bag_lines_have_pairs`).
+
+**Demo.** A fifth synthetic bug, `ghost_line`: pressing Remove on a bag line leaves it in the bag at quantity 0 (shown at ₹0), and Remove then stops responding. Totals agree with the shown lines, so no built-in rule fires, but the dead Remove presses form a live issue on /cart. The suggester sees that issue's sessions record a `qty` of 0 on a bag line and proposes the constant-free rule above, which needs no merchant-only fact (unlike `qty_price`'s ₹17,000 cap). The ghost line is shown at ₹0 on purpose: a charged line with no pairs would also break the merchant's ₹17,000-per-pair rule, and the two demo lanes would catch each other's sessions. The dry run flags the ghost sessions with an estimated revenue lost to date; approving re-scans the past 30 days into a found-later issue. The other demo issues (a dead coupon button, a failing payment) also qualify, but their sessions' numbers are normal, so the suggester declines them.
+
+**Exit test.** `pnpm sim:suggest` (after `pnpm sim`) waits for the agent draft on the ghost_line issue and checks it: origin agent, dry run hits the ghost sessions only, revenue lost estimated; then approves it and checks the re-scan's invariant issue holds the ghost sessions, tagged found later.
 
 **Why one pipeline, not two.** The part with real correctness risk is the compiler, the validator, and the bitemporal re-scan (rules 3 to 5), not where the sentence came from. A second, parallel pipeline risks the two lanes disagreeing on hit rate or revenue, which is exactly the kind of thing a demo gets caught on.
 
-**Risk.** A wrong agent-authored suggestion reads worse than a wrong human one: it looks like the model hallucinated a rule rather than a person misdescribing one. Keep the trigger conservative and the suggester's job narrow (phrasing only, same grounding validator as every other agent); a few good suggestions beat a noisy feed, especially live in front of judges.
+**Risk.** A wrong agent-authored suggestion reads worse than a wrong human one: it looks like the model hallucinated a rule. Hence the conservative trigger, the narrow job (phrasing only, from numbers in the issue's own sessions), the same grounding validator, the zero-hit guard, and a person approving every rule.
 
 ## 7. Dashboard and API
 
@@ -506,6 +523,7 @@ The approver is recorded as `dashboard` until the API has sign-in (Phase 5).
   - the dry run (sessions checked, applicable, flagged, hit rate, already in an issue) with sample replays.
 
   Approving shows the re-scan's progress, and a link to the resulting issue.
+- **Suggested by the agent (17 Oct).** Drafts the rule suggester created (section 6) sit in their own panel, separate from the sentence box, with the same Approve and Discard actions. Each card also shows why the agent suggested it (its cited explanation), a link to the issue that prompted it, and the estimated revenue lost to date over the sessions the dry run flags (synthetic). Every draft, human or agent, shows that figure.
 - **Time travel page.** An as-of slider with ticks at approvals and re-scans, and a valid-time stretch (24 h, 7 d or 30 d before T). It shows "What we knew then" next to "What we know now about the same stretch", with found-later issues highlighted and synthetic totals.
 - **Issue cards and the issue page.** They show "Found later · N sessions" for issues a re-scan added sessions to.
 
@@ -574,9 +592,9 @@ Monorepo layout: see `AGENTS.md`. The `sim` folder matters as much as any servic
 
 Simulator (implemented 6 Oct). `pnpm sim -- --sessions 300 --seed 42 --concurrency 8` drives the demo shop in real Chrome, so the real SDK, probes, collector, processor, and clusterer all run.
 
-- **Plans.** Seeded plans (`sim/src/plan.ts`) give the mix: 20% dead_button, 15% cart_total, 15% checkout_error, 10% qty_price (since 15 Oct; abandons 70%), and 40% clean. qty_price is a retro bug: `sim:check` accepts it having no issue, and `pnpm sim:rescan` checks the merchant rule surfaces it.
-- **Near misses.** Half of the clean sessions carry a bug flag whose trigger they never reach: at most 2 coupon presses, a discounted bag kept at a single item, or a region other than Northeast. A test asserts that affected plans reach their trigger and clean plans never do.
-- **Abandonment.** Affected shoppers abandon more often than the baseline by design (60%, 40%, and 85% against 25%). Every session is recorded (sample rate 1), so the baseline is unbiased.
+- **Plans.** Seeded plans (`sim/src/plan.ts`) give the mix: 20% dead_button, 15% cart_total, 15% checkout_error, 10% qty_price (since 15 Oct; abandons 70%), 10% ghost_line (since 17 Oct; abandons 75%), and 30% clean. qty_price is a retro bug: `sim:check` accepts it having no issue, and `pnpm sim:rescan` checks the merchant rule surfaces it. ghost_line's issue is live; once its agent-suggested rule is approved, the rule's own issue may also hold its sessions, and `sim:check` accepts that second issue. `pnpm sim:suggest` checks the suggestion end to end.
+- **Near misses.** Half of the clean sessions carry a bug flag whose trigger they never reach: at most 2 coupon presses, a discounted bag kept at a single item, a region other than Northeast, quantities kept at 1, or never pressing Remove (only the ghost_line shopper does). A test asserts that affected plans reach their trigger and clean plans never do.
+- **Abandonment.** Affected shoppers abandon more often than the baseline by design (dead_button 60%, cart_total 40%, checkout_error 85%, qty_price 70%, ghost_line 75%, against 25%). Every session is recorded (sample rate 1), so the baseline is unbiased.
 - **Ground truth.** It goes to `sim/out/ground-truth.json`.
 - **Scoring.** `pnpm sim:check` waits for the pipeline to go quiet, then scores the issues against the ground truth: one issue per bug, precision 100%, recall ≥ 90%, no clean session in any issue, no stray issues. It writes `sim/out/check-report.json`.
 
@@ -639,6 +657,7 @@ Demo shop bug flags:
 - `BUG_CART_TOTAL`: with a discount applied and 2 or more items in the bag (the same shoe or different ones), the cart total leaves out the last item, so it differs from the sum of line items.
 - `BUG_CHECKOUT_ERROR`: the payment step throws a JS error and a 500 for one region, producing rage clicks and abandonment.
 - `qty_price` (added 15 Oct for Phase 4): a bag line with quantity 2 or more shows 100x its price, and every total agrees with it. No built-in rule sees it; a merchant rule written later finds the sessions it already hurt.
+- `ghost_line` (added 17 Oct for agent-suggested rules): Remove leaves a bag line in the bag at quantity 0 (₹0), and then stops responding. The dead presses form a live issue; the rule suggester proposes the rule that catches a bag line with no pairs (section 6).
 
 The `sim` generator runs several hundred scripted sessions with randomized behavior, where bug-affected sessions abandon at a higher rate than the rest. Those rates are parameters we choose, so say clearly in the demo and README that the data is synthetic.
 
@@ -658,7 +677,7 @@ The 3-minute video should spend about a third of its time on the retroactive re-
 | 0:00 to 0:20 | Demo shop cart where the total does not match its lines | Users do not report this; they leave | Problem alignment |
 | 0:20 to 0:50 | Click Apply Coupon six times; a quick architecture frame | One script tag streams rrweb sessions through Pub/Sub into our detectors | Technical merit |
 | 0:50 to 1:30 | Findings feed: three findings from hundreds of sessions; open one | Clustered, ranked by revenue at risk; Gemini explains it and confirms it visually; jump to the replay moment | Gen AI implementation |
-| 1:30 to 2:10 | Type a plain-English rule; dry run; approve; re-scan | A new rule finds last week's sessions nobody knew were broken | Innovation |
+| 1:30 to 2:10 | Type a plain-English rule; dry run; approve; re-scan. Then the agent's own suggestion for the ghost line, with revenue lost to date; approve it | A new rule finds last week's sessions nobody knew were broken, and the agent proposes rules from what it sees, but a person still approves | Innovation and Gen AI |
 | 2:10 to 2:40 | Move the as-of control | What we believed then versus what we know now | Innovation and UX |
 | 2:40 to 2:55 | Funnel counts: sessions, signals, clusters, Gemini calls | The LLM only sees clusters, so cost stays flat as traffic grows | Technical merit and impact |
 
