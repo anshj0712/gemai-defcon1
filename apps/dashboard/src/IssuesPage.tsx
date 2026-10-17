@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FindingSummary } from '@cp/schema';
-import { fetchClusters, fetchFindings, type ClusterSummary } from './api';
-import { ago, money, symptomColor, symptomName, TIER_NAMES, tierColor } from './format';
+import { fetchClusters, fetchFindings, fetchQuality, type ClusterSummary, type QualityReport } from './api';
+import { ago, isResolved, money, symptomColor, symptomName, TIER_NAMES, tierColor } from './format';
 
 /** Scored issues first in finding order (tier, then score); issues the agent has not scored yet after them, newest first. */
 export function rankIssues(clusters: readonly ClusterSummary[], findings: readonly FindingSummary[]): { cluster: ClusterSummary; finding: FindingSummary | null }[] {
@@ -23,6 +23,7 @@ export function IssuesPage() {
   const [clusters, setClusters] = useState<ClusterSummary[] | null>(null);
   const [findings, setFindings] = useState<FindingSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [quality, setQuality] = useState<QualityReport | null>(null);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const [bumped, setBumped] = useState<Set<string>>(new Set());
   const [, setTick] = useState(0);
@@ -49,6 +50,7 @@ export function IssuesPage() {
         (e: Error) => alive && setError(e.message),
       );
     void load();
+    void fetchQuality().then((q) => alive && setQuality(q));
     const timer = setInterval(load, REFRESH_MS);
     const clock = setInterval(() => setTick((t) => t + 1), 1000);
     return () => {
@@ -61,10 +63,15 @@ export function IssuesPage() {
   if (error && !clusters) return <p className="muted">Could not load issues ({error}). Is the API running? Try <code>pnpm dev</code>.</p>;
   if (!clusters) return <p className="muted">Loading…</p>;
 
-  const sessions = clusters.reduce((n, c) => n + c.session_count, 0);
-  const signals = clusters.reduce((n, c) => n + c.signal_count, 0);
-  const ranked = rankIssues(clusters, findings);
-  const estimated = findings.filter((f) => f.revenue.status === 'ok' && f.revenue.currency);
+  const all = rankIssues(clusters, findings);
+  const ranked = all.filter((r) => !isResolved(r.finding));
+  const resolved = all.filter((r) => isResolved(r.finding));
+  const open = ranked.map((r) => r.cluster);
+  const sessions = open.reduce((n, c) => n + c.session_count, 0);
+  const signals = open.reduce((n, c) => n + c.signal_count, 0);
+  const estimated = ranked.flatMap((r) => (r.finding && r.finding.revenue.status === 'ok' && r.finding.revenue.currency ? [r.finding] : []));
+  // The one to fix first: the best-ranked open issue the agent has scored and found worth acting on.
+  const first = ranked.find((r) => r.finding && r.finding.status === 'open');
   const currency = estimated[0]?.revenue.currency ?? null;
   const atRisk = estimated.filter((f) => f.revenue.currency === currency).reduce((n, f) => n + f.revenue.revenue_at_risk_minor, 0);
 
@@ -78,7 +85,7 @@ export function IssuesPage() {
       </div>
       <div className="stat-row">
         <div className="stat">
-          <b>{clusters.length}</b>
+          <b>{open.length}</b>
           <span>open issues</span>
         </div>
         <div className="stat">
@@ -94,6 +101,18 @@ export function IssuesPage() {
           <span>revenue at risk (synthetic)</span>
         </div>
       </div>
+
+      {first?.finding && (
+        <a className="fix-first" href={`#/issues/${first.cluster.cluster_id}`}>
+          <span className="fix-first-label">Fix this first</span>
+          <b>{first.finding.title}</b>
+          <span className="fix-first-meta">
+            {first.finding.revenue.status === 'ok' ? `${money(first.finding.revenue.revenue_at_risk_minor, first.finding.revenue.currency)} lost · ` : ''}
+            {TIER_NAMES[first.finding.tier] ?? first.finding.tier} · {first.cluster.session_count} sessions · {first.cluster.route}
+          </span>
+          <span className="fix-first-go">Open →</span>
+        </a>
+      )}
 
       {clusters.length === 0 ? (
         <div className="empty">
@@ -165,6 +184,51 @@ export function IssuesPage() {
           ))}
         </div>
       )}
+
+      <QualityCard q={quality} />
+
+      {resolved.length > 0 && (
+        <details className="resolved">
+          <summary>
+            Resolved · {resolved.length} <span className="muted small-inline">marked fixed and not seen since; one reopens by itself if it comes back</span>
+          </summary>
+          {resolved.map(({ cluster: c, finding: f }) => (
+            <a key={c.cluster_id} href={`#/issues/${c.cluster_id}`} className="resolved-row">
+              <span className="kind">Fixed {f?.resolution ? ago(f.resolution.resolved_at) : ''}</span> {f?.title ?? c.title}
+              <span className="muted small-inline"> · {c.session_count} sessions</span>
+            </a>
+          ))}
+        </details>
+      )}
     </>
+  );
+}
+
+/** How well the system did on a test with known answers. Synthetic shoppers, so we know which ones hit which bug. */
+function QualityCard({ q }: { q: QualityReport | null }) {
+  if (!q) {
+    return (
+      <details className="quality">
+        <summary>Quality: how accurate is this?</summary>
+        <p className="muted small">Not measured yet. Run <code>pnpm sim -- --sessions 240</code>, then <code>pnpm sim:check</code>: it plays synthetic shoppers who hit known bugs and checks what the system found.</p>
+      </details>
+    );
+  }
+  const p = (x: number) => `${Math.round(x * 100)}%`;
+  return (
+    <details className="quality" open>
+      <summary>
+        Quality: found {q.bugs_found} of {q.bugs_expected} planted bugs, {q.false_alarms} false alarm{q.false_alarms === 1 ? '' : 's'} <span className={`verdict-pill ${q.pass ? 'approved' : 'rejected'}`}>{q.pass ? 'test passed' : 'test failed'}</span>
+      </summary>
+      <div className="quality-grid">
+        <div><b>{q.bugs_found}/{q.bugs_expected}</b><span>bugs found, each as one issue</span></div>
+        <div><b>{p(q.lowest_recall)}</b><span>of shoppers caught (worst bug)</span></div>
+        <div><b>{q.clean_sessions_flagged}</b><span>healthy shoppers wrongly flagged</span></div>
+        <div><b>{q.jury.approved}/{q.jury.reviewed}</b><span>AI reports the jury approved</span></div>
+      </div>
+      <p className="muted small">
+        Measured {ago(q.checked_at)} on {q.sessions} synthetic shoppers (seed {q.seed}). We know which shoppers hit which bug, so this is a real score. Not real shoppers.
+      </p>
+    </details>
   );
 }

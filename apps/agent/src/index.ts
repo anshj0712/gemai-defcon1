@@ -5,6 +5,7 @@ import { loadAgentConfig } from './config.js';
 import { createModels } from './llm/models.js';
 import { DEFAULT_PRIORITY_RULES, parseRules, ruleSetVersion } from './scoring/index.js';
 import { createRuleService } from './rules/service.js';
+import { createFindingActions } from './finding-actions.js';
 import { buildAgentServer } from './server.js';
 import { createAgentService, recordRules } from './service.js';
 import { DEFAULT_WATCH_PARAMS } from './watch/contrast.js';
@@ -65,6 +66,7 @@ async function main(): Promise<void> {
     regressionWindowMs: cfg.REGRESSION_WINDOW_HOURS * 3_600_000,
     revenue,
     suspected: (tenant) => watcher?.suspected(tenant) ?? new Set<string>(),
+    ...(cfg.JURY ? { jury: { size: cfg.JURY_SIZE, threshold: cfg.JURY_THRESHOLD } } : {}),
     loadReplay: (tenant, session) => loadReplay(platform, tenant, session, { sinceMs: Date.now() - lookbackMs, maxChunks: cfg.MAX_REPLAY_CHUNKS }),
     // Agent-suggested rules (ARCHITECTURE.md section 6): same rule service, origin agent, a person approves.
     ...(cfg.RULE_SUGGEST
@@ -115,7 +117,7 @@ async function main(): Promise<void> {
     rule_suggest: cfg.RULE_SUGGEST,
     churn_watch: cfg.WATCH ? cfg.WATCH_INTERVAL_MS : false,
   };
-  const app = buildAgentServer({ logger, runPass: () => service.runPass(), info, projectId: pc.projectId, rules: ruleService, ...(watcher ? { watcher } : {}) });
+  const app = buildAgentServer({ logger, runPass: () => service.runPass(), info, projectId: pc.projectId, rules: ruleService, findings: createFindingActions(platform.state), ...(watcher ? { watcher } : {}) });
   await app.listen({ port: cfg.AGENT_PORT, host: cfg.HOST });
   logger.info({ mode: pc.mode, port: cfg.AGENT_PORT, tenants: cfg.AGENT_TENANTS, poll_ms: cfg.AGENT_POLL_MS, ...info }, 'agent ready');
   if (models.offline) logger.warn('no GOOGLE_API_KEY: agents use the offline stand-in (templated text, no visual check). Set GOOGLE_API_KEY for Gemini.');

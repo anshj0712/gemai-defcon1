@@ -16,8 +16,13 @@ export interface Screenshotter {
   close(): Promise<void>;
 }
 
-/** How far past the flagged event the frame is taken, so the (missing) response would be visible. */
+/**
+ * How far past the flagged event the frame is taken for a data rule, so the wrong total has time to show. A click
+ * detector's frame is taken at the click itself: a shopper often moves on within a second (a dead Apply Coupon, then
+ * on to checkout), and a later frame would show some other page.
+ */
 export const AFTER_FLAG_MS = 600;
+export const afterFlagMs = (detector: string): number => (detector === 'invariant_check' ? AFTER_FLAG_MS : 0);
 const MAX_WIDTH = 1280;
 const MAX_HEIGHT = 900;
 
@@ -80,7 +85,7 @@ export class PlaywrightScreenshotter implements Screenshotter {
     if (events.length === 0) throw new Error('no events to render');
     const start = events[0]!.timestamp;
     const end = events.at(-1)!.timestamp;
-    const at = Math.min(end, Math.max(start, marker.replay_ts + AFTER_FLAG_MS));
+    const at = Math.min(end, Math.max(start, marker.replay_ts + afterFlagMs(marker.detector)));
     const offsetMs = at - start;
     const vp = viewport(events, at);
     const browser = await this.launch();

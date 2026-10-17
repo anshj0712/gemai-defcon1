@@ -34,6 +34,7 @@ async function main(): Promise<void> {
     state: platform.state,
     defaultTenant: e.API_DEFAULT_TENANT,
     // Local mode only: the dashboard switches demo bugs on and off, the shop follows.
+    qualityFile: pc.mode === 'local' ? join(pc.localDataDir, 'quality.json') : undefined,
     demoBugs: pc.mode === 'local' ? createFileDemoBugStore(join(pc.localDataDir, 'demo-bugs.json')) : undefined,
     demoStore: (e.DEMO_STORE ?? (pc.mode === 'local' ? 'true' : 'false')) === 'true' ? {} : undefined,
     signalsLookbackMs: e.SIGNALS_LOOKBACK_DAYS * 86_400_000,

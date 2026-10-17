@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { arg, requireServices, say } from './browser.js';
 import { get, waitForFindings, waitForQuiet } from './pipeline.js';
@@ -75,6 +75,33 @@ async function main(): Promise<void> {
   if (offline) say('  (agents ran on the offline stand-in: set GOOGLE_API_KEY for Gemini)');
   report.failures.push(...phase3.failures);
   report.pass = report.pass && phase3.failures.length === 0;
+
+  // The dashboard's Quality card reads this small summary (local mode: next to the other .data/ stand-ins).
+  const all = await get<{ findings: { verdict?: { outcome: string } }[] }>('/v1/findings?limit=200').catch(() => ({ findings: [] }));
+  const expected = report.bugs.filter((b) => b.affected > 0 && !b.silent);
+  const found = expected.filter((b) => b.clusters === 1 && b.recall >= minRecall);
+  const quality = {
+    synthetic: true,
+    checked_at: Date.now(),
+    sessions: report.scored_sessions,
+    seed: truth.seed,
+    bugs_expected: expected.length,
+    bugs_found: found.length,
+    /** Lowest share of a bug's sessions that landed in its one issue. */
+    lowest_recall: expected.length ? Math.min(...expected.map((b) => b.recall)) : 1,
+    false_alarms: report.unexpected_clusters.length,
+    clean_sessions_flagged: report.clean_in_clusters.length,
+    jury: {
+      reviewed: all.findings.filter((f) => f.verdict && f.verdict.outcome !== 'unavailable').length,
+      approved: all.findings.filter((f) => f.verdict?.outcome === 'approved').length,
+      held_back: all.findings.filter((f) => f.verdict?.outcome === 'rejected').length,
+    },
+    bugs: expected.map((b) => ({ bug: b.bug, sessions: b.affected, issues: b.clusters, recall: b.recall, precision: b.precision })),
+    pass: report.pass,
+  };
+  mkdirSync('.data', { recursive: true });
+  writeFileSync(join('.data', 'quality.json'), `${JSON.stringify(quality, null, 2)}
+`);
 
   const reportFile = join(outDir, 'check-report.json');
   writeFileSync(reportFile, `${JSON.stringify({ ...report, findings: phase3.scores, seed: truth.seed, checked_at: Date.now(), min_recall: minRecall }, null, 2)}\n`);

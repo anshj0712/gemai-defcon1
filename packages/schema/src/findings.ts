@@ -93,6 +93,67 @@ export const RankOutput = z.object({
 });
 export type RankOutput = z.infer<typeof RankOutput>;
 
+
+// ---------------------------------------------------------------------------------------------
+// The jury: independent reviewers that score one finished AI report; code applies the gate.
+// ---------------------------------------------------------------------------------------------
+
+export const JUROR_ROLES = ['evidence_auditor', 'skeptic', 'impact_analyst', 'repro_reviewer'] as const;
+export type JurorRole = (typeof JUROR_ROLES)[number];
+
+/** One juror's answer: how far the report deserves to be trusted (1 = fully), and why, citing evidence. */
+export const JurorOutput = z.object({
+  score: z.number().min(0).max(1),
+  rationale: Claim,
+});
+export type JurorOutput = z.infer<typeof JurorOutput>;
+
+/** The judge only writes the ruling in words; the decision was already made by code. */
+export const JudgeOutput = z.object({ ruling: Claim });
+export type JudgeOutput = z.infer<typeof JudgeOutput>;
+
+export interface JurorScore {
+  role: JurorRole;
+  /** Null when the juror could not answer (model failure or a rejected answer). */
+  score: number | null;
+  rationale: Claim | null;
+  model: string;
+  prompt_hash: string;
+  ok: boolean;
+}
+
+/**
+ * The verdict on one report. approved: the mean score is above the threshold, enough jurors answered, and the
+ * deterministic checks passed. unavailable: too few jurors answered, so no verdict either way.
+ */
+export interface FindingVerdict {
+  outcome: 'approved' | 'rejected' | 'unavailable';
+  mean_score: number | null;
+  threshold: number;
+  jurors_asked: number;
+  jurors_answered: number;
+  jurors_needed: number;
+  /** Code checks that must hold whatever the jurors say. */
+  checks: { agents_ok: boolean; visual_ok: boolean };
+  jurors: JurorScore[];
+  /** The judge's words (null if the judge could not answer); the decision itself never depends on them. */
+  ruling: Claim | null;
+  judge_model: string | null;
+  /** Written by code, always present: the decision in one plain sentence. */
+  summary: string;
+  /** True when the offline stand-in answered instead of Gemini. */
+  offline: boolean;
+  /** What the verdict was computed from; the same key reuses it. */
+  key: string;
+  at: number;
+}
+
+/** A person marked the issue fixed. It counts as resolved only until the issue is seen again. */
+export interface FindingResolution {
+  resolved_at: number;
+  resolved_by: string;
+}
+
 // ---------------------------------------------------------------------------------------------
 // The finding document (Firestore hot copy, API) and its evidence pack.
 // ---------------------------------------------------------------------------------------------
@@ -140,7 +201,7 @@ export interface RevenueAtRisk {
 }
 
 export interface AgentRun {
-  agent: 'triage' | 'root_cause' | 'ranker' | 'rule_author' | 'rule_suggester' | 'churn_analyst';
+  agent: 'triage' | 'root_cause' | 'ranker' | 'rule_author' | 'rule_suggester' | 'churn_analyst' | 'juror' | 'judge';
   model: string;
   prompt_hash: string;
   attempts: number;
@@ -223,6 +284,10 @@ export interface Finding {
    * trips). Hot copy only: not part of the version hash or the BigQuery row, so it never makes a version.
    */
   rule_suggestion?: FindingRuleSuggestion;
+  /** The jury's verdict on this report. Hot copy only, like rule_suggestion: not part of the version hash. */
+  verdict?: FindingVerdict;
+  /** Set when a person marked the issue fixed; hot copy only. Resolved while last_seen is not after resolved_at. */
+  resolution?: FindingResolution;
   /** All demo data is synthetic (AGENTS.md rule 10). */
   synthetic: true;
 }

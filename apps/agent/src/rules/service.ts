@@ -498,6 +498,41 @@ export function createRuleService(deps: RuleServiceDeps) {
     },
 
     /**
+     * Undo an approval: switch the live rule off. Live traffic stops using it within the processor's cache time.
+     * Nothing is erased: the signals it already raised and its re-scan stay as history, and the warehouse gets a
+     * new row recording the undo (never an update in place).
+     */
+    async undo(tenantId: string, ruleId: string, by = 'merchant'): Promise<RuleDoc> {
+      requireTenant(tenantId);
+      const undone: { version?: number } = {};
+      const doc = await update(tenantId, ruleId, async (current) => {
+        if (!current) throw new RuleError('not_found', `no rule ${ruleId}`, 404);
+        const active = current.active;
+        if (!active) return null; // already off (a retried click)
+        if (running.has(`${tenantId}/${ruleId}`)) throw new RuleError('conflict', 'a re-scan of this rule is still running; undo when it finishes', 409);
+        const t = now();
+        await deps.warehouse.insert('rules', [
+          {
+            insertId: `${tenantId}:invariant:${ruleVersionOf(active.rule)}:undone`,
+            row: {
+              tenant_id: tenantId,
+              rule_id: ruleId,
+              version: active.rule.version,
+              kind: 'generated',
+              definition: { type: 'invariant_undone', rule_id: ruleId, version: active.rule.version, undone_by: by },
+              created_by: by,
+              recorded_at: t,
+            },
+          },
+        ]);
+        undone.version = active.rule.version;
+        return { ...current, active: null, undone: [...(current.undone ?? []), { version: active.rule.version, undone_at: t, undone_by: by }], updated_at: t };
+      });
+      if (undone.version !== undefined) deps.logger.info({ tenant_id: tenantId, rule_id: ruleId, rule_version: undone.version, undone_by: by }, 'rule undone; no longer live');
+      return doc ?? (await deps.state.getRule(tenantId, ruleId))!;
+    },
+
+    /**
      * Discard the pending draft, with an optional note on why. The verdict stays on the doc: the churn watcher
      * does not raise the same number again unless it grows, and the analyst reads the note next time.
      */

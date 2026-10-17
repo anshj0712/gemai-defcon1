@@ -67,3 +67,6 @@ export const plain = (text: string) =>
     .replace(/\s*\(\s*E\d+(?:\s*,\s*E\d+)*\s*\)/g, '')
     .replace(/\s+([.,;])/g, '$1')
     .trim();
+
+/** Marked fixed, and not seen again since. An issue seen after it was marked is open again. */
+export const isResolved = (f: { resolution?: { resolved_at: number } | undefined; last_seen: number } | null | undefined): boolean => !!f?.resolution && f.last_seen <= f.resolution.resolved_at;

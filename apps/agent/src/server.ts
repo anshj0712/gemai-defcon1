@@ -4,6 +4,7 @@ import { traceBindings, type Logger } from '@cp/logger';
 import { PROBE_NAME, RecordedProbeSpecSchema, RULE_ID, TENANT_ID } from '@cp/schema';
 import { probeSpecProblem, RuleError, SENTENCE_LIMITS, type RuleService } from './rules/service.js';
 import type { PassResult } from './service.js';
+import type { FindingActions } from './finding-actions.js';
 import type { ChurnWatcher } from './watch/watcher.js';
 
 const DraftBody = z.object({ tenant: z.string().regex(TENANT_ID), sentence: z.string().min(1).max(SENTENCE_LIMITS.max * 2) });
@@ -28,6 +29,8 @@ export function buildAgentServer(deps: {
   projectId?: string | undefined;
   rules?: RuleService;
   watcher?: Pick<ChurnWatcher, 'run'>;
+  /** Marking an issue fixed, and reopening it. */
+  findings?: FindingActions;
 }): FastifyInstance {
   const app = Fastify({
     loggerInstance: deps.logger as FastifyBaseLogger,
@@ -48,6 +51,25 @@ export function buildAgentServer(deps: {
       } catch (err) {
         return reply.code(404).send({ error: 'unknown_tenant', message: err instanceof Error ? err.message : String(err) });
       }
+    });
+  }
+
+  const findings = deps.findings;
+  if (findings) {
+    const FindingParams = z.object({ id: z.string().min(1).max(128) });
+    app.post('/findings/:id/resolve', async (req, reply) => {
+      const p = FindingParams.safeParse(req.params);
+      const body = ByBody.safeParse(req.body);
+      if (!p.success || !body.success) return reply.code(400).send({ error: 'invalid_request' });
+      const finding = await findings.resolve(body.data.tenant, p.data.id, body.data.by);
+      return finding ? { finding } : reply.code(404).send({ error: 'not_found', message: 'no such finding' });
+    });
+    app.post('/findings/:id/reopen', async (req, reply) => {
+      const p = FindingParams.safeParse(req.params);
+      const body = TenantBody.safeParse(req.body);
+      if (!p.success || !body.success) return reply.code(400).send({ error: 'invalid_request' });
+      const finding = await findings.reopen(body.data.tenant, p.data.id);
+      return finding ? { finding } : reply.code(404).send({ error: 'not_found', message: 'no such finding' });
     });
   }
 
@@ -72,6 +94,16 @@ export function buildAgentServer(deps: {
       if (!p.success || !body.success) return reply.code(400).send({ error: 'invalid_request' });
       try {
         return { rule: await rules.approve(body.data.tenant, p.data.id, body.data.version, body.data.approved_by) };
+      } catch (err) {
+        return fail(reply, err);
+      }
+    });
+    app.post('/rules/:id/undo', async (req, reply) => {
+      const p = RuleParams.safeParse(req.params);
+      const body = ByBody.safeParse(req.body);
+      if (!p.success || !body.success) return reply.code(400).send({ error: 'invalid_request' });
+      try {
+        return { rule: await rules.undo(body.data.tenant, p.data.id, body.data.by) };
       } catch (err) {
         return fail(reply, err);
       }

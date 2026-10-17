@@ -256,6 +256,31 @@ describe('rule service', () => {
     expect((await state.getRule('demo', doc.rule_id))!.rescan).toMatchObject({ status: 'done', signals_written: 1 });
   });
 
+  it('undo switches a live rule off, keeps what it found, and records the undo as a new row', async () => {
+    await seedDemo();
+    const rules = service();
+    const doc = await rules.draft('demo', SENTENCE);
+    clock += 60_000;
+    await rules.approve('demo', doc.rule_id, 1, 'm');
+    await rules.idle();
+    expect(await warehouse.rows('signals')).toHaveLength(1);
+
+    clock += 60_000;
+    const undoneAt = clock;
+    const off = await rules.undo('demo', doc.rule_id, 'm');
+    expect(off).toMatchObject({ active: null, undone: [{ version: 1, undone_at: undoneAt, undone_by: 'm' }] });
+    expect(await rules.activeRules('demo')).not.toContainEqual(expect.objectContaining({ id: doc.rule_id }));
+    // Nothing erased or changed in place: the signal stays, and the undo is an added row beside the approval.
+    expect(await warehouse.rows('signals')).toHaveLength(1);
+    const ruleRows = await warehouse.rows('rules');
+    expect(ruleRows).toHaveLength(2);
+    expect(ruleRows[1]).toMatchObject({ rule_id: doc.rule_id, definition: { type: 'invariant_undone', undone_by: 'm' }, recorded_at: undoneAt });
+
+    // A second click does nothing more.
+    expect((await rules.undo('demo', doc.rule_id, 'm')).undone).toHaveLength(1);
+    expect(await warehouse.rows('rules')).toHaveLength(2);
+  });
+
   it('drafts with Gemini from a recorded answer and records the model', async () => {
     await seedDemo();
     const gemini = new RecordedLlm({ rule_author: [fixture('rule-author.bag-cap')] }, 'gemini-3.8-flash');

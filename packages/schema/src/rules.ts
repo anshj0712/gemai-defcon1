@@ -370,6 +370,8 @@ export interface RuleDoc {
   versions: { version: number; approved_at: number }[];
   /** Verdicts on this rule's drafts, oldest first (absent on docs written before feedback existed). */
   feedback?: RuleFeedback[];
+  /** Versions a person switched off again (Undo), oldest first. The rule stops running live; what it already found stays. */
+  undone?: { version: number; undone_at: number; undone_by: string }[];
   created_at: number;
   updated_at: number;
   synthetic: true;

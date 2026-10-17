@@ -118,6 +118,29 @@ export function registerRuleRoutes(app: FastifyInstance, deps: RuleRouteDeps): v
     return forward(reply, `/rules/${p.data.id}/reject`, { tenant, by: ACTOR, ...(body.data.note ? { note: body.data.note } : {}) });
   });
 
+  // Undo an approval: the rule stops running live; what it already found stays.
+  app.post('/v1/rules/:id/undo', async (req, reply) => {
+    const p = RuleParams.safeParse(req.params);
+    const tenant = tenantOf(req.query);
+    if (!p.success || !tenant) return reply.code(400).send({ error: 'invalid_request' });
+    return forward(reply, `/rules/${p.data.id}/undo`, { tenant, by: ACTOR });
+  });
+
+  // Mark an issue fixed, or reopen it. It reopens by itself if the issue is seen again.
+  const FindingParams = z.object({ id: z.string().min(1).max(128) });
+  app.post('/v1/findings/:id/resolve', async (req, reply) => {
+    const p = FindingParams.safeParse(req.params);
+    const tenant = tenantOf(req.query);
+    if (!p.success || !tenant) return reply.code(400).send({ error: 'invalid_request' });
+    return forward(reply, `/findings/${encodeURIComponent(p.data.id)}/resolve`, { tenant, by: ACTOR });
+  });
+  app.post('/v1/findings/:id/reopen', async (req, reply) => {
+    const p = FindingParams.safeParse(req.params);
+    const tenant = tenantOf(req.query);
+    if (!p.success || !tenant) return reply.code(400).send({ error: 'invalid_request' });
+    return forward(reply, `/findings/${encodeURIComponent(p.data.id)}/reopen`, { tenant });
+  });
+
   app.post('/v1/rules/:id/rescan', async (req, reply) => {
     const p = RuleParams.safeParse(req.params);
     const tenant = tenantOf(req.query);

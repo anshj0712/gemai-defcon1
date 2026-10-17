@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ChurnReason, DryRun, RescanStatus, RevenueAtRisk, WatchMeta } from '@cp/schema';
-import { ApiError, approveRule, draftRule, fetchClusters, fetchRules, redraftRule, rejectRule, rescanRule, runWatch, type BuiltinRuleView, type ClusterSummary, type RuleView } from './api';
+import { ApiError, approveRule, draftRule, fetchClusters, fetchRules, redraftRule, rejectRule, rescanRule, runWatch, undoRule, type BuiltinRuleView, type ClusterSummary, type RuleView } from './api';
 import { ago, formulaLine, money, pct, time } from './format';
 import { probeValue, ProbesPanel } from './ProbesPanel';
 
@@ -390,6 +390,8 @@ export function RulesPage() {
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [watchNote, setWatchNote] = useState<string | null>(null);
+  // The rule just switched on, shown for a while with an Undo button.
+  const [applied, setApplied] = useState<{ id: string; title: string } | null>(null);
 
   const load = useCallback(
     () =>
@@ -416,7 +418,12 @@ export function RulesPage() {
     setError(null);
     setErrorKey(null);
     try {
-      await fn();
+      const res = (await fn()) as { rule?: { rule_id: string; title: string } } | undefined;
+      if (key.startsWith('approve-') && res?.rule) {
+        setApplied({ id: res.rule.rule_id, title: res.rule.title });
+        setTimeout(() => setApplied((a) => (a?.id === res.rule!.rule_id ? null : a)), 20_000);
+      }
+      if (key.startsWith('undo-')) setApplied(null);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e : new Error(String(e)));
@@ -543,6 +550,11 @@ export function RulesPage() {
               <p className="rule-text">
                 <code>{r.text.active}</code>
               </p>
+              <div className="row-actions">
+                <button className="btn" disabled={busy !== null} onClick={() => void act(`undo-${r.rule_id}`, () => undoRule(r.rule_id))} title="Switch this rule off. What it already found stays as history.">
+                  {busy === `undo-${r.rule_id}` ? 'Switching off…' : 'Undo (switch off)'}
+                </button>
+              </div>
               {r.rescan && <RescanBlock s={r.rescan} issue={issueFor(r.rule_id)} busy={busy !== null} onRescan={() => void act(`rescan-${r.rule_id}`, () => rescanRule(r.rule_id))} />}
             </div>
           );
@@ -562,6 +574,21 @@ export function RulesPage() {
         </div>
       ))}
       <p className="muted small">All sessions and numbers are synthetic.</p>
+      {applied && (
+        <div className="agent-toast applied" role="status">
+          <div className="agent-toast-head">
+            <span className="hyp-badge">Rule is live</span>
+            <button className="agent-toast-close" onClick={() => setApplied(null)} aria-label="Dismiss">
+              ×
+            </button>
+          </div>
+          <b>{applied.title}</b>
+          <p>It now checks every new session, and the last 30 days are being re-scanned. Changed your mind?</p>
+          <button className="btn tiny" disabled={busy !== null} onClick={() => void act(`undo-${applied.id}`, () => undoRule(applied.id))}>
+            Undo
+          </button>
+        </div>
+      )}
     </>
   );
 }

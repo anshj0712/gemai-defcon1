@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { Cluster, Finding } from '@cp/schema';
-import { fetchCluster, fetchFinding, type FindingVersionView } from './api';
+import { fetchCluster, fetchFinding, reopenFinding, resolveFinding, type FindingVersionView } from './api';
 import { Fold, FindingFolds, FindingSummary } from './FindingPanel';
-import { ago, symptomColor, symptomName, time } from './format';
+import { ago, isResolved, symptomColor, symptomName, time } from './format';
 
 /**
  * One issue. At a glance: what it costs, what shoppers hit, the proof, and how to recreate it (compact
@@ -13,6 +13,7 @@ export function IssuePage({ clusterId }: { clusterId: string }) {
   const [cluster, setCluster] = useState<Cluster | null>(null);
   const [finding, setFinding] = useState<{ finding: Finding; versions: FindingVersionView[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -29,6 +30,23 @@ export function IssuePage({ clusterId }: { clusterId: string }) {
     };
   }, [clusterId]);
 
+  const refresh = async () => {
+    const [c, f] = await Promise.all([fetchCluster(clusterId), fetchFinding(clusterId)]);
+    setCluster(c.cluster);
+    setFinding(f);
+  };
+  const toggleFixed = async (fixed: boolean) => {
+    setBusy(true);
+    try {
+      await (fixed ? reopenFinding(clusterId) : resolveFinding(clusterId));
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (error && !cluster) return <p className="muted">Could not load this issue ({error}).</p>;
   if (!cluster) return <p className="muted">Loading issue…</p>;
 
@@ -40,6 +58,25 @@ export function IssuePage({ clusterId }: { clusterId: string }) {
       <p>
         <a href="#/">← Issues</a>
       </p>
+      {finding && (
+        <div className={`fixed-bar${isResolved(finding.finding) ? ' done' : ''}`}>
+          {isResolved(finding.finding) ? (
+            <>
+              <span>✓ Marked fixed {ago(finding.finding.resolution!.resolved_at)}. If shoppers hit it again, it reopens by itself.</span>
+              <button className="btn tiny" disabled={busy} onClick={() => void toggleFixed(true)}>
+                Reopen
+              </button>
+            </>
+          ) : (
+            <>
+              {finding.finding.resolution && <span className="muted small-inline">Seen again after it was marked fixed, so it is open again.</span>}
+              <button className="btn tiny" disabled={busy} onClick={() => void toggleFixed(false)}>
+                {busy ? 'Saving…' : 'Mark as fixed'}
+              </button>
+            </>
+          )}
+        </div>
+      )}
       {finding ? (
         <FindingSummary finding={finding.finding} cluster={cluster} />
       ) : (

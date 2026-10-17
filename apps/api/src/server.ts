@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import Fastify, { LogController, type FastifyBaseLogger, type FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { Logger } from '@cp/logger';
@@ -17,6 +18,8 @@ export interface ApiDeps {
   defaultTenant: string;
   /** Local mode only: which bugs the demo shop has switched on. Absent on GCP, which hides the routes. */
   demoBugs?: DemoBugStore;
+  /** The summary `pnpm sim:check` leaves for the Quality card (local mode): a JSON file path. Absent hides the route. */
+  qualityFile?: string;
   /** The synthetic shop's backend (`/api/*`): local mode, or DEMO_STORE=true. Absent hides the routes. */
   demoStore?: DemoStoreOptions;
   /** Where rule actions are forwarded (the agent service); the local agent when absent. */
@@ -80,6 +83,18 @@ export function buildApi(deps: ApiDeps): FastifyInstance {
   app.get('/healthz', async () => ({ ok: true, service: 'api' }));
 
   // Demo shop bug switches (local mode only). The dashboard writes them, the shop reads them.
+  const qualityFile = deps.qualityFile;
+  if (qualityFile) {
+    // Synthetic accuracy numbers from the last simulator check; 404 until one has run.
+    app.get('/v1/quality', async (_req, reply) => {
+      try {
+        return reply.header('cache-control', 'no-store').send(JSON.parse(readFileSync(qualityFile, 'utf8')));
+      } catch {
+        return reply.code(404).send({ error: 'no_quality_report', message: 'Run pnpm sim -- --sessions 240, then pnpm sim:check, to measure accuracy on synthetic shoppers.' });
+      }
+    });
+  }
+
   const demoBugs = deps.demoBugs;
   if (demoBugs) {
     const view = (live: readonly string[]) => ({ bugs: live, known: DEMO_BUGS, reasons: CHURN_REASONS, synthetic: true });

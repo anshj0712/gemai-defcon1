@@ -101,6 +101,9 @@ export const fetchRules = () => getJson<{ rules: RuleView[]; builtin: BuiltinRul
 export const draftRule = (sentence: string) => postJson<{ rule: RuleDoc }>('/v1/rules/draft', { sentence });
 export const approveRule = (id: string, version: number) => postJson<{ rule: RuleDoc }>(`/v1/rules/${encodeURIComponent(id)}/approve`, { version });
 export const rejectRule = (id: string, note?: string) => postJson<{ rule: RuleDoc }>(`/v1/rules/${encodeURIComponent(id)}/reject`, note ? { note } : {});
+export const undoRule = (id: string) => postJson<{ rule: RuleDoc }>(`/v1/rules/${encodeURIComponent(id)}/undo`, {});
+export const resolveFinding = (id: string) => postJson<{ finding: Finding }>(`/v1/findings/${encodeURIComponent(id)}/resolve`, {});
+export const reopenFinding = (id: string) => postJson<{ finding: Finding }>(`/v1/findings/${encodeURIComponent(id)}/reopen`, {});
 export const rescanRule = (id: string) => postJson<{ rule: RuleDoc }>(`/v1/rules/${encodeURIComponent(id)}/rescan`, {});
 export const redraftRule = (id: string, sentence: string) => postJson<{ rule: RuleDoc }>(`/v1/rules/${encodeURIComponent(id)}/redraft`, { sentence });
 export const runWatch = () => postJson<{ results: unknown }>('/v1/watch/run', {});
@@ -185,3 +188,20 @@ export async function putDemoBugs(bugs: string[]): Promise<DemoBugsView> {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return (await res.json()) as DemoBugsView;
 }
+
+export interface QualityReport {
+  synthetic: true;
+  checked_at: number;
+  sessions: number;
+  seed: number;
+  bugs_expected: number;
+  bugs_found: number;
+  lowest_recall: number;
+  false_alarms: number;
+  clean_sessions_flagged: number;
+  jury: { reviewed: number; approved: number; held_back: number };
+  bugs: { bug: string; sessions: number; issues: number; recall: number; precision: number }[];
+  pass: boolean;
+}
+/** Null until a simulator check has run (the API answers 404). */
+export const fetchQuality = () => getJson<QualityReport>('/v1/quality').catch(() => null);

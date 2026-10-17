@@ -10,6 +10,7 @@ import type {
   FindingDiscovery,
   FindingRow,
   FindingRuleSuggestion,
+  FindingVerdict,
   FindingScreenshot,
   InvariantRule,
   PriorityRule,
@@ -24,6 +25,7 @@ import type {
 import { PROMPT_VERSION, RANKER, rankerInput, ROOT_CAUSE, rootCauseInput, TRIAGE, triageInput } from './agents/prompts.js';
 import { RULE_SUGGESTER, ruleSuggesterInput, SUGGEST_PROMPT_VERSION } from './agents/rule-suggester.js';
 import { buildEvidence, screenshotEvidence } from './evidence.js';
+import { convene, juryKey, type JuryParams } from './jury.js';
 import { validateRank, validateRootCause, validateRuleSuggestion, validateTriage } from './grounding.js';
 import type { ModelSet } from './llm/models.js';
 import { OFFLINE_MODEL_ID } from './llm/offline.js';
@@ -88,6 +90,8 @@ export interface PipelineDeps {
   loadReplay: (tenantId: string, sessionId: string) => Promise<ReplayPayload | null>;
   /** Agent-suggested rules; absent means the step never runs. */
   ruleSuggest?: RuleSuggestDeps;
+  /** The jury that reviews each finished report; absent means findings are not reviewed. */
+  jury?: JuryParams;
 }
 
 /** Per-pass context shared by every cluster of a tenant. */
@@ -152,7 +156,7 @@ async function takeScreenshot(deps: PipelineDeps, c: Cluster, log: Logger): Prom
       const marker = replay?.markers.find((m) => m.signal_id === e.signal_id);
       if (!replay || !marker) continue;
       const { png, offsetMs } = await deps.screenshotter.capture(replay.events, marker);
-      const path = `screenshots/${c.tenant_id}/${c.cluster_id}/${e.signal_id}.png`;
+      const path = `screenshots/${c.tenant_id}/${c.cluster_id}/${e.signal_id}-t${offsetMs}.png`;
       const { uri } = await deps.blob.putIfAbsent(path, png, 'image/png');
       return { png, meta: { signal_id: e.signal_id, session_id: e.session_id, uri, offset_ms: offsetMs, captured_at: (deps.now ?? Date.now)() } };
     } catch (err) {
@@ -233,7 +237,10 @@ export async function analyze(deps: PipelineDeps, cluster: Cluster, ctx: TenantC
 
   const ranked = rank(cluster, revenue, deps.rules, { regression, ranker: enr.ranker });
   if (ranked.rejected) log.info({ reason: ranked.rejected }, 'ranker move not applied');
-  const status: Finding['status'] = enr.root_cause?.visual_check === 'not_confirmed' ? 'suspect' : 'open';
+  const visualOk = enr.root_cause?.visual_check !== 'not_confirmed';
+  const verdict = await reviewReport(deps, cluster, revenue, ranked.tier, enr, key, previous, visualOk, log);
+  // Held back by the screenshot, or by a jury that read the report and did not approve it.
+  const status: Finding['status'] = !visualOk || verdict?.outcome === 'rejected' ? 'suspect' : 'open';
   const modelVersion = [...new Set(enr.runs.map((r) => r.model))].join('+') || 'none';
   const promptHash = sha(enr.runs.map((r) => `${r.agent}:${r.prompt_hash}`).join('|')).slice(0, 16);
 
@@ -274,11 +281,58 @@ export async function analyze(deps: PipelineDeps, cluster: Cluster, ctx: TenantC
     updated_at: now,
     discovery: discoveryOf(cluster),
     ...(suggestion ? { rule_suggestion: suggestion } : {}),
+    ...(verdict ? { verdict } : {}),
+    ...(previous?.resolution ? { resolution: previous.resolution } : {}),
     synthetic: true,
   };
   finding.input_hash = versionHash(finding);
   finding.version = previous && previous.input_hash === finding.input_hash ? previous.version : (previous?.version ?? 0) + 1;
   return finding;
+}
+
+/**
+ * The jury step. The same finished report is not judged twice: the verdict is kept while the finding's own
+ * key and the jury's settings stay the same, and re-convened when a pass could not reach enough jurors.
+ * Without triage output there is no report to review. Never throws.
+ */
+async function reviewReport(
+  deps: PipelineDeps,
+  cluster: Cluster,
+  revenue: RevenueAtRisk,
+  tier: Finding['tier'],
+  enr: Enrichment,
+  llmKeyValue: string,
+  previous: Finding | null,
+  visualOk: boolean,
+  log: Logger,
+): Promise<FindingVerdict | undefined> {
+  if (!deps.jury || !enr.triage) return undefined;
+  const key = juryKey(llmKeyValue, { models: deps.models, params: deps.jury });
+  if (previous?.verdict && previous.verdict.key === key && previous.verdict.outcome !== 'unavailable') return previous.verdict;
+  try {
+    const verdict = await convene(
+      { models: deps.models, params: deps.jury, ...(deps.runOptions ? { runOptions: deps.runOptions } : {}), logger: log, ...(deps.now ? { now: deps.now } : {}) },
+      {
+        report: {
+          title: enr.triage.title,
+          tier,
+          affected_sessions: cluster.session_count,
+          revenue: { status: revenue.status, revenue_at_risk_minor: revenue.revenue_at_risk_minor, currency: revenue.currency, note: revenue.note },
+          triage: enr.triage,
+          root_cause: enr.root_cause,
+          ranker: enr.ranker,
+        },
+        evidence: enr.evidence,
+        checks: { agents_ok: enr.runs.every((r) => r.ok), visual_ok: visualOk },
+        key,
+      },
+    );
+    log.info({ outcome: verdict.outcome, mean: verdict.mean_score, answered: verdict.jurors_answered }, 'jury verdict');
+    return verdict;
+  } catch (err) {
+    log.warn({ err: errorText(err) }, 'the jury could not convene; the report is left unreviewed');
+    return undefined;
+  }
 }
 
 const DAY_MS = 86_400_000;

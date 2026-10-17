@@ -281,6 +281,18 @@ Triggering: a timer every `AGENT_POLL_MS` (default 5 s), or `POST /run`. On Clou
 
 Tests use hand-written fixtures in Gemini's response shape (`apps/agent/test/fixtures`) and the offline stand-in; nothing calls Gemini. They have not been recorded from live Gemini yet, because no key was available when this was built. The screenshot test needs a browser: `CP_BROWSER_TESTS=chrome pnpm --filter @cp/agent test`.
 
+### Implemented (17 Oct): the jury, Undo for rules, Resolved, and the Quality card
+
+**The jury (reports only).** After the triage, root-cause and ranker steps, up to four jurors review the finished report, each in its own call and each blind to the others: the fact checker (does every claim rest on the evidence it cites), the false-alarm hunter, the money-and-priority analyst, and the steps reviewer. Each returns a score from 0 to 1 and a rationale that cites evidence ids (the grounding validator rejects unknown ids). **Code decides**: a report is *approved* when the mean of the jurors who answered is above `JURY_THRESHOLD` (0.66), at least `JURY_SIZE` minus one answered (all of them when fewer than four sit), the three agent steps passed their own checks, and the screenshot did not contradict the report. Otherwise it is *held back* (`status: suspect`, "Needs review"), or *not reviewed* when too few jurors answered (the report is left as it was). The judge only writes the ruling in words; it cannot change the outcome. The verdict (per-juror scores, models, prompt hashes, ruling, the code's own summary line) is stored on the hot copy of the finding as `verdict`, cached by the finding's key, so it is not asked twice and does not make a new version. Settings: `JURY`, `JURY_SIZE`, `JURY_THRESHOLD`. Typed rules are not juried: a person approves them. Code: `apps/agent/src/jury.ts`, `agents/jury.ts`.
+
+**Undo.** `POST /v1/rules/:id/undo` switches an approved rule off. The rule doc's `active` becomes null (the processor stops using it within its rule-cache time), `undone` records the version, who and when, and the `rules` table gets one more row (`definition.type = invariant_undone`); nothing is changed in place and what the rule already found stays as history. Approval itself is unchanged: a person still approves, and the dashboard shows a "Rule is live" notice with an Undo button for 20 seconds, and an Undo button on the live rule card.
+
+**Resolved.** `POST /v1/findings/:id/resolve` and `/reopen` set or clear `resolution` on the finding's hot copy. An issue counts as resolved only while it has not been seen again since (`last_seen <= resolved_at`), so a fix that did not hold reopens by itself. The Issues page leaves resolved issues out of the counts, the revenue total and the "Fix this first" strip, and lists them under Resolved.
+
+**Quality card.** `pnpm sim:check` also writes `.data/quality.json` (bugs planted and found, worst recall, healthy shoppers wrongly flagged, reports the jury approved); the API serves it at `GET /v1/quality` (local mode) and the Issues page shows it. All synthetic.
+
+**Screenshots.** A click detector's frame is now taken at the click, not 600 ms later: shoppers often move on within a second, and a later frame showed another page. A data rule keeps the 600 ms.
+
 ## 6. Bitemporal search and retroactive re-scan
 
 Retroactive re-scan is the feature to demo: change or add a rule, re-run it over the past 30 days, and see which users were already hurt, without overwriting what the system believed at the time.
