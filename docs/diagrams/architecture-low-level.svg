@@ -1,0 +1,257 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" class="d" width="1270" height="1060" viewBox="0 0 1270 1060" role="img" aria-label="Architecture. Browser sessions flow through the collector, Pub/Sub, the processor and the clusterer into Cloud Storage, BigQuery and Firestore. The agent service turns issues into ranked findings, and turns sentences from the churn watcher, a merchant or the rule suggester into rules through one pipeline. A person approves each rule; it then goes live in the processor and a re-scan replays raw chunks into the signals topic. The API and dashboard read the stores and forward rule actions to the agent." xmlns:c2pa="http://c2pa.org/manifest"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpkYjBlMGQ0Ni0wMTRjLTRiNzMtYTE2NS01NjQzOWVhNDA0ZGUAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaKYVWUmu2vJxU/pydApA/WAAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDo1YjY0YzUyYS0yZmI4LTQxN2UtOTNlYi00NjMyODI0ZjQyMGFscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoA8Qia1f8r+ZDW5Vro2hSDAAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFgg/RdP0LR/xo8kKf2rsxDOI2VlHehp0t0xOsgB8rpDkjmkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaJi2Kvb3/gyhLKjDNqLt6OYAAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRMAAAAAAAAAAAAAAAAZGhhc2hYIMlHgejbIBumo5ey/NsfXIbrkk16rfrUt7Hhof8e3BQlZG5hbWVuanVtYmYgbWFuaWZlc3RqZXhjbHVzaW9uc4GiZXN0YXJ0GQLcZmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmRiMGUwZDQ2LTAxNGMtNGI3My1hMTY1LTU2NDM5ZWE0MDRkZS9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOmE5OTZkNzExLWI5ODctNDE2Mi1iM2E4LTNkZTBlYTdiYTI3OHJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCD9F0/QtH/GjyQp/auzEM4jZWUd6GnS3TE6yAHyukOSOaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggJRxy45cRAahxpY5kv86Mnb9lsvlf3hYCz+nxX3daUBCiY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggZxB5domcBamazwtQ0nsA47csS9PHwgmCNgimw4Dbl950Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPRhqR2T/k5OgKrg+5xKEZgDA630zqKEBmjiIuo8BdR8la7OJZ+/Va1/WZhCyqbqSSBBUmtxdgOnFZnJ3QuXviA=</c2pa:manifest></metadata>
+  <title>Churn Preventer Agent: low-level architecture</title>
+  <style>
+:root, svg { --bg:#F1F3F5; --surface:#FFFFFF; --panel:#E7EBEF; --sunk:#F5F7F9; --fg:#17202B; --muted:#566170; --line:#AEB7C2; --hair:#D3D9E0; --gemini:#2F50B5; --gemini-fill:#E5EBFA; --accent:#B4470F; --accent-fill:#FBE9DC; }
+@media (prefers-color-scheme: dark) {
+  :root, svg { --bg:#0F1318; --surface:#171D25; --panel:#131920; --sunk:#1C232D; --fg:#E2E7ED; --muted:#95A0AE; --line:#3A4555; --hair:#262E39; --gemini:#95ABF2; --gemini-fill:#1B2541; --accent:#F0894C; --accent-fill:#3A2214; }
+}
+.d .bgfill { fill: var(--bg); }
+.d text { font-family: "IBM Plex Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif; font-size: 11px; fill: var(--fg); }
+.d .t { font-weight: 600; font-size: 12px; }
+.d .lg { font-size: 15px; }
+.d .m { fill: var(--muted); }
+.d .mono { font-family: "IBM Plex Mono", Consolas, "SFMono-Regular", Menlo, monospace; font-size: 11px; }
+.d .cap { font-family: "IBM Plex Sans Condensed", "Arial Narrow", "Segoe UI", sans-serif; font-weight: 600; font-size: 11.5px; letter-spacing: 0.08em; fill: var(--muted); }
+.d .el { fill: var(--muted); }
+.d .elA { fill: var(--accent); font-weight: 600; }
+.d .gt { fill: var(--gemini); font-weight: 600; }
+.d .box { fill: var(--surface); stroke: var(--line); }
+.d .sub { fill: var(--sunk); stroke: var(--hair); }
+.d .chip { fill: var(--sunk); stroke: var(--line); }
+.d .gem { fill: var(--gemini-fill); stroke: var(--gemini); }
+.d .human { fill: var(--accent-fill); stroke: var(--accent); stroke-width: 1.5; }
+.d .panel { fill: var(--panel); stroke: var(--hair); }
+.d .e, .d .bus { fill: none; stroke: var(--fg); stroke-width: 1.2; }
+.d .loop { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 7 5; }
+.d .mk { fill: var(--fg); }
+.d .mkA { fill: var(--accent); }
+  </style>
+  <defs>
+    <marker id="d1a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk" d="M0,0 L10,5 L0,10 z"/></marker>
+    <marker id="d1b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="mkA" d="M0,0 L10,5 L0,10 z"/></marker>
+  </defs>
+  <rect class="bgfill" x="0" y="0" width="1270" height="1060"/>
+
+  <!-- Feedback rails (drawn first, so boxes sit on top) -->
+  <path class="loop" d="M576 820 V806 H22 V40 H744 V70" marker-end="url(#d1b)"/>
+  <path class="loop" d="M56 848 H12 V24 H992 V117" marker-end="url(#d1b)"/>
+  <text class="elA" x="752" y="60">approved rules · live within 15 s</text>
+  <text class="elA" x="1000" y="60">re-scanned signals</text>
+
+  <!-- Band 1: capture and detect -->
+  <text class="cap" x="40" y="62">CAPTURE AND DETECT · WRITE PATH</text>
+
+  <rect class="box" x="40" y="72" width="170" height="150" rx="6"/>
+  <text class="t" x="52" y="94">Browser</text>
+  <text class="m" x="52" y="110">demo shop · STRIDE</text>
+  <text x="52" y="134">SDK: rrweb + masking</text>
+  <text x="52" y="150">declared probes</text>
+  <text x="52" y="166">net, error, nav events</text>
+  <text x="52" y="182">gzip batches</text>
+  <text x="52" y="198">30 s ring buffer</text>
+
+  <rect class="box" x="258" y="72" width="140" height="150" rx="6"/>
+  <text class="t" x="270" y="94">Collector</text>
+  <text class="m" x="270" y="110">Cloud Run :8080</text>
+  <text x="270" y="134">site-key check</text>
+  <text x="270" y="150">scrub again</text>
+  <text x="270" y="166">assign chunk seq</text>
+
+  <rect class="box" x="446" y="119" width="100" height="56" rx="28"/>
+  <text class="t" x="496" y="143" text-anchor="middle">Pub/Sub</text>
+  <text class="mono" x="496" y="160" text-anchor="middle">events.raw</text>
+  <text class="m" x="496" y="194" text-anchor="middle">ordered by session</text>
+
+  <rect class="box" x="594" y="72" width="300" height="208" rx="6"/>
+  <text class="t" x="606" y="94">Processor</text>
+  <text class="m" x="606" y="110">Cloud Run :8081 · state per session</text>
+  <rect class="sub" x="606" y="120" width="276" height="42" rx="4"/>
+  <text class="t" x="616" y="137">Normalizer</text>
+  <text x="616" y="153">rrweb → clicks, nav, net, errors</text>
+  <rect class="sub" x="606" y="168" width="276" height="42" rx="4"/>
+  <text class="t" x="616" y="185">Probe readers</text>
+  <text x="616" y="201">page mirror → recorded · net → request</text>
+  <rect class="sub" x="606" y="216" width="276" height="56" rx="4"/>
+  <text class="t" x="616" y="233">Detectors</text>
+  <text x="616" y="249">dead_click · rage_click · response_decay</text>
+  <text x="616" y="265">invariant_check → error_correlation</text>
+
+  <rect class="box" x="942" y="119" width="100" height="56" rx="28"/>
+  <text class="t" x="992" y="143" text-anchor="middle">Pub/Sub</text>
+  <text class="mono" x="992" y="160" text-anchor="middle">signals</text>
+
+  <rect class="box" x="1090" y="72" width="170" height="150" rx="6"/>
+  <text class="t" x="1102" y="94">Clusterer</text>
+  <text class="m" x="1102" y="110">Cloud Run :8083</text>
+  <text x="1102" y="134">one issue per bug</text>
+  <text x="1102" y="150">key: route + selector,</text>
+  <text x="1102" y="166">or rule id</text>
+  <text x="1102" y="182">counts found-later</text>
+
+  <line class="e" x1="210" y1="147" x2="257" y2="147" marker-end="url(#d1a)"/>
+  <text class="el" x="234" y="139" text-anchor="middle">ingest</text>
+  <line class="e" x1="398" y1="147" x2="445" y2="147" marker-end="url(#d1a)"/>
+  <text class="el" x="422" y="139" text-anchor="middle">publish</text>
+  <line class="e" x1="546" y1="147" x2="593" y2="147" marker-end="url(#d1a)"/>
+  <text class="el" x="570" y="139" text-anchor="middle">push</text>
+  <line class="e" x1="894" y1="147" x2="941" y2="147" marker-end="url(#d1a)"/>
+  <text class="el" x="918" y="139" text-anchor="middle">publish</text>
+  <line class="e" x1="1042" y1="147" x2="1089" y2="147" marker-end="url(#d1a)"/>
+  <text class="el" x="1066" y="139" text-anchor="middle">push</text>
+
+  <!-- Band 1 to storage -->
+  <line class="e" x1="328" y1="222" x2="328" y2="349" marker-end="url(#d1a)"/>
+  <text class="el" x="336" y="292">raw chunk</text>
+  <line class="e" x1="744" y1="280" x2="744" y2="349" marker-end="url(#d1a)"/>
+  <text class="el" x="752" y="324">signals, chunk index</text>
+  <path class="e" d="M870 280 V306 H1130 V349" marker-end="url(#d1a)"/>
+  <text class="el" x="902" y="300">session tail + mirror</text>
+  <line class="e" x1="1200" y1="222" x2="1200" y2="349" marker-end="url(#d1a)"/>
+  <text class="el" x="1208" y="292">issues</text>
+
+  <!-- Band 2: storage -->
+  <text class="cap" x="40" y="338">STORAGE</text>
+  <rect class="box" x="40" y="350" width="358" height="108" rx="6"/>
+  <text class="t" x="52" y="372">Cloud Storage</text>
+  <text class="m" x="52" y="388">raw chunks · immutable</text>
+  <text class="mono" x="52" y="410">raw/{tenant}/{session}/{seq}.json.gz</text>
+  <text x="52" y="426">written once, never overwritten</text>
+  <text x="52" y="442">replay, dry runs and re-scans read here</text>
+
+  <rect class="box" x="446" y="350" width="448" height="108" rx="6"/>
+  <text class="t" x="458" y="372">BigQuery</text>
+  <text class="m" x="458" y="388">append-only · two clocks on every row</text>
+  <text x="458" y="410">raw_chunks · signals · business_events</text>
+  <text x="458" y="426">rules (builtin, generated, probe) · findings</text>
+  <text x="458" y="442">event_time = valid · ingest_time = transaction</text>
+
+  <rect class="box" x="1090" y="350" width="170" height="108" rx="6"/>
+  <text class="t" x="1102" y="372">Firestore</text>
+  <text class="m" x="1102" y="388">hot copies</text>
+  <text x="1102" y="410">session tails, mirror</text>
+  <text x="1102" y="426">clusters (live issues)</text>
+  <text x="1102" y="442">findings · rules · probes</text>
+
+  <!-- Storage into the agent service -->
+  <line class="e" x1="330" y1="458" x2="330" y2="580" marker-end="url(#d1a)"/>
+  <text class="el" x="338" y="484">reads newest sessions</text>
+  <line class="e" x1="1170" y1="458" x2="1170" y2="554" marker-end="url(#d1a)"/>
+  <text class="el" x="1178" y="484">due issues</text>
+
+  <!-- Band 3: agent service -->
+  <rect class="panel" x="40" y="500" width="1220" height="400" rx="8"/>
+  <text class="t lg" x="56" y="526">Agent service</text>
+  <text class="m" x="56" y="542">Cloud Run :8084 · ADK + Gemini</text>
+
+  <text class="t" x="1092" y="570">Findings, every 5 s</text>
+  <rect class="chip" x="1092" y="580" width="156" height="28" rx="4"/>
+  <text x="1102" y="598">Revenue at risk</text><text class="m" x="1240" y="598" text-anchor="end">code</text>
+  <rect class="chip" x="1092" y="616" width="156" height="28" rx="4"/>
+  <text x="1102" y="634">Base tier</text><text class="m" x="1240" y="634" text-anchor="end">code</text>
+  <rect class="chip" x="1092" y="652" width="156" height="28" rx="4"/>
+  <text x="1102" y="670">Evidence pack</text><text class="m" x="1240" y="670" text-anchor="end">code</text>
+  <rect class="chip gem" x="1092" y="688" width="156" height="28" rx="4"/>
+  <text x="1102" y="706">Triage</text><text class="gt" x="1240" y="706" text-anchor="end">Gemini</text>
+  <rect class="chip" x="1092" y="724" width="156" height="28" rx="4"/>
+  <text x="1102" y="742">Screenshot</text><text class="m" x="1240" y="742" text-anchor="end">Playwright</text>
+  <rect class="chip gem" x="1092" y="760" width="156" height="28" rx="4"/>
+  <text x="1102" y="778">Root cause</text><text class="gt" x="1240" y="778" text-anchor="end">Gemini</text>
+  <rect class="chip gem" x="1092" y="796" width="156" height="28" rx="4"/>
+  <text x="1102" y="814">Ranker</text><text class="gt" x="1240" y="814" text-anchor="end">Gemini</text>
+  <rect class="chip" x="1092" y="832" width="156" height="28" rx="4"/>
+  <text x="1102" y="850">Tier + score</text><text class="m" x="1240" y="850" text-anchor="end">code</text>
+
+  <text class="cap" x="56" y="570">WHERE A RULE SENTENCE COMES FROM</text>
+
+  <rect class="box" x="56" y="582" width="320" height="110" rx="6"/>
+  <text class="t" x="68" y="602">Churn watcher</text>
+  <text class="m" x="364" y="602" text-anchor="end">every 60 s</text>
+  <rect class="chip" x="68" y="614" width="88" height="28" rx="4"/>
+  <text x="112" y="632" text-anchor="middle">Read raw</text>
+  <rect class="chip" x="172" y="614" width="88" height="28" rx="4"/>
+  <text x="216" y="632" text-anchor="middle">Contrast</text>
+  <rect class="chip gem" x="276" y="614" width="88" height="28" rx="4"/>
+  <text x="320" y="632" text-anchor="middle">Churn analyst</text>
+  <line class="e" x1="156" y1="628" x2="171" y2="628" marker-end="url(#d1a)"/>
+  <line class="e" x1="260" y1="628" x2="275" y2="628" marker-end="url(#d1a)"/>
+  <text x="68" y="664">segment vs like-for-like baseline</text>
+  <text x="68" y="680">lift ≥ 0.3, p ≤ 0.01 · proposes a probe</text>
+
+  <rect class="box" x="400" y="582" width="260" height="110" rx="6"/>
+  <text class="t" x="412" y="602">A merchant</text>
+  <text class="m" x="648" y="602" text-anchor="end">Rules tab</text>
+  <text x="412" y="626">types a rule in plain English:</text>
+  <text class="m" x="412" y="644">“the bag subtotal must never be</text>
+  <text class="m" x="412" y="660">more than ₹17,000 × pairs”</text>
+
+  <rect class="box" x="684" y="582" width="376" height="110" rx="6"/>
+  <text class="t" x="696" y="602">Rule suggester</text>
+  <text class="gt" x="1048" y="602" text-anchor="end">Gemini</text>
+  <text x="696" y="626">code triggers it after the ranker when:</text>
+  <text x="696" y="642">≥ 10 sessions · one dominant symptom</text>
+  <text x="696" y="658">no active rule explains the issue</text>
+  <text x="696" y="674">revenue at risk is estimated</text>
+  <path class="e" d="M1092 810 H1076 V637 H1061" marker-end="url(#d1a)"/>
+
+  <path class="bus" d="M216 692 V712 M530 692 V712 M872 692 V712 M130 712 H872"/>
+  <line class="e" x1="130" y1="712" x2="130" y2="735" marker-end="url(#d1a)"/>
+  <text class="el" x="240" y="706">one sentence, plus the watcher’s proposed probe</text>
+
+  <rect class="box gem" x="56" y="736" width="180" height="56" rx="6"/>
+  <text class="t" x="68" y="758">Rule author</text>
+  <text class="gt" x="68" y="775">Gemini · reasoning</text>
+  <rect class="box" x="266" y="736" width="180" height="56" rx="6"/>
+  <text class="t" x="278" y="758">Compile + validate</text>
+  <text class="m" x="278" y="775">code · grounding check</text>
+  <rect class="box" x="476" y="736" width="200" height="56" rx="6"/>
+  <text class="t" x="488" y="758">Dry run</text>
+  <text class="m" x="488" y="775">hits + revenue lost so far</text>
+  <rect class="box" x="706" y="736" width="180" height="56" rx="6"/>
+  <text class="t" x="718" y="758">Draft, pending</text>
+  <text class="m" x="718" y="775">Firestore rule doc</text>
+  <line class="e" x1="236" y1="764" x2="265" y2="764" marker-end="url(#d1a)"/>
+  <line class="e" x1="446" y1="764" x2="475" y2="764" marker-end="url(#d1a)"/>
+  <line class="e" x1="676" y1="764" x2="705" y2="764" marker-end="url(#d1a)"/>
+  <text class="cap" x="906" y="758">RULES SERVICE</text>
+  <text class="m" x="906" y="774">one pipeline for</text>
+  <text class="m" x="906" y="790">every sentence</text>
+
+  <line class="e" x1="796" y1="792" x2="796" y2="819" marker-end="url(#d1a)"/>
+
+  <rect class="box human" x="706" y="820" width="180" height="56" rx="6"/>
+  <text class="t" x="718" y="842">A person decides</text>
+  <text x="718" y="859">approve · change · reject</text>
+  <rect class="box" x="476" y="820" width="200" height="56" rx="6"/>
+  <text class="t" x="488" y="842">Rule recorded</text>
+  <text class="m" x="488" y="859">rules row + probe registry</text>
+  <rect class="box" x="56" y="820" width="390" height="56" rx="6"/>
+  <text class="t" x="68" y="842">Re-scan from raw</text>
+  <text class="m" x="68" y="859">last 30 days · keeps original event_time · tags rescan_id</text>
+  <line class="e" x1="706" y1="848" x2="677" y2="848" marker-end="url(#d1a)"/>
+  <line class="e" x1="476" y1="848" x2="447" y2="848" marker-end="url(#d1a)"/>
+
+  <!-- Band 4: read path -->
+  <line class="e" x1="796" y1="944" x2="796" y2="877" marker-end="url(#d1a)"/>
+  <text class="el" x="804" y="926">approve · reject · draft</text>
+  <line class="e" x1="1170" y1="860" x2="1170" y2="943" marker-end="url(#d1a)"/>
+  <text class="el" x="1178" y="926">findings</text>
+
+  <text class="cap" x="40" y="930">READ PATH</text>
+  <rect class="box" x="40" y="944" width="600" height="100" rx="6"/>
+  <text class="t" x="52" y="966">Dashboard</text>
+  <text class="m" x="52" y="982">React + Vite :5174 · Firebase Hosting planned</text>
+  <text x="52" y="1004">Issues feed · issue page with replay · Signals · Time travel</text>
+  <text x="52" y="1020">Rules: agent suspects · suggested · write · probes</text>
+  <text x="52" y="1036">inbox bell + toast · switches for 13 demo bugs</text>
+
+  <rect class="box" x="700" y="944" width="560" height="100" rx="6"/>
+  <text class="t" x="712" y="966">API</text>
+  <text class="m" x="712" y="982">Cloud Run :8082 · loopback only, no auth yet</text>
+  <text x="712" y="1004">reads Firestore (feed, rules, probes) and BigQuery (as-of)</text>
+  <text x="712" y="1020">replays sessions from Cloud Storage · hosts the demo store</text>
+  <text x="712" y="1036">forwards rule actions to the agent service</text>
+
+  <line class="e" x1="642" y1="994" x2="698" y2="994" marker-start="url(#d1a)" marker-end="url(#d1a)"/>
+  <text class="el" x="670" y="986" text-anchor="middle">REST</text>
+</svg>

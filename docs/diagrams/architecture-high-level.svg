@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" class="d" width="1270" height="484" viewBox="0 0 1270 484" role="img" aria-label="High-level architecture. Every session goes from the shopper's browser through ingest, detect and group to Gemini explanation and ranking, and on to the merchant. Rules start from the churn watcher, the rule suggester or a merchant, go through one draft and dry-run pipeline, and need a person's approval. An approved rule runs on live traffic within 15 seconds and is replayed over the last 30 days of raw sessions. Raw sessions, the bitemporal record and hot state are the three stores." xmlns:c2pa="http://c2pa.org/manifest"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpkMGQ4MjgxNy02ZjkyLTQyMGMtYjRiMi0yMjRiN2M3NDI3N2MAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaBQtemhXmth3E5cBA38k4RIAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDoyNmY0NTQ4Ni0yMmUzLTRhZWEtYWEyOS05NDY5ZTIxZjVjOWZscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoUNONiXx0W57OmbW2selRbwAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFgg6k59s2ZkCIocqriIN3Iw2eQBIYpqAttDmif+U8aZj76kZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaByOwNNGluLjqK3m2muAMUEAAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRMAAAAAAAAAAAAAAAAZGhhc2hYILKlCQWqtzqVJVFtvBo49cr/UeOT6DIbnTeQ30uXO1SbZG5hbWVuanVtYmYgbWFuaWZlc3RqZXhjbHVzaW9uc4GiZXN0YXJ0GQLKZmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmQwZDgyODE3LTZmOTItNDIwYy1iNGIyLTIyNGI3Yzc0Mjc3Yy9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjk1YzBkOWQ1LWM0NTAtNDRiNi04NDFjLTc5OWI0OTFjOTViMnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCDqTn2zZmQIihyquIg3cjDZ5AEhimoC20OaJ/5TxpmPvqJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggJf2JUOq39bdRlzsDBzKxo9dX7a9YBg++9q+sXDUjZo2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggEPuFmNveRb8w9W5H69GN4OmNKYkuaotlOxKUlokAqil0Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQDRese4EBXAnLiY1zb0x048RaizSPJs09ldU2ZXmslr/r4StRZN+XTu5cvuLf3Hf1a9Osf9CDpj+x+Hi0GsxKGs=</c2pa:manifest></metadata>
+  <title>Churn Preventer Agent: high-level architecture</title>
+  <style>
+:root, svg { --bg:#F1F3F5; --surface:#FFFFFF; --panel:#E7EBEF; --sunk:#F5F7F9; --fg:#17202B; --muted:#566170; --line:#AEB7C2; --hair:#D3D9E0; --gemini:#2F50B5; --gemini-fill:#E5EBFA; --accent:#B4470F; --accent-fill:#FBE9DC; }
+@media (prefers-color-scheme: dark) {
+  :root, svg { --bg:#0F1318; --surface:#171D25; --panel:#131920; --sunk:#1C232D; --fg:#E2E7ED; --muted:#95A0AE; --line:#3A4555; --hair:#262E39; --gemini:#95ABF2; --gemini-fill:#1B2541; --accent:#F0894C; --accent-fill:#3A2214; }
+}
+.d .bgfill { fill: var(--bg); }
+.d text { font-family: "IBM Plex Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif; font-size: 11px; fill: var(--fg); }
+.d .t { font-weight: 600; font-size: 12px; }
+.d .lg { font-size: 15px; }
+.d .m { fill: var(--muted); }
+.d .mono { font-family: "IBM Plex Mono", Consolas, "SFMono-Regular", Menlo, monospace; font-size: 11px; }
+.d .cap { font-family: "IBM Plex Sans Condensed", "Arial Narrow", "Segoe UI", sans-serif; font-weight: 600; font-size: 11.5px; letter-spacing: 0.08em; fill: var(--muted); }
+.d .el { fill: var(--muted); }
+.d .elA { fill: var(--accent); font-weight: 600; }
+.d .gt { fill: var(--gemini); font-weight: 600; }
+.d .box { fill: var(--surface); stroke: var(--line); }
+.d .sub { fill: var(--sunk); stroke: var(--hair); }
+.d .chip { fill: var(--sunk); stroke: var(--line); }
+.d .gem { fill: var(--gemini-fill); stroke: var(--gemini); }
+.d .human { fill: var(--accent-fill); stroke: var(--accent); stroke-width: 1.5; }
+.d .panel { fill: var(--panel); stroke: var(--hair); }
+.d .e, .d .bus { fill: none; stroke: var(--fg); stroke-width: 1.2; }
+.d .loop { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 7 5; }
+.d .mk { fill: var(--fg); }
+.d .mkA { fill: var(--accent); }
+  </style>
+  <defs>
+    <marker id="d0a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk" d="M0,0 L10,5 L0,10 z"/></marker>
+    <marker id="d0b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="mkA" d="M0,0 L10,5 L0,10 z"/></marker>
+  </defs>
+  <rect class="bgfill" x="0" y="0" width="1270" height="484"/>
+
+  <text class="cap" x="40" y="58">EVERY SESSION</text>
+
+  <rect class="box" x="40" y="70" width="160" height="96" rx="6"/>
+  <text class="t" x="52" y="94">Shopper’s browser</text>
+  <text x="52" y="112">one script tag</text>
+  <text x="52" y="128">rrweb, inputs masked</text>
+  <text x="52" y="144">probes report numbers</text>
+
+  <rect class="box" x="250" y="70" width="160" height="96" rx="6"/>
+  <text class="t" x="262" y="94">Ingest</text>
+  <text x="262" y="112">Collector scrubs</text>
+  <text x="262" y="128">Pub/Sub keeps each</text>
+  <text x="262" y="144">session in order</text>
+
+  <rect class="box" x="460" y="70" width="160" height="96" rx="6"/>
+  <text class="t" x="472" y="94">Detect</text>
+  <text x="472" y="112">Processor:</text>
+  <text x="472" y="128">5 detectors</text>
+  <text x="472" y="144">+ probe readers</text>
+
+  <rect class="box" x="670" y="70" width="160" height="96" rx="6"/>
+  <text class="t" x="682" y="94">Group</text>
+  <text x="682" y="112">Clusterer:</text>
+  <text x="682" y="128">one issue per bug,</text>
+  <text x="682" y="144">found-later tags</text>
+
+  <rect class="box gem" x="880" y="70" width="160" height="96" rx="6"/>
+  <text class="t" x="892" y="94">Explain + rank</text>
+  <text x="892" y="112">revenue at risk (code)</text>
+  <text class="gt" x="892" y="128">Gemini triage, visual</text>
+  <text class="gt" x="892" y="144">check, ranker</text>
+
+  <rect class="box human" x="1090" y="70" width="160" height="96" rx="6"/>
+  <text class="t" x="1102" y="94">Merchant</text>
+  <text x="1102" y="112">ranked findings,</text>
+  <text x="1102" y="128">replay, time travel,</text>
+  <text x="1102" y="144">approves rules</text>
+
+  <line class="e" x1="200" y1="118" x2="249" y2="118" marker-end="url(#d0a)"/>
+  <text class="el" x="225" y="110" text-anchor="middle">sessions</text>
+  <line class="e" x1="410" y1="118" x2="459" y2="118" marker-end="url(#d0a)"/>
+  <text class="el" x="435" y="110" text-anchor="middle">chunks</text>
+  <line class="e" x1="620" y1="118" x2="669" y2="118" marker-end="url(#d0a)"/>
+  <text class="el" x="645" y="110" text-anchor="middle">signals</text>
+  <line class="e" x1="830" y1="118" x2="879" y2="118" marker-end="url(#d0a)"/>
+  <text class="el" x="855" y="110" text-anchor="middle">issues</text>
+  <line class="e" x1="1040" y1="118" x2="1089" y2="118" marker-end="url(#d0a)"/>
+  <text class="el" x="1065" y="110" text-anchor="middle">findings</text>
+
+  <text class="cap" x="40" y="238">HOW IT LEARNS</text>
+
+  <line class="e" x1="1020" y1="166" x2="1020" y2="249" marker-end="url(#d0a)"/>
+  <text class="el" x="1028" y="212">proposes</text>
+  <line class="e" x1="1170" y1="166" x2="1170" y2="249" marker-end="url(#d0a)"/>
+  <text class="el" x="1178" y="212">writes</text>
+
+  <rect class="box" x="1000" y="250" width="250" height="100" rx="6"/>
+  <text class="t" x="1012" y="272">Rules start three ways</text>
+  <text class="gt" x="1012" y="294">churn watcher · Gemini</text>
+  <text class="gt" x="1012" y="312">rule suggester · Gemini</text>
+  <text x="1012" y="330">a merchant, in plain English</text>
+
+  <rect class="box" x="780" y="250" width="170" height="100" rx="6"/>
+  <text class="t" x="792" y="272">Draft + dry run</text>
+  <text class="gt" x="792" y="292">Gemini drafts the rule</text>
+  <text x="792" y="308">code compiles, checks</text>
+  <text x="792" y="324">revenue lost so far</text>
+
+  <rect class="box human" x="560" y="250" width="170" height="100" rx="6"/>
+  <text class="t" x="572" y="272">A person approves</text>
+  <text x="572" y="292">nothing runs without</text>
+  <text x="572" y="308">a yes on the Rules tab</text>
+
+  <rect class="box" x="250" y="250" width="200" height="100" rx="6"/>
+  <text class="t" x="262" y="272">Re-scan history</text>
+  <text x="262" y="292">last 30 days of raw</text>
+  <text x="262" y="308">sessions, same rule</text>
+  <text x="262" y="324">past victims: found later</text>
+
+  <line class="e" x1="1000" y1="300" x2="951" y2="300" marker-end="url(#d0a)"/>
+  <line class="e" x1="780" y1="300" x2="731" y2="300" marker-end="url(#d0a)"/>
+  <line class="e" x1="560" y1="300" x2="451" y2="300" marker-end="url(#d0a)"/>
+  <text class="el" x="505" y="292" text-anchor="middle">and</text>
+
+  <path class="loop" d="M600 250 V168" marker-end="url(#d0b)"/>
+  <text class="elA" x="608" y="214">live within 15 s</text>
+  <path class="loop" d="M330 250 V205 H500 V168" marker-end="url(#d0b)"/>
+  <text class="elA" x="338" y="197">replayed through Detect</text>
+
+  <text class="cap" x="40" y="382">STORAGE · EVERY STAGE WRITES HERE</text>
+  <line class="e" x1="330" y1="392" x2="330" y2="351" marker-end="url(#d0a)"/>
+  <text class="el" x="338" y="376">reads</text>
+
+  <rect class="box" x="40" y="392" width="410" height="72" rx="6"/>
+  <text class="t" x="52" y="414">Raw sessions</text>
+  <text class="m" x="52" y="432">Cloud Storage · written once, never changed</text>
+  <text class="m" x="52" y="448">which is why history can be replayed</text>
+
+  <rect class="box" x="480" y="392" width="370" height="72" rx="6"/>
+  <text class="t" x="492" y="414">The record</text>
+  <text class="m" x="492" y="432">BigQuery · append-only</text>
+  <text class="m" x="492" y="448">valid time + transaction time on every row</text>
+
+  <rect class="box" x="880" y="392" width="370" height="72" rx="6"/>
+  <text class="t" x="892" y="414">Hot state</text>
+  <text class="m" x="892" y="432">Firestore · live issues, findings,</text>
+  <text class="m" x="892" y="448">rules, probes, session tails</text>
+</svg>
