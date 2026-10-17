@@ -3,7 +3,7 @@ import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import type { Firestore } from '@google-cloud/firestore';
-import type { Cluster, Finding, RuleDoc, SessionTail } from '@cp/schema';
+import type { Cluster, Finding, ProbeDoc, RuleDoc, SessionTail } from '@cp/schema';
 
 /** Result of applying one signal to a cluster. */
 export interface ClusterUpdate {
@@ -49,6 +49,15 @@ export interface StateStore {
   getRule(tenantId: string, ruleId: string): Promise<RuleDoc | null>;
   /** Most recently updated first. */
   listRules(tenantId: string): Promise<RuleDoc[]>;
+
+  /**
+   * Recorded probes: a selector read from the recorded page, registered on the dashboard (or proposed by the agent
+   * and approved with its rule). Written by the agent service only; the processor reads the active ones.
+   */
+  putProbe(probe: ProbeDoc): Promise<void>;
+  getProbe(tenantId: string, name: string): Promise<ProbeDoc | null>;
+  /** Most recently updated first. */
+  listProbes(tenantId: string): Promise<ProbeDoc[]>;
 }
 
 export const TAILS_COLLECTION = 'session_tails';
@@ -57,9 +66,12 @@ export const CLUSTERS_COLLECTION = 'clusters';
 export const CLUSTERED_COLLECTION = 'clustered_signals';
 export const FINDINGS_COLLECTION = 'findings';
 export const RULES_COLLECTION = 'rules';
+export const PROBES_COLLECTION = 'probes';
 
 /** Most rules one tenant may hold (a cardinality guard on the hot copy). */
 export const MAX_RULES_PER_TENANT = 200;
+/** Most recorded probes one tenant may hold. */
+export const MAX_PROBES_PER_TENANT = 200;
 
 const tailId = (tenantId: string, sessionId: string) => `${tenantId}__${sessionId}`;
 const processedId = (tenantId: string, sessionId: string, seq: number) => `${tenantId}__${sessionId}__${seq}`;
@@ -68,6 +80,8 @@ const clusteredId = (tenantId: string, signalId: string) => `${tenantId}__${sign
 const findingDocId = (tenantId: string, findingId: string) => `${tenantId}__${findingId}`;
 const ruleDocId = (tenantId: string, ruleId: string) => `${tenantId}__${ruleId}`;
 const byUpdated = (a: RuleDoc, b: RuleDoc) => b.updated_at - a.updated_at || (a.rule_id < b.rule_id ? -1 : 1);
+const probeDocId = (tenantId: string, name: string) => `${tenantId}__${name}`;
+const probesByUpdated = (a: ProbeDoc, b: ProbeDoc) => b.updated_at - a.updated_at || (a.name < b.name ? -1 : 1);
 
 /**
  * Firestore layout. The tail itself is stored as one gzipped JSON bytes field: it keeps the document
@@ -218,6 +232,28 @@ export class FirestoreStateStore implements StateStore {
     const q = await this.db.collection(RULES_COLLECTION).where('tenant_id', '==', tenantId).limit(MAX_RULES_PER_TENANT).get();
     return q.docs.map((d) => this.decodeRule(d.get('payload'))).filter((r): r is RuleDoc => r !== null).sort(byUpdated);
   }
+
+  async putProbe(p: ProbeDoc): Promise<void> {
+    await this.db
+      .collection(PROBES_COLLECTION)
+      .doc(probeDocId(p.tenant_id, p.name))
+      .set({ tenant_id: p.tenant_id, name: p.name, status: p.status, updated_at: new Date(p.updated_at), payload: gzipSync(JSON.stringify(p)) });
+  }
+
+  private decodeProbe(payload: unknown): ProbeDoc | null {
+    return payload instanceof Uint8Array ? (JSON.parse(gunzipSync(payload).toString('utf8')) as ProbeDoc) : null;
+  }
+
+  async getProbe(tenantId: string, name: string): Promise<ProbeDoc | null> {
+    const snap = await this.db.collection(PROBES_COLLECTION).doc(probeDocId(tenantId, name)).get();
+    return snap.exists ? this.decodeProbe(snap.get('payload')) : null;
+  }
+
+  async listProbes(tenantId: string): Promise<ProbeDoc[]> {
+    // Equality filter only (automatic single-field index); sorted here.
+    const q = await this.db.collection(PROBES_COLLECTION).where('tenant_id', '==', tenantId).limit(MAX_PROBES_PER_TENANT).get();
+    return q.docs.map((d) => this.decodeProbe(d.get('payload'))).filter((p): p is ProbeDoc => p !== null).sort(probesByUpdated);
+  }
 }
 
 /** local mode: one JSON file per document under `<dir>/<collection>/`. No TTL; `pnpm clean` wipes it. */
@@ -344,5 +380,24 @@ export class LocalStateStore implements StateStore {
     const files = (await readdir(dir)).filter((f) => f.startsWith(prefix) && f.endsWith('.json'));
     const all = await Promise.all(files.map(async (f) => JSON.parse(await readFile(join(dir, f), 'utf8')) as RuleDoc));
     return all.sort(byUpdated).slice(0, MAX_RULES_PER_TENANT);
+  }
+
+  async putProbe(p: ProbeDoc): Promise<void> {
+    await this.write(PROBES_COLLECTION, probeDocId(p.tenant_id, p.name), p);
+  }
+
+  async getProbe(tenantId: string, name: string): Promise<ProbeDoc | null> {
+    const file = this.path(PROBES_COLLECTION, probeDocId(tenantId, name));
+    if (!existsSync(file)) return null;
+    return JSON.parse(await readFile(file, 'utf8')) as ProbeDoc;
+  }
+
+  async listProbes(tenantId: string): Promise<ProbeDoc[]> {
+    const dir = join(this.dir, PROBES_COLLECTION);
+    if (!existsSync(dir)) return [];
+    const prefix = `${tenantId}__`;
+    const files = (await readdir(dir)).filter((f) => f.startsWith(prefix) && f.endsWith('.json'));
+    const all = await Promise.all(files.map(async (f) => JSON.parse(await readFile(join(dir, f), 'utf8')) as ProbeDoc));
+    return all.sort(probesByUpdated).slice(0, MAX_PROBES_PER_TENANT);
   }
 }

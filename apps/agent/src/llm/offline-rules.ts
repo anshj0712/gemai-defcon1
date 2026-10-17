@@ -57,7 +57,8 @@ export function offlineRuleAuthor(payload: { evidence?: Item[] }): RuleAuthorOut
   const probes = new Map(items.filter((i) => i.kind === 'probe' && i.name).map((i) => [i.name!, i.id]));
   const need = (...names: string[]) => names.every((n) => probes.has(n));
   const cite = (...names: string[]) => [sid, ...names.map((n) => probes.get(n)!)];
-  const fallback = 'The offline stand-in only understands the example sentences (a per-pair price cap, a discount cap, totals that add up, or at least one pair per bag line). Set GOOGLE_API_KEY to draft any rule with Gemini.';
+  const fallback =
+    'The offline stand-in only understands the example sentences (a per-pair price cap, a discount cap, totals that add up, at least one pair per bag line) and "<probe name> must never be more than <limit>". Set GOOGLE_API_KEY to draft any rule with Gemini.';
 
   // 1. Per-unit cap: subtotal <= amount x number of pairs.
   const perUnit = /more than\s+(.+?)\s+(?:times|x|×|per)\s+(?:the\s+)?(?:number of\s+)?(pairs?|items?|units?|shoes?)/.exec(text);
@@ -143,7 +144,53 @@ export function offlineRuleAuthor(payload: { evidence?: Item[] }): RuleAuthorOut
     };
   }
 
+  // 5. One probe, one limit: "<probe> must never be more than <n>" (or "at least <n>"). The probe is named as it
+  // appears in the catalog (shipping_fee, req_post_api_payment_authorize_ms); this is the form the offline churn
+  // watcher writes, and a merchant can write it too.
+  const single = singleProbeLimit(text, [...probes.keys()]);
+  if (single) {
+    const { probe, op, value, unit } = single;
+    const shown = unit === 'money' ? `₹${(value / 100).toLocaleString('en-IN')}` : unit === 'ms' ? `${(value / 1000).toLocaleString('en-IN')} s` : value.toLocaleString('en-IN');
+    const base = probe.length > 40 ? probe.slice(0, 40).replace(/_+$/, '') : probe;
+    return {
+      understood: true,
+      rule_id: `${base}_${op === 'lte' ? 'at_most' : 'at_least'}_${value}`.slice(0, 63).replace(/_+$/, ''),
+      title: (unit === 'ms' ? `${probe.replace(/^req_/, '').replace(/_ms$/, '').replace(/_/g, ' ')} takes longer than ${shown}` : `${probe.replace(/_/g, ' ')} is ${op === 'lte' ? 'above' : 'below'} ${shown}`).slice(0, 90),
+      left: [term({ kind: 'probe', probe })],
+      op,
+      right: [term({ kind: 'const', value })],
+      tolerance_minor: 0,
+      routes: [],
+      highlight_probe: probe,
+      explanation: { text: `The sentence names the probe ${probe} directly and limits it to ${op === 'lte' ? 'at most' : 'at least'} ${shown} (${value}${unit === 'money' ? ' minor units' : unit === 'ms' ? ' ms' : ''}).`, evidence_ids: cite(probe) },
+      assumptions: unit === 'money' ? ['Money has two decimal places (minor units = amount x 100).'] : unit === 'ms' ? ['Request probes measure milliseconds.'] : [],
+    };
+  }
+
   return notUnderstood(fallback, [sid]);
+}
+
+/** The probe a sentence names (the longest catalog name it contains as a word), with its limit. */
+export function singleProbeLimit(text: string, names: readonly string[]): { probe: string; op: 'lte' | 'gte'; value: number; unit: 'money' | 'ms' | 'number' } | null {
+  const lower = text.toLowerCase();
+  const probe = [...names].sort((a, b) => b.length - a.length).find((n) => new RegExp(`(^|[^a-z0-9_])${n}([^a-z0-9_]|$)`).test(lower));
+  if (!probe) return null;
+  const after = lower.slice(lower.indexOf(probe) + probe.length);
+  const lte = /(never be more than|never more than|must not exceed|no more than|at most|within|under|below|not be more than|≤|<=)/.exec(after);
+  const gte = /(at least|never be less than|never less than|no less than|≥|>=)/.exec(after);
+  const m = lte ?? gte;
+  if (!m) return null;
+  const rest = after.slice(m.index + m[0].length);
+  const op = lte ? 'lte' : 'gte';
+  if (/^\s*(?:₹\s*0(?![\d.,])|0\s*(?:rupees|inr)|free|zero)/.test(rest)) return { probe, op, value: 0, unit: 'money' };
+  const money = /^\s*(?:₹|rs\.?\s*|inr\s*)\s*(\d+(?:,\d+)*(?:\.\d+)?)/.exec(rest);
+  if (money?.[1]) return { probe, op, value: Math.round(Number(money[1].replace(/,/g, '')) * 100), unit: 'money' };
+  const num = /^\s*(\d+(?:,\d+)*(?:\.\d+)?)\s*(milliseconds?|ms|seconds?|secs?|s)?\b/.exec(rest);
+  if (!num?.[1]) return null;
+  const n = Number(num[1].replace(/,/g, ''));
+  const unitWord = num[2] ?? '';
+  if (probe.endsWith('_ms')) return { probe, op, value: Math.round(/^s|^sec/.test(unitWord) ? n * 1000 : n), unit: 'ms' };
+  return { probe, op, value: n, unit: 'number' };
 }
 
 // ---------------------------------------------------------------------------------------------

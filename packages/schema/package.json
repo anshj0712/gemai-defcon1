@@ -13,6 +13,11 @@
       "source": "./src/tags.ts",
       "types": "./dist/tags.d.ts",
       "default": "./dist/tags.js"
+    },
+    "./probe-parse": {
+      "source": "./src/probe-parse.ts",
+      "types": "./dist/probe-parse.d.ts",
+      "default": "./dist/probe-parse.js"
     }
   },
   "types": "./dist/index.d.ts",

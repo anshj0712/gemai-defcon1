@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BUGS, makePlans, pressesRemove, reachesTrigger, SUGGESTED_RULE_BUGS, type Bug } from '../src/plan.js';
+import { DEFAULT_CONFIG, makePlans, NEAR_MISS_BUGS, placesOrder, pressesRemove, reachesCheckout, reachesTrigger, SILENT_BUGS, SUGGESTED_RULE_BUGS, WATCH_BUGS, type Bug } from '../src/plan.js';
 import { evaluate, evaluateRetro, type ClusterLike, type GroundTruth, type TruthSession } from '../src/truth.js';
 
 describe('session plans', () => {
@@ -12,7 +12,8 @@ describe('session plans', () => {
 
   it('follows the bug mix exactly', () => {
     const count = (b: Bug | null) => plans.filter((p) => p.bug === b).length;
-    expect([count('dead_button'), count('cart_total'), count('checkout_error'), count('qty_price'), count('ghost_line'), count(null)]).toEqual([60, 45, 45, 30, 30, 90]);
+    expect([count('dead_button'), count('cart_total'), count('checkout_error'), count('qty_price'), count('ghost_line'), count(null)]).toEqual([24, 21, 21, 18, 18, 78]);
+    for (const b of ['shipping_shock', 'slow_delivery', 'slow_payment', 'slow_stock', 'card_declined', 'returns_hidden', 'support_down', 'recs_sold_out'] as const) expect(count(b)).toBe(15);
   });
 
   it('keeps the ground truth honest: affected plans reach their trigger, clean plans never do', () => {
@@ -29,7 +30,9 @@ describe('session plans', () => {
   it('includes near misses: clean sessions with a bug flag on', () => {
     const nearMisses = plans.filter((p) => p.bug === null && p.flags.length > 0);
     expect(nearMisses.length).toBeGreaterThan(40);
-    for (const bug of BUGS) expect(nearMisses.some((p) => p.flags.includes(bug))).toBe(true);
+    for (const bug of NEAR_MISS_BUGS) expect(nearMisses.some((p) => p.flags.includes(bug))).toBe(true);
+    // Bugs that trigger on any product view or order never ride along on a clean session.
+    for (const p of nearMisses) expect(NEAR_MISS_BUGS).toContain(p.flags[0]);
   });
 
   it('makes affected shoppers abandon more often than the baseline', () => {
@@ -49,7 +52,7 @@ describe('session plans', () => {
 
   it('sends ghost_line sessions to Remove, and never lets a clean session press it', () => {
     const ghost = plans.filter((p) => p.bug === 'ghost_line');
-    expect(ghost.length).toBe(30);
+    expect(ghost.length).toBe(18);
     for (const p of ghost) {
       expect(p).toMatchObject({ persona: 'line_remover', flags: ['ghost_line'], codes: [], qtyIncrements: 0 });
       expect(pressesRemove(p)).toBe(true);
@@ -67,6 +70,35 @@ describe('session plans', () => {
     }
     // Near misses: ghost_line on, but nobody presses Remove, so the session stays clean.
     expect(plans.some((p) => p.bug === null && p.flags.includes('ghost_line'))).toBe(true);
+  });
+
+  it('gives each churn-reason bug its own persona and keeps clean shoppers off its control', () => {
+    const persona: Partial<Record<Bug, string>> = {
+      shipping_shock: 'fee_shocked',
+      slow_delivery: 'eta_reader',
+      slow_payment: 'slow_bank',
+      slow_stock: 'stock_waiter',
+      card_declined: 'declined_card',
+      returns_hidden: 'returns_checker',
+      support_down: 'help_seeker',
+      recs_sold_out: 'rec_clicker',
+    };
+    for (const [bug, name] of Object.entries(persona)) {
+      const group = plans.filter((p) => p.bug === bug);
+      expect(group.length).toBe(15);
+      for (const p of group) expect(p).toMatchObject({ persona: name, flags: [bug], codes: [], qtyIncrements: 0 });
+    }
+    // The fee shows at checkout and the payment bugs at Place Order, so those shoppers always get there.
+    for (const p of plans.filter((x) => x.bug === 'shipping_shock')) expect(reachesCheckout(p)).toBe(true);
+    for (const p of plans.filter((x) => x.bug === 'slow_payment' || x.bug === 'card_declined')) expect(placesOrder(p)).toBe(true);
+    // Only the bug's own persona presses its control.
+    for (const p of plans.filter((x) => !['card_declined', 'returns_hidden', 'support_down', 'recs_sold_out'].includes(x.bug ?? ''))) expect(p.presses).toBe(0);
+  });
+
+  it('lists the bugs that stay silent until a rule exists: the retro bug and the four the watcher finds', () => {
+    expect(WATCH_BUGS).toEqual(['shipping_shock', 'slow_delivery', 'slow_payment', 'slow_stock']);
+    expect(SILENT_BUGS).toEqual(['qty_price', ...WATCH_BUGS]);
+    for (const b of WATCH_BUGS) expect(NEAR_MISS_BUGS).not.toContain(b);
   });
 });
 
@@ -94,12 +126,7 @@ describe('evaluate', () => {
     seed: 1,
     started_at: 0,
     finished_at: 1,
-    config: {
-      mix: { dead_button: 0, cart_total: 0, checkout_error: 0, qty_price: 0, ghost_line: 0 },
-      abandonment: { baseline: 0, dead_button: 0, cart_total: 0, checkout_error: 0, qty_price: 0, ghost_line: 0 },
-      windowShoppers: 0,
-      nearMiss: 0,
-    },
+    config: DEFAULT_CONFIG,
     sessions,
   });
   const c = (id: string, sessions: string[], kind = 'element'): ClusterLike => ({ cluster_id: id, title: id, kind, anchor: 'a', route: '/', sessions, detectors: {} });
@@ -120,6 +147,16 @@ describe('evaluate', () => {
     expect(r.failures.join('\n')).toMatch(/cart_total: recall 0.0%/);
     expect(r.clean_in_clusters.sort()).toEqual(['s_4', 's_5']);
     expect(r.unexpected_clusters.map((u) => u.cluster_id)).toEqual(['stray']);
+  });
+
+  it('treats a watch bug with no issue as silent until the approved rule builds one', () => {
+    const withWatch = [...sessions, s(11, 'shipping_shock'), s(12, 'shipping_shock')];
+    const silent = evaluate(truth(withWatch), [c('dead', ['s_1', 's_2']), c('total', ['s_3'])]);
+    expect(silent.pass).toBe(true);
+    expect(silent.bugs.find((b) => b.bug === 'shipping_shock')).toMatchObject({ silent: true, clusters: 0 });
+    const found = evaluate(truth(withWatch), [c('dead', ['s_1', 's_2']), c('total', ['s_3']), c('fee', ['s_11', 's_12'], 'invariant')]);
+    expect(found.pass).toBe(true);
+    expect(found.bugs.find((b) => b.bug === 'shipping_shock')).toMatchObject({ silent: false, recall: 1, precision: 1, cluster_id: 'fee' });
   });
 
   it('treats a retro bug with no issue as silent, and holds it to the bar once an issue has it', () => {

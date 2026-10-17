@@ -6,15 +6,24 @@ import { BRAND, CATEGORIES, PRODUCTS, SIZES, money, productById, shoeSvg, type P
 import { icons } from './icons';
 
 /**
- * STRIDE: a synthetic store for exercising the pipeline (all data is made up). Five bugs can be switched on
- * with `?bugs=dead_button,cart_total,checkout_error,qty_price,ghost_line` or from the dashboard (localhost:5174):
+ * STRIDE: a synthetic store for exercising the pipeline (all data is made up). Thirteen bugs, one or more per
+ * common churn reason, can be switched on with `?bugs=dead_button,shipping_shock,...` or from the dashboard
+ * (localhost:5174). The store's backend is the API's synthetic store (apps/api/src/demo-store.ts).
  *   dead_button     Apply Coupon silently stops responding after the third click
- *   cart_total      with a discount applied and 2+ items in the bag (same shoe or different), the total skips the last item
- *   checkout_error  the Northeast region gets a 500 and a JS error at payment
- *   qty_price       a line with quantity 2+ shows 100x its price (paise as rupees); the totals agree with it, so only a
- *                   merchant rule written later catches it (the Phase 4 found-later demo)
  *   ghost_line      Remove leaves a bag line in the bag at quantity 0 (₹0) and then stops responding; totals agree, so
  *                   no built-in rule fires (the agent suggests one)
+ *   slow_stock      the stock check behind Add to Bag takes 4 s (the agent proposes a speed rule)
+ *   cart_total      with a discount applied and 2+ items in the bag (same shoe or different), the total skips the last item
+ *   qty_price       a line with quantity 2+ shows 100x its price (paise as rupees); the totals agree with it, so only a
+ *                   merchant rule written later catches it (the Phase 4 found-later demo)
+ *   shipping_shock  the bag says delivery is free; checkout adds ₹499 delivery and handling (the agent proposes a probe)
+ *   slow_delivery   the product page promises delivery in 9–12 days instead of 2–4 (the agent proposes a probe)
+ *   returns_hidden  the Returns policy button on the product page does nothing
+ *   support_down    Chat with us at checkout fails with a 503 and a JS error
+ *   recs_sold_out   Picked for you (bag) suggests sold-out shoes, and Quick add does nothing
+ *   card_declined   every card is declined at payment, and Use another card does nothing
+ *   checkout_error  the Northeast region gets a 500 and a JS error at payment
+ *   slow_payment    payment authorisation hangs 6.5 s, then the bank times out (the agent proposes a speed rule)
  *
  * Rule for this file: every clickable element must visibly do something (navigate, change the
  * page, or make a request). A control that silently does nothing is a real dead click, and only
@@ -31,7 +40,21 @@ declare global {
 // Bug flags and the recorder
 // ---------------------------------------------------------------------------------------------
 
-const BUG_NAMES = ['dead_button', 'cart_total', 'checkout_error', 'qty_price', 'ghost_line'] as const;
+const BUG_NAMES = [
+  'dead_button',
+  'cart_total',
+  'checkout_error',
+  'qty_price',
+  'ghost_line',
+  'shipping_shock',
+  'slow_delivery',
+  'slow_payment',
+  'slow_stock',
+  'card_declined',
+  'returns_hidden',
+  'support_down',
+  'recs_sold_out',
+] as const;
 type Bug = (typeof BUG_NAMES)[number];
 const isBug = (s: string): s is Bug => (BUG_NAMES as readonly string[]).includes(s);
 
@@ -70,6 +93,8 @@ const cp = init({
   siteKey: import.meta.env.VITE_CP_SITE_KEY ?? 'pk_local_demo',
   collectorUrl: import.meta.env.VITE_CP_COLLECTOR ?? 'http://localhost:8080',
   release: 'demo-shop@local',
+  // One route per page type, so a problem on every product page is one issue, not one per shoe.
+  routeFor: (path) => (path.startsWith('/product/') ? '/product/:id' : path.startsWith('/order/') ? '/order/:id' : path),
   // Numbers the invariant rules check (cart total = line totals - discount). Only parsed numbers leave the browser.
   probes: [
     { name: 'cart_total', selector: '[data-cp-probe="cart_total"]' },
@@ -102,7 +127,16 @@ const state = {
   selectedSize: null as string | null,
   view: 'side' as 'side' | 'mirror' | 'tilt' | 'detail',
   sizeAttempts: 0,
+  /** Payment authorisations tried on this visit to checkout (slow_payment hangs only the first). */
+  authAttempts: 0,
 };
+
+/** BUG shipping_shock: what checkout adds for delivery and handling, though the bag says delivery is free. */
+const SHOCK_DELIVERY_MINOR = 49900;
+/** The delivery estimate the product page promises, in business days (BUG slow_delivery: 9–12). */
+const deliveryWindow = () => (bugs.has('slow_delivery') ? '9–12' : '2–4');
+/** The size Quick add picks: in stock for every shoe in the catalog. */
+const QUICK_ADD_SIZE = 'UK 9';
 
 const lineKey = (l: Pick<Line, 'id' | 'size'>) => `${l.id}|${l.size}`;
 
@@ -141,6 +175,12 @@ function totals(display = true): { subtotal: number; discount: number; total: nu
 
 const api = (path: string, body: unknown) =>
   fetch(path, { method: 'POST', headers: { 'content-type': 'application/json', 'x-demo-bugs': [...bugs].join(',') }, body: JSON.stringify(body) });
+const apiGet = (path: string) => fetch(path, { headers: { 'x-demo-bugs': [...bugs].join(',') }, cache: 'no-store' });
+
+/** What checkout charges: the bag total plus delivery (free, unless shipping_shock is on). */
+function checkoutDelivery(): number {
+  return bugs.has('shipping_shock') ? SHOCK_DELIVERY_MINOR : 0;
+}
 
 // ---------------------------------------------------------------------------------------------
 // Building blocks
@@ -269,6 +309,7 @@ function renderProduct(p: Product): void {
         <h1>${esc(p.name)}</h1>
         <p class="kind">${esc(p.kind)}</p>
         <p class="pdp-price price">${priceHtml(p)}</p>
+        <p class="eta" id="delivery-eta">Arrives in ${deliveryWindow()} business days</p>
         <div class="size-head"><span>Select Size</span><span class="muted">UK sizing</span></div>
         <div class="sizes" id="sizes">
           ${SIZES.map((s) => {
@@ -279,7 +320,7 @@ function renderProduct(p: Product): void {
         </div>
         <p class="size-error" id="size-error" hidden>Please select a size.</p>
         <div class="buy-actions">
-          <button type="button" id="add-to-bag" class="pill dark block" data-testid="add-to-bag">Add to Bag</button>
+          <button type="button" id="add-to-bag" class="pill dark block" data-testid="add-to-bag" disabled>Checking stock…</button>
           <button type="button" class="pill outline block" data-action="fav" data-id="${p.id}" aria-pressed="${fav}">${fav ? 'Favourited' : 'Favourite'} ${fav ? icons.heartFilled : icons.heart}</button>
         </div>
         <p class="desc">${esc(p.description)}</p>
@@ -289,8 +330,73 @@ function renderProduct(p: Product): void {
         </ul>
         <details class="acc"><summary>Free Delivery and Returns</summary><p>Free standard delivery on every order. Returns are free within 30 days. (This is a demo: nothing ships.)</p></details>
         <details class="acc"><summary>Reviews (128)</summary><p>★★★★☆ 4.4 average. "Comfortable from day one." Reviews are synthetic.</p></details>
+        <button type="button" id="returns-info" class="link-btn">Returns policy</button>
+        <div class="returns-panel" id="returns-panel" hidden>
+          <p><strong>Free 30-day returns.</strong> Start a return from your order page; we email a prepaid label and refund within 5 days of receiving the pair. (Synthetic policy: nothing ships.)</p>
+        </div>
       </section>
     </div>`;
+  void checkStock(p.id);
+}
+
+/** Add to Bag waits for the stock check (BUG slow_stock: 4 s instead of 150 ms). Only the latest page's answer counts. */
+let stockSeq = 0;
+async function checkStock(id: string): Promise<void> {
+  const mine = ++stockSeq;
+  try {
+    await apiGet(`/api/stock?product=${encodeURIComponent(id)}`);
+  } catch {
+    // The store backend is down: let the shopper try anyway.
+  }
+  const button = document.getElementById('add-to-bag') as HTMLButtonElement | null;
+  if (mine !== stockSeq || !button || document.querySelector<HTMLElement>('.buy')?.dataset.product !== id) return;
+  button.disabled = false;
+  button.textContent = 'Add to Bag';
+}
+
+function toggleReturns(): void {
+  // BUG returns_hidden: the Returns policy button silently does nothing.
+  if (bugs.has('returns_hidden')) return;
+  const panel = document.getElementById('returns-panel');
+  if (panel) panel.hidden = !panel.hidden;
+}
+
+/** Up to three shoes for "Picked for you" on the bag page: ones not already in the bag. */
+function recommendations(): Product[] {
+  const inBag = new Set(state.bag.map((l) => l.id));
+  return PRODUCTS.filter((p) => !inBag.has(p.id)).slice(0, 3);
+}
+
+function recsHtml(): string {
+  const recs = recommendations();
+  if (recs.length === 0) return '';
+  // BUG recs_sold_out: the picks are shoes that have sold out, and Quick add does nothing.
+  const soldOut = bugs.has('recs_sold_out');
+  return `<section class="recs">
+      <h2 class="section-title">Picked for you</h2>
+      <div class="rec-grid">
+        ${recs
+          .map(
+            (p) => `<div class="rec-card">
+              <a href="/product/${p.id}" data-link class="bag-thumb">${shoeSvg(p.colorway, { label: p.name })}</a>
+              <div><p>${esc(p.name)}</p><p class="muted">${soldOut ? 'Only a few left' : esc(p.kind)}</p><p>${money(p.price_minor)}</p></div>
+              <button type="button" class="pill outline rec-add" data-testid="rec-add" data-id="${p.id}">Quick add</button>
+            </div>`,
+          )
+          .join('')}
+      </div>
+    </section>`;
+}
+
+function quickAdd(id: string): void {
+  if (bugs.has('recs_sold_out')) return;
+  const p = productById(id);
+  if (!p) return;
+  const line = state.bag.find((l) => l.id === id && l.size === QUICK_ADD_SIZE);
+  if (line) line.qty += 1;
+  else state.bag.push({ id, size: QUICK_ADD_SIZE, qty: 1 });
+  persist();
+  renderBag();
 }
 
 function bagLines(): string {
@@ -333,6 +439,7 @@ function renderBag(): void {
       <section>
         <h1 class="page-title">Bag</h1>
         <div id="cart-rows">${bagLines()}</div>
+        ${recsHtml()}
       </section>
       <aside class="summary">
         <h2>Summary</h2>
@@ -389,6 +496,8 @@ const field = (id: string, label: string, attrs = '') =>
 function renderCheckout(): void {
   if (state.bag.length === 0) return navigate('/cart');
   const t = totals();
+  const delivery = checkoutDelivery();
+  state.authAttempts = 0;
   app.innerHTML = `
     <div class="checkout-page">
       <form class="checkout-form" id="checkout-form" novalidate>
@@ -409,6 +518,7 @@ function renderCheckout(): void {
           ${field('cvv', 'CVV', 'autocomplete="cc-csc"')}
         </div>
         <p class="error-box" id="checkout-error"></p>
+        <button id="retry-card" type="button" class="pill outline block" hidden>Use another card</button>
         <button id="place-order" type="submit" class="pill dark block">Place Order</button>
         <p class="fine">This is a synthetic demo store. Nothing is charged or shipped.</p>
       </form>
@@ -422,19 +532,57 @@ function renderCheckout(): void {
           .join('')}
         <div class="sum-row"><span>Subtotal</span><span>${money(t.subtotal)}</span></div>
         <div class="sum-row"><span>Discount</span><span>${t.discount > 0 ? `-${money(t.discount)}` : money(0)}</span></div>
-        <div class="sum-row"><span>Delivery</span><span>Free</span></div>
-        <div class="sum-row total"><span>Total</span><span>${money(t.total)}</span></div>
+        <div class="sum-row"><span>Delivery &amp; handling</span><span id="delivery-fee">${delivery > 0 ? money(delivery) : 'Free'}</span></div>
+        <div class="sum-row total"><span>Total</span><span>${money(t.total + delivery)}</span></div>
+        <div class="help-box">
+          <p>Questions about your order?</p>
+          <button id="chat-help" type="button" class="pill outline">Chat with us</button>
+          <p id="chat-msg" class="chat-msg"></p>
+        </div>
       </aside>
     </div>`;
+}
+
+async function startChat(): Promise<void> {
+  const msg = document.getElementById('chat-msg');
+  const res = await api('/api/support/session', {});
+  // BUG support_down: the chat cannot start (503) and the widget throws, so the shopper sees nothing happen.
+  if (!res.ok) throw new Error('support chat unavailable');
+  const data = (await res.json()) as { agent?: string; wait_minutes?: number };
+  if (msg) msg.textContent = `${data.agent ?? 'Support'} will reply in about ${data.wait_minutes ?? 2} minutes.`;
+}
+
+function useAnotherCard(): void {
+  // BUG card_declined: after the decline, Use another card silently does nothing.
+  if (bugs.has('card_declined')) return;
+  document.getElementById('retry-card')!.hidden = true;
+  document.getElementById('checkout-error')!.textContent = 'Enter another card, then place your order again.';
 }
 
 async function placeOrder(form: HTMLFormElement): Promise<void> {
   const button = document.getElementById('place-order') as HTMLButtonElement;
   const errorBox = document.getElementById('checkout-error')!;
   const region = (form.elements.namedItem('region') as HTMLSelectElement).value;
+  const retry = document.getElementById('retry-card')!;
   button.disabled = true;
-  button.textContent = 'Placing Order…';
+  button.textContent = 'Contacting your bank…';
   errorBox.textContent = '';
+  retry.hidden = true;
+  // The bank authorises first (BUG card_declined: always declined; BUG slow_payment: the first try hangs 6.5 s).
+  state.authAttempts += 1;
+  const auth = (await (await api('/api/payment/authorize', { total_minor: totals(false).total + checkoutDelivery(), attempt: state.authAttempts })).json()) as { ok: boolean; reason?: string };
+  if (!auth.ok) {
+    button.disabled = false;
+    button.textContent = 'Place Order';
+    if (auth.reason === 'card_declined') {
+      errorBox.textContent = 'Your card was declined by your bank.';
+      retry.hidden = false;
+    } else {
+      errorBox.textContent = 'Your bank took too long to respond. Please try again.';
+    }
+    return;
+  }
+  button.textContent = 'Placing Order…';
   const res = await api('/api/checkout', { region, total_minor: totals(false).total });
   if (!res.ok) {
     errorBox.textContent = "We couldn't process your payment. Please try again.";
@@ -483,7 +631,17 @@ function renderHelp(): void {
         <li><strong>cart_total</strong>: put 2 or more items in the bag (2 of one shoe, or two different shoes), apply SAVE10, and the total leaves out the last item.</li>
         <li><strong>checkout_error</strong>: choose region Northeast at checkout and Place Order fails.</li>
         <li><strong>ghost_line</strong>: put two shoes in your Bag and press Remove (the bin) on one. It stays in the bag at quantity 0 (₹0), and pressing Remove again does nothing. The totals agree with the lines, so no built-in rule fires: the agent suggests one on the dashboard's Rules tab.</li>
+        <li><strong>qty_price</strong>: press + on a bag line; at quantity 2 it shows 100x its price.</li>
+        <li><strong>slow_stock</strong>: open any shoe; Add to Bag waits 4 seconds on a stock check.</li>
+        <li><strong>shipping_shock</strong>: the bag says delivery is free; checkout adds ₹499 delivery and handling.</li>
+        <li><strong>slow_delivery</strong>: product pages promise delivery in 9–12 days.</li>
+        <li><strong>returns_hidden</strong>: on a product page, Returns policy does nothing.</li>
+        <li><strong>support_down</strong>: at checkout, Chat with us fails.</li>
+        <li><strong>recs_sold_out</strong>: in your Bag, Quick add under Picked for you does nothing.</li>
+        <li><strong>card_declined</strong>: Place Order: the card is declined, and Use another card does nothing.</li>
+        <li><strong>slow_payment</strong>: Place Order waits 6.5 seconds, then the bank times out (a second try works).</li>
       </ul>
+      <p>The agent finds the slow, shipping and delivery bugs on its own: watch the Rules tab for "The agent suspects".</p>
       <h2>Privacy</h2>
       <p>Recording starts only after you accept. Everything you type is masked before it leaves the browser, and payment fields are never captured.</p>
       <p><a href="/" data-link class="pill dark">Back to the store</a></p>
@@ -602,6 +760,11 @@ document.addEventListener('click', (e) => {
   }
   if (target.closest('#apply-coupon')) return void applyCoupon();
   if (target.closest('#add-to-bag')) return addToBag();
+  if (target.closest('#returns-info')) return toggleReturns();
+  if (target.closest('#chat-help')) return void startChat();
+  if (target.closest('#retry-card')) return useAnotherCard();
+  const rec = target.closest<HTMLElement>('.rec-add');
+  if (rec) return quickAdd(rec.dataset.id ?? '');
   if (target.closest('#checkout')) {
     cp.track('checkout_started', { value_minor: totals(false).total, currency: 'INR' });
     return navigate('/checkout');

@@ -1,7 +1,23 @@
 import { BUILTIN_RULES, shortHash } from '@cp/detectors';
 import type { Logger } from '@cp/logger';
+import { compileSelector } from '@cp/normalizer';
 import type { BlobStore, Publisher, StateStore, Warehouse, WarehouseReader } from '@cp/platform';
-import { ruleVersionOf, type InvariantRule, type RawChunkRow, type RevenueAtRisk, type RuleAuthorMeta, type RuleDoc } from '@cp/schema';
+import {
+  isRequestProbe,
+  RecordedProbeSpecSchema,
+  REQUEST_PROBE_PREFIX,
+  ruleVersionOf,
+  type InvariantRule,
+  type ProbeDoc,
+  type ProbePreview,
+  type RawChunkRow,
+  type RecordedProbeSpec,
+  type RevenueAtRisk,
+  type RuleAuthorMeta,
+  type RuleDoc,
+  type RuleFeedback,
+  type WatchMeta,
+} from '@cp/schema';
 import { RULE_AUTHOR, ruleAuthorInput } from '../agents/rule-author.js';
 import { SENTENCE_LIMITS } from '../grounding.js';
 import type { ModelSet } from '../llm/models.js';
@@ -9,7 +25,7 @@ import { OFFLINE_MODEL_ID } from '../llm/offline.js';
 import { runStructured, type RunOptions } from '../llm/run-agent.js';
 import { revenueAtRisk, type RevenueParams } from '../scoring/revenue.js';
 import { compileRule, validateRuleAuthor } from './compile.js';
-import { buildCatalog, dryRun, type ProbeCatalog } from './evaluate.js';
+import { buildCatalog, dryRun, previewProbe, type ProbeCatalog } from './evaluate.js';
 import { initialStatus, runRescan } from './rescan.js';
 import { scanWindow, sessionProbes, type SessionProbes } from './scan.js';
 
@@ -34,7 +50,18 @@ import { scanWindow, sessionProbes, type SessionProbes } from './scan.js';
 export class RuleError extends Error {
   override name = 'RuleError';
   constructor(
-    readonly code: 'unknown_tenant' | 'invalid_sentence' | 'no_probes' | 'not_understood' | 'author_failed' | 'not_found' | 'conflict' | 'no_hits',
+    readonly code:
+      | 'unknown_tenant'
+      | 'invalid_sentence'
+      | 'no_probes'
+      | 'not_understood'
+      | 'author_failed'
+      | 'not_found'
+      | 'conflict'
+      | 'no_hits'
+      | 'invalid_probe'
+      | 'probe_reads_nothing'
+      | 'probe_in_use',
     message: string,
     readonly status: number,
     readonly author: RuleAuthorMeta | null = null,
@@ -57,20 +84,71 @@ export interface RuleServiceDeps {
   rescan: { sessions: number; days: number; concurrency: number };
   /** The revenue-at-risk parameters, for revenue already lost over a draft's dry-run hits. */
   revenue: RevenueParams;
+  /** Shoppers the churn watcher suspects: kept out of the revenue baseline like shoppers in an issue. */
+  suspected?: (tenantId: string) => ReadonlySet<string>;
   runOptions?: RunOptions;
   now?: () => number;
 }
 
-/** A draft written from the rule suggester's sentence (see pipeline.ts); omitted for a merchant's. */
+/** A draft written from the rule suggester's or the churn watcher's sentence; omitted for a merchant's. */
 export interface AgentDraftOptions {
   origin: 'agent';
-  /** The issue whose evidence prompted the suggestion. */
-  cluster_id: string;
+  /** The issue whose evidence prompted the suggestion; null when the churn watcher found it in the stream. */
+  cluster_id: string | null;
   suggester: RuleAuthorMeta;
+  /** Recorded probes the rule needs that are not registered yet (registered when the draft is approved). */
+  proposedProbes?: RecordedProbeSpec[];
+  /** Churn watcher drafts: the segment it found and the hypothesis. */
+  watch?: WatchMeta;
+  /** Redraft: replace this rule's pending draft (a person edited the sentence). */
+  replaceDraft?: boolean;
+}
+
+/** A merchant's draft, optionally naming a recorded probe to register with it. */
+export interface HumanDraftOptions {
+  origin?: 'human';
+  proposedProbes?: RecordedProbeSpec[];
+  replaceDraft?: boolean;
 }
 
 export { SENTENCE_LIMITS };
 const SCAN_CONCURRENCY = 8;
+/** The probe catalog the Rules page shows is reused this long (it is read back from raw sessions). */
+const CATALOG_TTL_MS = 30_000;
+/** Most recent sessions a probe preview reads. */
+const PREVIEW_SESSIONS = 300;
+
+/**
+ * Why a recorded probe spec cannot be registered, or null. `taken` holds names already used by declared or
+ * request probes (a recorded probe may not shadow them).
+ */
+export function probeSpecProblem(spec: unknown, taken: ReadonlySet<string> = new Set()): string | null {
+  const parsed = RecordedProbeSpecSchema.safeParse(spec);
+  if (!parsed.success) return 'name must be lowercase letters, digits and _ (starting with a letter), with a selector and a kind (money or count)';
+  const s = parsed.data;
+  if (s.name.startsWith(REQUEST_PROBE_PREFIX) || isRequestProbe(s.name)) return `names starting with ${REQUEST_PROBE_PREFIX} are reserved for request probes`;
+  if (taken.has(s.name)) return `${s.name} is already a probe the store reports; pick another name`;
+  if (!compileSelector(s.selector)) return 'the selector uses something outside the supported subset (tag, #id, .class, [attr], [attr="value"], descendant and > combinators)';
+  if (s.routes?.some((r) => !r.startsWith('/'))) return 'routes are page paths such as /checkout or /product/:id';
+  return null;
+}
+
+/** A person's verdict on a draft, as the churn watcher reads it next time. */
+function feedbackOf(draft: NonNullable<RuleDoc['draft']>, verdict: RuleFeedback['verdict'], note: string | null, by: string, at: number): RuleFeedback {
+  return {
+    verdict,
+    note: note?.trim() ? note.trim().slice(0, 500) : null,
+    by,
+    at,
+    title: draft.watch?.title ?? draft.rule.title,
+    feature_key: draft.watch?.feature.key ?? null,
+    churn_reason: draft.watch?.churn_reason ?? null,
+    lift: draft.watch?.lift ?? null,
+  };
+}
+
+/** Whether a rule reads a probe (in what it requires, or anywhere in its two sides). */
+export const ruleReads = (rule: InvariantRule, probe: string) => rule.requires.includes(probe) || JSON.stringify(rule.assert).includes(`"${probe}"`);
 
 /** The route most hits were on (ties: alphabetical), for a like-for-like revenue baseline. */
 function commonestRoute(routes: Iterable<string>): string {
@@ -116,7 +194,81 @@ export function createRuleService(deps: RuleServiceDeps) {
     return new Set((await deps.state.listClusters(tenantId, 500)).flatMap((c) => c.sessions));
   }
 
-  function startRescan(tenantId: string, rule: InvariantRule): RuleDoc['rescan'] {
+  /** The tenant's active recorded probes: read from every session a dry run, re-scan or preview reads. */
+  async function registeredProbes(tenantId: string): Promise<RecordedProbeSpec[]> {
+    return (await deps.state.listProbes(tenantId)).filter((p) => p.status === 'active').map((p) => p.spec);
+  }
+
+  /** Registered probes plus proposed ones (a proposal replaces a registered probe of the same name). */
+  function withProposed(registry: readonly RecordedProbeSpec[], proposed: readonly RecordedProbeSpec[] = []): RecordedProbeSpec[] {
+    const names = new Set(proposed.map((p) => p.name));
+    return [...registry.filter((p) => !names.has(p.name)), ...proposed];
+  }
+
+  const catalogs = new Map<string, { at: number; catalog: ProbeCatalog; window: { from: number; to: number }; sessions: number }>();
+
+  /** Probes recent sessions report (declared, request and recorded), cached briefly; it is read back from raw. */
+  async function recentCatalog(tenantId: string, fresh = false): Promise<{ catalog: ProbeCatalog; window: { from: number; to: number }; sessions: number }> {
+    const hit = catalogs.get(tenantId);
+    if (!fresh && hit && now() - hit.at < CATALOG_TTL_MS) return hit;
+    const t = now();
+    const window = { from: t - deps.dryRun.days * 86_400_000, to: t + 1 };
+    const sessions: SessionProbes[] = [];
+    await scanWindow(deps, {
+      tenantId,
+      fromMs: window.from,
+      toMs: window.to,
+      maxSessions: Math.min(deps.dryRun.sessions, PREVIEW_SESSIONS),
+      concurrency: SCAN_CONCURRENCY,
+      recordedProbes: await registeredProbes(tenantId),
+      onSession: (s) => void sessions.push(s),
+      onError: (sessionId, err) => deps.logger.warn({ err, tenant_id: tenantId, session_id: sessionId }, 'probe catalog could not read a session; skipped'),
+    });
+    const entry = { at: t, catalog: buildCatalog(sessions), window, sessions: sessions.length };
+    catalogs.set(tenantId, entry);
+    return entry;
+  }
+
+  /** Names a recorded probe may not take: what sessions already report as declared or request probes. */
+  async function takenNames(tenantId: string): Promise<Set<string>> {
+    const { catalog } = await recentCatalog(tenantId);
+    return new Set(catalog.probes.filter((p) => p.source !== 'recorded').map((p) => p.name));
+  }
+
+  /** Register (or re-register) a recorded probe: the hot doc the processor reads, and a `rules` row of kind probe. */
+  async function registerProbe(tenantId: string, spec: RecordedProbeSpec, opts: { by: string; source: ProbeDoc['source']; ruleId: string | null; preview: ProbePreview | null }): Promise<ProbeDoc> {
+    const existing = await deps.state.getProbe(tenantId, spec.name);
+    const same = existing && existing.status === 'active' && JSON.stringify(existing.spec) === JSON.stringify(spec);
+    if (same) return existing;
+    const t = now();
+    const doc: ProbeDoc = {
+      v: 1,
+      tenant_id: tenantId,
+      name: spec.name,
+      spec,
+      source: opts.source,
+      status: 'active',
+      version: (existing?.version ?? 0) + 1,
+      approved_by: opts.by,
+      rule_id: opts.ruleId,
+      preview: opts.preview ?? existing?.preview ?? null,
+      created_at: existing?.created_at ?? t,
+      updated_at: t,
+      synthetic: true,
+    };
+    await deps.warehouse.insert('rules', [
+      {
+        insertId: `${tenantId}:probe:${spec.name}@${doc.version}`,
+        row: { tenant_id: tenantId, rule_id: `probe:${spec.name}`, version: doc.version, kind: 'probe', definition: { type: 'recorded_probe', ...spec, source: opts.source, rule_id: opts.ruleId }, created_by: opts.by, recorded_at: t },
+      },
+    ]);
+    await deps.state.putProbe(doc);
+    catalogs.delete(tenantId);
+    deps.logger.info({ tenant_id: tenantId, probe: spec.name, version: doc.version, source: opts.source }, 'recorded probe registered');
+    return doc;
+  }
+
+  function startRescan(tenantId: string, rule: InvariantRule, recordedProbes: readonly RecordedProbeSpec[]): RuleDoc['rescan'] {
     const startedAt = now();
     const rescanId = `rs_${shortHash(`${tenantId}|${ruleVersionOf(rule)}|${startedAt}`, 12)}`;
     const window = { from: startedAt - deps.rescan.days * 86_400_000, to: startedAt + 1 };
@@ -128,6 +280,7 @@ export function createRuleService(deps: RuleServiceDeps) {
       window,
       maxSessions: deps.rescan.sessions,
       concurrency: deps.rescan.concurrency,
+      recordedProbes,
       onProgress: async (status) => {
         // Only this re-scan's own status is written; a newer one owns the doc's slot.
         await update(tenantId, rule.id, (doc) => (doc && doc.rescan?.rescan_id === rescanId ? { ...doc, rescan: status, updated_at: now() } : null));
@@ -145,11 +298,22 @@ export function createRuleService(deps: RuleServiceDeps) {
      * Draft a rule from one sentence, with a dry run. Nothing reaches live traffic until approve. A
      * merchant's sentence by default; `opts` marks a sentence from the rule suggester.
      */
-    async draft(tenantId: string, rawSentence: string, opts?: AgentDraftOptions): Promise<RuleDoc> {
+    async draft(tenantId: string, rawSentence: string, opts?: AgentDraftOptions | HumanDraftOptions): Promise<RuleDoc> {
       requireTenant(tenantId);
       const sentence = rawSentence.trim().replace(/\s+/g, ' ');
       if (sentence.length < SENTENCE_LIMITS.min || sentence.length > SENTENCE_LIMITS.max) {
         throw new RuleError('invalid_sentence', `describe the rule in ${SENTENCE_LIMITS.min} to ${SENTENCE_LIMITS.max} characters`, 400);
+      }
+      const registry = await registeredProbes(tenantId);
+      const registered = new Set(registry.map((p) => JSON.stringify(p)));
+      // Proposed probes that are already registered as they are need no registration on approval.
+      const proposed = (opts?.proposedProbes ?? []).filter((p) => !registered.has(JSON.stringify(p)));
+      if (proposed.length > 0) {
+        const taken = await takenNames(tenantId);
+        for (const p of proposed) {
+          const problem = probeSpecProblem(p, taken);
+          if (problem) throw new RuleError('invalid_probe', `proposed probe ${p.name}: ${problem}`, 400);
+        }
       }
       const startedAt = now();
       const window = { from: startedAt - deps.dryRun.days * 86_400_000, to: startedAt + 1 };
@@ -160,6 +324,7 @@ export function createRuleService(deps: RuleServiceDeps) {
         toMs: window.to,
         maxSessions: deps.dryRun.sessions,
         concurrency: SCAN_CONCURRENCY,
+        recordedProbes: withProposed(registry, proposed),
         onSession: (s) => void sessions.push(s),
         onError: (sessionId, err) => deps.logger.warn({ err, tenant_id: tenantId, session_id: sessionId }, 'dry run could not read a session; skipped'),
       });
@@ -190,12 +355,14 @@ export function createRuleService(deps: RuleServiceDeps) {
       }
       if (!out.understood) throw new RuleError('not_understood', out.explanation.text || 'the sentence could not be expressed over the recorded probes', 422, author);
 
-      const agent = opts?.origin === 'agent' ? opts : null;
+      const agent = opts?.origin === 'agent' ? (opts as AgentDraftOptions) : null;
       const issueSessions = await sessionsInIssues(tenantId);
+      const suspected = deps.suspected?.(tenantId);
+      const notBaseline = suspected?.size ? new Set([...issueSessions, ...suspected]) : issueSessions;
       const outcomes = await deps.reader.sessionOutcomes(tenantId, window.from);
       const unchanged: { doc?: RuleDoc } = {};
       const written = await update(tenantId, out.rule_id, (doc) => {
-        if (agent && doc) {
+        if (agent && doc && !opts?.replaceDraft) {
           // The same issue's own pending suggestion: nothing to do (idempotent, so the caller records drafted).
           if (doc.draft?.origin === 'agent' && doc.draft.cluster_id === agent.cluster_id) {
             unchanged.doc = doc;
@@ -223,7 +390,7 @@ export function createRuleService(deps: RuleServiceDeps) {
         const revenueLost: RevenueAtRisk | null =
           hits.size > 0
             ? revenueAtRisk(
-                { affectedSessionIds: [...hits.keys()], affectedSessionCount: hits.size, route: commonestRoute(hits.values()), sessionsInAnyIssue: issueSessions, outcomes, now: t },
+                { affectedSessionIds: [...hits.keys()], affectedSessionCount: hits.size, route: commonestRoute(hits.values()), sessionsInAnyIssue: notBaseline, outcomes, now: t },
                 deps.revenue,
               )
             : null;
@@ -257,9 +424,13 @@ export function createRuleService(deps: RuleServiceDeps) {
             cluster_id: agent?.cluster_id ?? null,
             suggester: agent?.suggester ?? null,
             revenue_lost: revenueLost,
+            // Only probes the compiled rule actually reads need registering with it.
+            ...(proposed.some((p) => ruleReads(rule, p.name)) ? { proposed_probes: proposed.filter((p) => ruleReads(rule, p.name)) } : {}),
+            ...(agent?.watch ? { watch: agent.watch } : {}),
           },
           rescan: doc?.rescan ?? null,
           versions: doc?.versions ?? [],
+          ...(doc?.feedback ? { feedback: doc.feedback } : {}),
           created_at: doc?.created_at ?? t,
           updated_at: t,
           synthetic: true,
@@ -281,6 +452,10 @@ export function createRuleService(deps: RuleServiceDeps) {
         }
         if (draft.rule.version !== version) throw new RuleError('conflict', `the draft is version ${draft.rule.version}, not ${version}; reload and review it`, 409);
         if (running.has(`${tenantId}/${ruleId}`)) throw new RuleError('conflict', 'a re-scan of this rule is still running; approve when it finishes', 409);
+        // The probes the rule reads come first: once registered, live traffic and the re-scan both read them.
+        for (const spec of draft.proposed_probes ?? []) {
+          await registerProbe(tenantId, spec, { by: approvedBy, source: draft.origin === 'agent' ? 'agent' : 'merchant', ruleId: draft.rule.id, preview: null });
+        }
         const t = now();
         await deps.warehouse.insert('rules', [
           {
@@ -299,6 +474,7 @@ export function createRuleService(deps: RuleServiceDeps) {
                   ? { sessions_scanned: draft.dry_run.sessions_scanned, sessions_applicable: draft.dry_run.sessions_applicable, sessions_hit: draft.dry_run.sessions_hit, hit_rate: draft.dry_run.hit_rate }
                   : null,
                 approved_by: approvedBy,
+                ...(draft.proposed_probes?.length ? { probes: draft.proposed_probes.map((p) => p.name) } : {}),
               },
               created_by: approvedBy,
               recorded_at: t,
@@ -311,8 +487,9 @@ export function createRuleService(deps: RuleServiceDeps) {
           title: draft.rule.title,
           active: { rule: draft.rule, sentence: draft.sentence, author: draft.author, approved_at: t, approved_by: approvedBy },
           draft: null,
-          rescan: startRescan(tenantId, draft.rule),
+          rescan: startRescan(tenantId, draft.rule, await registeredProbes(tenantId)),
           versions: [...current.versions, { version: draft.rule.version, approved_at: t }],
+          feedback: [...(current.feedback ?? []), feedbackOf(draft, 'approved', null, approvedBy, t)],
           updated_at: t,
         };
       });
@@ -320,22 +497,47 @@ export function createRuleService(deps: RuleServiceDeps) {
       return doc ?? (await deps.state.getRule(tenantId, ruleId))!;
     },
 
-    async reject(tenantId: string, ruleId: string): Promise<RuleDoc> {
+    /**
+     * Discard the pending draft, with an optional note on why. The verdict stays on the doc: the churn watcher
+     * does not raise the same number again unless it grows, and the analyst reads the note next time.
+     */
+    async reject(tenantId: string, ruleId: string, by = 'merchant', note: string | null = null): Promise<RuleDoc> {
       requireTenant(tenantId);
       const doc = await update(tenantId, ruleId, (current) => {
         if (!current) throw new RuleError('not_found', `no rule ${ruleId}`, 404);
-        return { ...current, draft: null, updated_at: now() };
+        const t = now();
+        const feedback = current.draft ? [...(current.feedback ?? []), feedbackOf(current.draft, 'rejected', note, by, t)] : current.feedback;
+        return { ...current, draft: null, ...(feedback ? { feedback } : {}), updated_at: t };
       });
       return doc!;
+    },
+
+    /**
+     * Change the rule: draft again from an edited sentence, keeping the draft's origin, its proposed probes and
+     * the watcher's hypothesis. When the new sentence names a different rule, the old draft is cleared.
+     */
+    async redraft(tenantId: string, ruleId: string, sentence: string): Promise<RuleDoc> {
+      requireTenant(tenantId);
+      const current = await deps.state.getRule(tenantId, ruleId);
+      const d = current?.draft;
+      if (!d) throw new RuleError('not_found', `rule ${ruleId} has no draft to change`, 404);
+      const opts: AgentDraftOptions | HumanDraftOptions =
+        d.origin === 'agent'
+          ? { origin: 'agent', cluster_id: d.cluster_id, suggester: d.suggester ?? d.author, replaceDraft: true, ...(d.proposed_probes ? { proposedProbes: d.proposed_probes } : {}), ...(d.watch ? { watch: d.watch } : {}) }
+          : { origin: 'human', replaceDraft: true, ...(d.proposed_probes ? { proposedProbes: d.proposed_probes } : {}) };
+      const next = await this.draft(tenantId, sentence, opts);
+      if (next.rule_id !== ruleId) await update(tenantId, ruleId, (doc) => (doc?.draft ? { ...doc, draft: null, updated_at: now() } : null));
+      return next;
     },
 
     /** Re-scan history with the approved version again (for example after an interrupted run). */
     async rescan(tenantId: string, ruleId: string): Promise<RuleDoc> {
       requireTenant(tenantId);
+      const registry = await registeredProbes(tenantId);
       const doc = await update(tenantId, ruleId, (current) => {
         if (!current?.active) throw new RuleError('not_found', `rule ${ruleId} has no approved version`, 404);
         if (running.has(`${tenantId}/${ruleId}`)) throw new RuleError('conflict', 'a re-scan of this rule is already running', 409);
-        return { ...current, rescan: startRescan(tenantId, current.active.rule), updated_at: now() };
+        return { ...current, rescan: startRescan(tenantId, current.active.rule, registry), updated_at: now() };
       });
       return doc!;
     },
@@ -364,6 +566,7 @@ export function createRuleService(deps: RuleServiceDeps) {
     async probeStats(tenantId: string, sessionIds: readonly string[]): Promise<ProbeCatalog> {
       requireTenant(tenantId);
       const since = now() - deps.dryRun.days * 86_400_000;
+      const recordedProbes = await registeredProbes(tenantId);
       const read: (SessionProbes | null)[] = sessionIds.map(() => null);
       let next = 0;
       const worker = async () => {
@@ -375,7 +578,7 @@ export function createRuleService(deps: RuleServiceDeps) {
               const seen = bySeq.get(row.seq);
               if (!seen || row.ingest_time < seen.ingest_time) bySeq.set(row.seq, row);
             }
-            if (bySeq.size > 0) read[i] = await sessionProbes(deps.blob, tenantId, sessionId, [...bySeq.values()]);
+            if (bySeq.size > 0) read[i] = await sessionProbes(deps.blob, tenantId, sessionId, [...bySeq.values()], { recordedProbes });
           } catch (err) {
             deps.logger.warn({ err, tenant_id: tenantId, session_id: sessionId }, 'probe statistics could not read a session; skipped');
           }
@@ -383,6 +586,64 @@ export function createRuleService(deps: RuleServiceDeps) {
       };
       await Promise.all(Array.from({ length: Math.max(1, Math.min(SCAN_CONCURRENCY, sessionIds.length)) }, worker));
       return buildCatalog(read.filter((s): s is SessionProbes => s !== null));
+    },
+
+    /**
+     * Every probe the store's recent sessions report, by source (declared in the site's SDK setup, request,
+     * recorded), with ranges, plus the registered recorded probes (active or disabled). Numbers only.
+     */
+    async listProbes(tenantId: string): Promise<{ catalog: ProbeCatalog; registry: ProbeDoc[]; window: { from: number; to: number }; sessions: number }> {
+      requireTenant(tenantId);
+      const { catalog, window, sessions } = await recentCatalog(tenantId);
+      return { catalog, registry: await deps.state.listProbes(tenantId), window, sessions };
+    },
+
+    /** What a recorded probe would read over recent sessions, before anyone saves it. Writes nothing. */
+    async previewProbe(tenantId: string, spec: RecordedProbeSpec): Promise<ProbePreview> {
+      requireTenant(tenantId);
+      const problem = probeSpecProblem(spec, await takenNames(tenantId));
+      if (problem) throw new RuleError('invalid_probe', problem, 400);
+      const t = now();
+      const window = { from: t - deps.dryRun.days * 86_400_000, to: t + 1 };
+      const sessions: SessionProbes[] = [];
+      await scanWindow(deps, {
+        tenantId,
+        fromMs: window.from,
+        toMs: window.to,
+        maxSessions: Math.min(deps.dryRun.sessions, PREVIEW_SESSIONS),
+        concurrency: SCAN_CONCURRENCY,
+        recordedProbes: [spec],
+        onSession: (s) => void sessions.push(s),
+        onError: (sessionId, err) => deps.logger.warn({ err, tenant_id: tenantId, session_id: sessionId }, 'probe preview could not read a session; skipped'),
+      });
+      return previewProbe(spec.name, sessions, window, now());
+    },
+
+    /**
+     * Register a recorded probe a merchant added on the Rules tab. It must read something in recent sessions
+     * (a selector that matches nothing is almost always a typo). Live traffic reads it within the processor's
+     * cache time, and rules can use it at once.
+     */
+    async addProbe(tenantId: string, spec: RecordedProbeSpec, by: string): Promise<ProbeDoc> {
+      const preview = await this.previewProbe(tenantId, spec);
+      if (preview.sessions_with_value === 0) {
+        throw new RuleError('probe_reads_nothing', `${spec.selector} matched no number in the last ${preview.sessions_scanned} sessions${spec.routes?.length ? ` on ${spec.routes.join(', ')}` : ''}; check the selector and the page`, 422);
+      }
+      return registerProbe(tenantId, RecordedProbeSpecSchema.parse(spec), { by, source: 'merchant', ruleId: null, preview });
+    },
+
+    /** Stop reading a recorded probe. Refused while an approved rule reads it. */
+    async disableProbe(tenantId: string, name: string, by: string): Promise<ProbeDoc> {
+      requireTenant(tenantId);
+      const doc = await deps.state.getProbe(tenantId, name);
+      if (!doc) throw new RuleError('not_found', `no recorded probe ${name}`, 404);
+      const users = (await deps.state.listRules(tenantId)).filter((r) => r.active && ruleReads(r.active.rule, name));
+      if (users.length > 0) throw new RuleError('probe_in_use', `${name} is read by ${users.map((r) => r.rule_id).join(', ')}; discard those rules first`, 409);
+      if (doc.status === 'disabled') return doc;
+      const next: ProbeDoc = { ...doc, status: 'disabled', approved_by: by, updated_at: now() };
+      await deps.state.putProbe(next);
+      catalogs.delete(tenantId);
+      return next;
     },
 
     /** Resolves when every re-scan started so far has finished (tests, shutdown). */

@@ -63,7 +63,8 @@ export const RuleRow = z.object({
   tenant_id: z.string(),
   rule_id: z.string(),
   version: z.int(),
-  kind: z.enum(['builtin', 'generated']),
+  /** builtin and generated are rules; probe records a recorded probe's registration (definition holds its spec). */
+  kind: z.enum(['builtin', 'generated', 'probe']),
   definition: json,
   created_by: z.string(),
   recorded_at: ms,

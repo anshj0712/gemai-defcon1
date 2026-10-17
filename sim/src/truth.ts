@@ -1,4 +1,4 @@
-import { BUGS, RETRO_BUGS, SUGGESTED_RULE_BUGS, type Bug, type Persona, type SimConfig } from './plan.js';
+import { BUGS, SILENT_BUGS, SUGGESTED_RULE_BUGS, type Bug, type Persona, type SimConfig } from './plan.js';
 
 /** One simulated session as it actually ran. All of it is synthetic. */
 export interface TruthSession {
@@ -81,7 +81,8 @@ export interface CheckReport {
 
 /**
  * Score this run's sessions against the issues. Sessions from other runs in the same issues are ignored.
- * A retro bug (RETRO_BUGS) with no issue is fine: no rule can see it until a merchant writes one. Once an
+ * A silent bug (SILENT_BUGS: retro and watch bugs) with no issue is fine: no rule sees it until a merchant writes one
+ * or approves the agent's. Once an
  * issue holds its sessions (after `pnpm sim:rescan`), it is held to the same bar as the others.
  * A bug in SUGGESTED_RULE_BUGS may also sit in invariant issues (the approved agent rule's, after
  * `pnpm sim:suggest`); those are neither a second issue nor unexpected, and its main issue keeps the bar.
@@ -115,7 +116,7 @@ export function evaluate(truth: GroundTruth, clusters: readonly ClusterLike[], m
       title: main?.c.title ?? null,
       recall: affected ? (main?.hits ?? 0) / affected : 1,
       precision: main ? main.hits / main.ids.length : 1,
-      silent: RETRO_BUGS.includes(bug) && holding.length === 0,
+      silent: SILENT_BUGS.includes(bug) && holding.length === 0,
       rule_cluster_ids: all.filter(isRuleIssue).map((h) => h.c.cluster_id),
     };
     bugs.push(score);

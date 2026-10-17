@@ -7,6 +7,8 @@ import { DEFAULT_PRIORITY_RULES, parseRules, ruleSetVersion } from './scoring/in
 import { createRuleService } from './rules/service.js';
 import { buildAgentServer } from './server.js';
 import { createAgentService, recordRules } from './service.js';
+import { DEFAULT_WATCH_PARAMS } from './watch/contrast.js';
+import { createChurnWatcher } from './watch/watcher.js';
 import { PlaywrightScreenshotter } from './visual/screenshot.js';
 
 async function main(): Promise<void> {
@@ -43,6 +45,8 @@ async function main(): Promise<void> {
     dryRun: { sessions: cfg.RULE_DRY_RUN_SESSIONS, days: cfg.RULE_DRY_RUN_DAYS },
     rescan: { sessions: cfg.RESCAN_MAX_SESSIONS, days: cfg.RESCAN_WINDOW_DAYS, concurrency: cfg.RESCAN_CONCURRENCY },
     revenue,
+    // Shoppers the churn watcher suspects stay out of revenue baselines (set once the watcher exists, below).
+    suspected: (tenant) => watcher?.suspected(tenant) ?? new Set<string>(),
   });
 
   const service = createAgentService({
@@ -60,6 +64,7 @@ async function main(): Promise<void> {
     lookbackMs,
     regressionWindowMs: cfg.REGRESSION_WINDOW_HOURS * 3_600_000,
     revenue,
+    suspected: (tenant) => watcher?.suspected(tenant) ?? new Set<string>(),
     loadReplay: (tenant, session) => loadReplay(platform, tenant, session, { sinceMs: Date.now() - lookbackMs, maxChunks: cfg.MAX_REPLAY_CHUNKS }),
     // Agent-suggested rules (ARCHITECTURE.md section 6): same rule service, origin agent, a person approves.
     ...(cfg.RULE_SUGGEST
@@ -80,6 +85,24 @@ async function main(): Promise<void> {
       : {}),
   });
 
+  // The churn watcher: numbers that make shoppers leave, proposed as a probe and rule a person approves.
+  const watcher = cfg.WATCH
+    ? createChurnWatcher({
+        state: platform.state,
+        reader: platform.reader,
+        blob: platform.blob,
+        models,
+        logger,
+        tenants: cfg.AGENT_TENANTS,
+        rules: ruleService,
+        params: { ...DEFAULT_WATCH_PARAMS, minSegment: cfg.WATCH_MIN_SEGMENT, minLift: cfg.WATCH_MIN_LIFT, maxP: cfg.WATCH_MAX_P, maxCandidates: cfg.WATCH_MAX_CANDIDATES },
+        windowDays: cfg.WATCH_WINDOW_DAYS,
+        maxSessions: cfg.WATCH_MAX_SESSIONS,
+        concurrency: cfg.RESCAN_CONCURRENCY,
+        revenue,
+      })
+    : null;
+
   await recordRules(platform.warehouse, cfg.AGENT_TENANTS, rules, Date.now());
 
   const interrupted = await ruleService.markInterrupted();
@@ -90,8 +113,9 @@ async function main(): Promise<void> {
     rule_set: ruleSetVersion(rules),
     visual_check: cfg.VISUAL_CHECK,
     rule_suggest: cfg.RULE_SUGGEST,
+    churn_watch: cfg.WATCH ? cfg.WATCH_INTERVAL_MS : false,
   };
-  const app = buildAgentServer({ logger, runPass: () => service.runPass(), info, projectId: pc.projectId, rules: ruleService });
+  const app = buildAgentServer({ logger, runPass: () => service.runPass(), info, projectId: pc.projectId, rules: ruleService, ...(watcher ? { watcher } : {}) });
   await app.listen({ port: cfg.AGENT_PORT, host: cfg.HOST });
   logger.info({ mode: pc.mode, port: cfg.AGENT_PORT, tenants: cfg.AGENT_TENANTS, poll_ms: cfg.AGENT_POLL_MS, ...info }, 'agent ready');
   if (models.offline) logger.warn('no GOOGLE_API_KEY: agents use the offline stand-in (templated text, no visual check). Set GOOGLE_API_KEY for Gemini.');
@@ -111,6 +135,18 @@ async function main(): Promise<void> {
   };
   if (cfg.AGENT_POLL_MS > 0) timer = setTimeout(() => void tick(), 1000);
 
+  let watchTimer: NodeJS.Timeout | null = null;
+  const watchTick = async () => {
+    try {
+      await watcher?.runAll();
+    } catch (err) {
+      logger.error({ err }, 'churn watch pass failed');
+    } finally {
+      if (watchTimer !== null) watchTimer = setTimeout(() => void watchTick(), cfg.WATCH_INTERVAL_MS);
+    }
+  };
+  if (watcher && cfg.WATCH_INTERVAL_MS > 0) watchTimer = setTimeout(() => void watchTick(), Math.min(cfg.WATCH_INTERVAL_MS, 15_000));
+
   let closing = false;
   const shutdown = async (signal: string) => {
     if (closing) return;
@@ -118,6 +154,8 @@ async function main(): Promise<void> {
     logger.info({ signal }, 'shutting down');
     if (timer) clearTimeout(timer);
     timer = null;
+    if (watchTimer) clearTimeout(watchTimer);
+    watchTimer = null;
     await app.close();
     await screenshotter?.close();
     await platform.close();

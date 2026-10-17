@@ -29,7 +29,7 @@ export function unknownCitations(output: unknown, supplied: ReadonlySet<string>)
   return [...new Set(citedIds(output).filter((id) => !supplied.has(id)))];
 }
 
-function citationErrors(output: unknown, supplied: ReadonlySet<string>): string[] {
+export function citationErrors(output: unknown, supplied: ReadonlySet<string>): string[] {
   const unknown = unknownCitations(output, supplied);
   return unknown.length ? [`cites evidence ids that were not supplied: ${unknown.join(', ')} (allowed: ${[...supplied].join(', ')})`] : [];
 }

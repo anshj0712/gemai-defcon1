@@ -1,4 +1,8 @@
+import { parseCount, parseMoney } from '@cp/schema/probe-parse';
 import { CUSTOM_TAGS, type ProbePayloadShape } from '@cp/schema/tags';
+
+// Shared with the normalizer, which reads recorded probes from the (already masked) recording the same way.
+export { parseCount, parseMoney };
 
 /**
  * Probes: allowlisted elements whose numbers the merchant wants checked (cart total, line prices,
@@ -17,31 +21,6 @@ export interface ProbeSpec {
 
 const NAME = /^[a-z][a-z0-9_]{0,63}$/;
 const MAX_VALUES = 100;
-
-/**
- * "₹17,181" -> 1718100, "₹1,079.5" -> 107950, "$12.99" -> 1299. Thousands separators are commas,
- * the decimal separator a point (set `decimal: ','` for "1.234,56"). Null when there is no number.
- */
-export function parseMoney(text: string, opts: { fractionDigits?: number; decimal?: '.' | ',' } = {}): number | null {
-  const digits = opts.fractionDigits ?? 2;
-  const decimal = opts.decimal ?? '.';
-  const m = /-?\d[\d.,\s]*/.exec(text.replace(/ /g, ' '));
-  if (!m) return null;
-  const raw = m[0].replace(/\s/g, '');
-  const negative = raw.startsWith('-');
-  const thousands = decimal === '.' ? ',' : '.';
-  const cleaned = raw.replace('-', '').split(thousands).join('');
-  const [whole = '0', frac = ''] = cleaned.split(decimal);
-  if (!/^\d+$/.test(whole) || !/^\d*$/.test(frac)) return null;
-  const minor = Number(whole) * 10 ** digits + Math.round(Number(`0.${frac || '0'}`) * 10 ** digits);
-  return negative ? -minor : minor;
-}
-
-/** "Qty 3" -> 3. */
-export function parseCount(text: string): number | null {
-  const m = /-?\d+/.exec(text);
-  return m ? Number(m[0]) : null;
-}
 
 interface QueryRoot {
   querySelectorAll(selector: string): ArrayLike<{ textContent: string | null }>;

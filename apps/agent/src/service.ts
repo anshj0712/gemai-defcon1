@@ -16,6 +16,8 @@ export interface ServiceDeps extends PipelineDeps {
   tenants: readonly string[];
   rescoreMs: number;
   maxPerPass: number;
+  /** Shoppers the churn watcher suspects (kept out of revenue baselines); none when the watcher is off. */
+  suspected?: (tenant: string) => ReadonlySet<string>;
 }
 
 export interface PassResult {
@@ -68,7 +70,7 @@ export function createAgentService(deps: ServiceDeps) {
     if (due.length === 0) return result;
 
     const outcomes = await deps.reader.sessionOutcomes(tenant, now() - deps.lookbackMs);
-    const ctx = tenantContext(clusters, outcomes);
+    const ctx = tenantContext(clusters, outcomes, deps.suspected?.(tenant));
     for (const cluster of due) {
       const log = deps.logger.child({ tenant_id: tenant, cluster_id: cluster.cluster_id });
       try {

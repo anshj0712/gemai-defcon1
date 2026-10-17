@@ -17,6 +17,8 @@ const ApiEnv = z.object({
   MAX_REPLAY_CHUNKS: z.coerce.number().int().positive().default(1000),
   /** The agent service, where rule actions (draft, approve, reject, re-scan) are forwarded. */
   AGENT_URL: z.url().default(DEFAULT_AGENT_URL),
+  /** The synthetic shop's backend (`/api/*`): on in local mode; set true to serve it from a deployed API too. */
+  DEMO_STORE: z.enum(['true', 'false']).optional(),
 });
 
 async function main(): Promise<void> {
@@ -33,6 +35,7 @@ async function main(): Promise<void> {
     defaultTenant: e.API_DEFAULT_TENANT,
     // Local mode only: the dashboard switches demo bugs on and off, the shop follows.
     demoBugs: pc.mode === 'local' ? createFileDemoBugStore(join(pc.localDataDir, 'demo-bugs.json')) : undefined,
+    demoStore: (e.DEMO_STORE ?? (pc.mode === 'local' ? 'true' : 'false')) === 'true' ? {} : undefined,
     signalsLookbackMs: e.SIGNALS_LOOKBACK_DAYS * 86_400_000,
     replayLookbackMs: e.REPLAY_LOOKBACK_DAYS * 86_400_000,
     maxReplayChunks: e.MAX_REPLAY_CHUNKS,

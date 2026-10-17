@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { arg, requireServices, say } from './browser.js';
 import { get, waitForFindings, waitForQuiet } from './pipeline.js';
+import { WATCH_BUGS } from './plan.js';
 import { evaluate, evaluateFindings, pct, type ClusterLike, type GroundTruth } from './truth.js';
 
 /**
@@ -39,7 +40,7 @@ async function main(): Promise<void> {
   say('  bug             sessions  issues  recall   precision  issue');
   for (const b of report.bugs) {
     if (b.silent) {
-      say(`  ${b.bug.padEnd(15)} ${String(b.affected).padStart(8)}  ${String(0).padStart(6)}  silent until a merchant rule catches it (pnpm sim:rescan)`);
+      say(`  ${b.bug.padEnd(15)} ${String(b.affected).padStart(8)}  ${String(0).padStart(6)}  silent until ${WATCH_BUGS.includes(b.bug) ? 'the agent proposes a probe and rule (pnpm sim:watch)' : 'a merchant rule catches it (pnpm sim:rescan)'}`);
       continue;
     }
     say(`  ${b.bug.padEnd(15)} ${String(b.affected).padStart(8)}  ${String(b.clusters).padStart(6)}  ${pct(b.recall).padStart(6)}  ${pct(b.precision).padStart(9)}   ${b.title ?? '-'}`);

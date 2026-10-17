@@ -4,7 +4,7 @@ Finds friction and silent data bugs in checkout sessions recorded with rrweb, an
 
 **All demo data is synthetic.** Sessions come from the test kit and the simulator, never from real shoppers.
 
-## Progress (updated 15 Oct 2026)
+## Progress (updated 17 Oct 2026)
 
 | Phase | Status | Evidence |
 | --- | --- | --- |
@@ -13,7 +13,10 @@ Finds friction and silent data bugs in checkout sessions recorded with rrweb, an
 | 2. Detectors, clusterer, simulator | Done | `pnpm sim:check`: each injected bug is one issue, precision 100%, recall at least 90%, no clean session in an issue |
 | 3. Agents, revenue at risk, ranked findings | Done, running on live Gemini locally | Triage, root cause with a screenshot check, and ranker answered for all three issues with no retries. Scoring is deterministic code |
 | 4. Bitemporal, rule author, re-scan | Done (fast path), verified locally on the offline stand-in | `pnpm sim:rescan`: a merchant sentence becomes a rule, the re-scan finds all 12 past sessions of the silent qty_price bug (recall and precision 100%), the issue is tagged found later, and time travel as of the approval differs from now by exactly that finding. The rebuild path (a selector nobody probed) is not built, and the rule author has not been run on live Gemini yet |
+| 4b. Churn watcher, probes from the recording, 13 churn bugs | Built 17 Oct on branch `churn-watcher`, verified locally on the offline stand-in | `pnpm sim:watch` on 240 sessions: the agent found all four silent churn bugs on its own (a ₹499 fee, a 9-day estimate, a 6.5 s bank, a 4 s stock check), proposed a probe and rule for each (two probes discovered on the recorded page), and after approval each issue holds that bug's sessions only (recall and precision 100%), found later. Not yet run on live Gemini |
 | 5. Deploy and package | Not done | Deploy scripts exist for the collector, processor, clusterer and agent but have not been run against a GCP project by us. API and dashboard are not deployed. No video or deck yet |
+
+Verified locally on 17 Oct (offline stand-in, no key, a fresh 240-session run): `pnpm typecheck`, `pnpm test` (490 passed, 1 skipped), `pnpm sim:check`, `pnpm sim:watch`, `pnpm sim:rescan`, `pnpm sim:suggest` and `pnpm e2e` all pass, and the Rules page (hypotheses, toast, probes) loads in Chrome with no console errors.
 
 Verified locally on 15 Oct (offline stand-in, no key):
 
@@ -151,11 +154,11 @@ pnpm smoke    # in a second terminal: sends a synthetic Apply Coupon session, wa
 With `pnpm dev` running:
 
 ```powershell
-pnpm sim -- --sessions 300 --seed 42 --concurrency 8   # about 12 minutes; watch the Issues feed fill in live
+pnpm sim -- --sessions 240 --seed 42 --concurrency 8   # about 15 minutes; watch the Issues feed fill in live
 pnpm sim:check                                          # scores the issues against the ground truth
 ```
 
-The simulator drives the shop in real Chrome. It runs a seeded mix: 20% dead_button, 15% cart_total, 15% checkout_error, 10% qty_price, 10% ghost_line, and 30% clean shoppers. Half of the clean shoppers have a bug flag on but never reach its trigger. qty_price is silent on purpose (see the next section): `sim:check` reports it as "silent until a merchant rule catches it" rather than failing.
+The simulator drives the shop in real Chrome. It runs a seeded mix of 13 bugs (8% dead_button, 7% cart_total, 7% checkout_error, 6% each qty_price and ghost_line, 5% each for the eight churn-reason bugs) and about 26% clean shoppers, so run 240 or more sessions. Half of the clean shoppers have a bug flag on but never reach its trigger. qty_price and the four watch bugs (slow_stock, shipping_shock, slow_delivery, slow_payment) are silent on purpose: `sim:check` reports them as silent until a rule catches them rather than failing.
 
 It writes the ground truth to `sim/out/ground-truth.json`, recording for each session its bug, persona, cart value, and whether it ordered or abandoned.
 
@@ -199,9 +202,42 @@ The demo shop's fifth bug, `ghost_line`, makes Remove leave a bag line in the ba
 The other issues (dead coupon button, failing payment) also reach the suggester, but their sessions' numbers are normal, so it declines them. Each issue is asked at most once per change in its nature or size, and a drafted issue never again.
 
 ```powershell
-pnpm sim:check     # five bugs: ghost_line is one live issue (qty_price stays silent)
+pnpm sim:check     # ghost_line is one live issue (qty_price and the watch bugs stay silent)
 pnpm sim:suggest   # waits for the agent's draft, checks it, approves it, checks the found-later issue
 ```
+
+## The agent finds what makes shoppers leave (synthetic)
+
+Most reasons shoppers leave break nothing: a surprise delivery fee, a 9-day delivery estimate, a slow bank, a slow page. No detector fires and no declared probe reads them. The **churn watcher** looks for them on its own.
+
+1. **Every number is a probe.** Besides the probes the shop declares, every network call becomes one (`req_post_api_payment_authorize_ms`, `..._status`), and any number on a recorded page can be read by a CSS selector, from the recording already stored. Nothing new is collected from shoppers, and a probe added today also reads last week's sessions.
+2. **Code finds the segment.** Every minute (or on **Look now**), it reads recent sessions and, for every number, finds the threshold past which shoppers abandon their cart far more often than others who reached the same page, and checks the gap is very unlikely to be chance. Numbers that issues or live rules already explain are skipped.
+3. **Gemini judges it.** The churn analyst decides whether the number plausibly drives shoppers away, labels the churn reason, names a probe for a page element nobody probed, and writes the rule as a sentence. The rule author and dry run turn it into a draft.
+4. **You decide.** A bell and a toast announce it. On the **Rules** tab, **The agent suspects** shows what it saw (for example "71% left after seeing ₹499, against 15% of other shoppers who reached checkout", synthetic), why, the new probe, the rule and the dry run. **Approve probe and rule** registers the probe, runs the rule live, and re-scans the last 30 days: the issue is tagged **Found later**. **Change the rule** re-drafts from your sentence. **Not a problem** takes a note; the agent does not raise that number again unless it grows, and reads your note next time.
+
+The shop's 13 bugs cover the common churn reasons (switch them on, grouped by reason, from the red bar):
+
+| Churn reason | Bugs | Caught by |
+| --- | --- | --- |
+| Poor user experience | dead_button, ghost_line, slow_stock | Dead clicks live; the agent suggests a rule for ghost_line; the watcher finds the 4 s stock check |
+| Price trust | cart_total, qty_price | The built-in rule live; a merchant rule finds qty_price later |
+| Shipping cost | shipping_shock (₹499 at checkout after "free delivery") | The watcher, with a probe on `#delivery-fee` |
+| Delivery time | slow_delivery (9–12 days) | The watcher, with a probe on `#delivery-eta` |
+| Returns hassle | returns_hidden | Dead clicks live |
+| Customer service | support_down | Errors after a click, live |
+| Personalization | recs_sold_out | Dead clicks live |
+| Declined card | card_declined | Dead clicks on Use another card, live |
+| Payment gateway | checkout_error, slow_payment | Errors live; the watcher finds the 6.5 s bank |
+
+Competitor offers and discount-only shoppers are not page defects, so the shop has no bug for them.
+
+```powershell
+pnpm sim -- --sessions 240 --seed 42 --concurrency 8
+pnpm sim:check     # the nine live bugs are one issue each; the four watch bugs and qty_price are silent
+pnpm sim:watch     # waits for the carts to settle, asks the watcher, checks each hypothesis, approves, checks the found-later issues
+```
+
+You can add a probe yourself under **Probes** on the Rules tab: name it, give a selector and a page, **Preview** what it reads over recent sessions, and save it. A rule can use it at once, for example "The delivery_fee must never be more than ₹99."
 
 ## 2. Your laptop against real GCP: supply the keys
 
@@ -252,6 +288,7 @@ Each deploy prints a Logs Explorer link. Services scale to zero by default. Use 
 | `pnpm sim:check` | Phase 2 and 3 exit tests: scores the issues against the last run's ground truth, then checks each bug's finding |
 | `pnpm sim:rescan` | Phase 4 exit test: a merchant rule surfaces past qty_price sessions, tagged found later, and time travel shows the difference |
 | `pnpm sim:suggest` | Agent-suggested rules exit test: the agent drafts a rule for the ghost_line issue (origin agent, revenue lost to date), approval surfaces its past sessions tagged found later |
+| `pnpm sim:watch` | Churn watcher exit test (after a 240-session `pnpm sim`): the agent finds the four silent churn bugs, proposes a probe and rule for each, and approval surfaces their past sessions tagged found later |
 | `pnpm rescan -- --tenant demo --rule <id>` | Re-scan history with a rule's approved version (the Cloud Run Job command) |
 | `pnpm build:sdk` | Build the one-tag SDK bundle (`apps/sdk/bundle/cp-sdk.js`) |
 | `pnpm smoke` | Phase 1 exit test on a synthetic session |
@@ -264,5 +301,6 @@ Each deploy prints a Logs Explorer link. Services scale to zero by default. Use 
 
 - **Nothing sensitive is stored.** The collector scrubs every batch again before storing it: emails, phone numbers, card-like digit runs, every input `value` (hidden inputs included), typed text, textarea contents, and URL query strings.
 - **Probes send numbers, not text.** The cart total, line totals, discount, and quantities are parsed to numbers in the browser; only allowlisted probe selectors are read.
+- **Recorded probes collect nothing new.** They are read on the server from the recording already stored (masked in the browser, scrubbed again at the collector). The page copy kept per session holds only text with digits, and only numbers reach rules, the dashboard and Gemini.
 - **Logs carry no payloads.** They hold ids, counts, timings, detectors, fingerprints and selectors only, and a redaction list censors payload keys as a backstop.
 - **Gemini sees no raw sessions.** It receives structured evidence only (detector facts, selectors, error signatures, numbers; no session ids, events, or HTML), plus one screenshot rendered from the already-masked replay with the network off.

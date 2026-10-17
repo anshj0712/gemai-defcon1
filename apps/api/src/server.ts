@@ -2,7 +2,8 @@ import Fastify, { LogController, type FastifyBaseLogger, type FastifyInstance } 
 import { z } from 'zod';
 import type { Logger } from '@cp/logger';
 import { loadReplay, SessionTooLongError, type BlobStore, type ReplayPayload, type StateStore, type WarehouseReader } from '@cp/platform';
-import { DEMO_BUGS, isDemoBug, type DemoBugStore } from './demo-bugs.js';
+import { CHURN_REASONS, DEMO_BUGS, isDemoBug, type DemoBugStore } from './demo-bugs.js';
+import { registerDemoStore, type DemoStoreOptions } from './demo-store.js';
 import { registerHistoryRoute } from './history.js';
 import { DEFAULT_AGENT_URL, registerRuleRoutes, type RuleRouteDeps } from './rules.js';
 import { compareFindings, SAFE_ID, TENANT_ID, type Finding, type FindingSummary } from '@cp/schema';
@@ -16,6 +17,8 @@ export interface ApiDeps {
   defaultTenant: string;
   /** Local mode only: which bugs the demo shop has switched on. Absent on GCP, which hides the routes. */
   demoBugs?: DemoBugStore;
+  /** The synthetic shop's backend (`/api/*`): local mode, or DEMO_STORE=true. Absent hides the routes. */
+  demoStore?: DemoStoreOptions;
   /** Where rule actions are forwarded (the agent service); the local agent when absent. */
   rules?: Omit<RuleRouteDeps, 'state' | 'defaultTenant'>;
   signalsLookbackMs: number;
@@ -79,7 +82,7 @@ export function buildApi(deps: ApiDeps): FastifyInstance {
   // Demo shop bug switches (local mode only). The dashboard writes them, the shop reads them.
   const demoBugs = deps.demoBugs;
   if (demoBugs) {
-    const view = (live: readonly string[]) => ({ bugs: live, known: DEMO_BUGS, synthetic: true });
+    const view = (live: readonly string[]) => ({ bugs: live, known: DEMO_BUGS, reasons: CHURN_REASONS, synthetic: true });
     app.get('/v1/demo/bugs', async (_req, reply) => reply.header('cache-control', 'no-store').send(view(demoBugs.read())));
     app.put('/v1/demo/bugs', async (req, reply) => {
       const body = DemoBugsBody.safeParse(req.body);
@@ -87,6 +90,7 @@ export function buildApi(deps: ApiDeps): FastifyInstance {
       return reply.header('cache-control', 'no-store').send(view(demoBugs.write(body.data.bugs.filter(isDemoBug))));
     });
   }
+  if (deps.demoStore) registerDemoStore(app, deps.demoStore);
 
   app.get('/v1/signals', async (req, reply) => {
     const q = SignalsQuery.safeParse(req.query);

@@ -7,3 +7,5 @@ export * from './bigquery.js';
 export * from './rules.js';
 export * from './clusters.js';
 export * from './findings.js';
+export * from './probes.js';
+export * from './probe-parse.js';

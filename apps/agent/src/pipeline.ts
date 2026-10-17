@@ -99,10 +99,14 @@ export interface TenantContext {
 
 const sha = (s: string) => createHash('sha256').update(s).digest('hex');
 
-export function tenantContext(clusters: readonly Cluster[], outcomes: readonly SessionOutcome[]): TenantContext {
+/**
+ * `suspected`: shoppers the churn watcher thinks some number may explain. They stay out of revenue at risk's
+ * baseline like shoppers in an issue, so problems nobody has flagged yet do not make the others look harmless.
+ */
+export function tenantContext(clusters: readonly Cluster[], outcomes: readonly SessionOutcome[], suspected: ReadonlySet<string> = new Set()): TenantContext {
   const releaseFirstSeen = new Map<string, number>();
   for (const o of outcomes) for (const r of o.releases) releaseFirstSeen.set(r, Math.min(releaseFirstSeen.get(r) ?? Infinity, o.first_seen));
-  return { outcomes, sessionsInAnyIssue: new Set(clusters.flatMap((c) => c.sessions)), releaseFirstSeen };
+  return { outcomes, sessionsInAnyIssue: new Set([...clusters.flatMap((c) => c.sessions), ...suspected]), releaseFirstSeen };
 }
 
 /** What decides whether the agents must run again for this cluster. */

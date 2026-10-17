@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { AgentInbox } from './AgentInbox';
 import { BugsBar } from './BugsBar';
 import { HistoryPage } from './HistoryPage';
 import { IssuePage } from './IssuePage';
@@ -57,6 +58,7 @@ export function App() {
           </a>
         </nav>
         <span className="synthetic">Synthetic data: demo sessions only</span>
+        <AgentInbox />
       </header>
       <BugsBar />
       <main>

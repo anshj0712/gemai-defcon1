@@ -24,6 +24,10 @@ const ProcessorEnv = z.object({
   INVARIANT_RULES: jsonEnv(z.record(z.string(), z.array(InvariantRuleSchema))).optional(),
   /** How long approved tenant rules are cached before the state store is read again (an approval goes live within this). */
   RULES_CACHE_TTL_MS: z.coerce.number().int().min(0).default(15_000),
+  /** How long recorded probes are cached before the state store is read again (a new probe is read within this). */
+  PROBES_CACHE_TTL_MS: z.coerce.number().int().min(0).default(15_000),
+  /** Keep a compact copy of each recorded page so recorded probes can be read (on by default). */
+  RECORDED_PROBES: boolEnv.default(true),
 });
 
 export interface ProcessorConfig {
@@ -34,6 +38,8 @@ export interface ProcessorConfig {
   overrides: Record<string, ParamOverrides>;
   rules: Record<string, InvariantRule[]>;
   rulesCacheTtlMs: number;
+  probesCacheTtlMs: number;
+  recordedProbes: boolean;
   tailLookbackMs: number;
   tailMaxEvents: number;
   tailTtlMs: number;
@@ -54,6 +60,8 @@ export function loadProcessorConfig(env: NodeJS.ProcessEnv = process.env): Proce
     overrides: e.DETECTOR_PARAMS ?? {},
     rules: e.INVARIANT_RULES ?? {},
     rulesCacheTtlMs: e.RULES_CACHE_TTL_MS,
+    probesCacheTtlMs: e.PROBES_CACHE_TTL_MS,
+    recordedProbes: e.RECORDED_PROBES,
     tailLookbackMs: e.TAIL_LOOKBACK_MS,
     tailMaxEvents: e.TAIL_MAX_EVENTS,
     tailTtlMs: e.TAIL_TTL_HOURS * 3_600_000,

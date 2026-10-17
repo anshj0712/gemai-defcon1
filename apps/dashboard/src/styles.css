@@ -162,6 +162,14 @@ table.kv td:first-child { color: #6b7280; white-space: nowrap; }
 .bugsbar-body { display: flex; flex-direction: column; gap: 6px; padding: 4px 0 12px; }
 .bugsbar-body label { display: flex; gap: 8px; align-items: baseline; }
 .bugsbar-note, .bugsbar-err { margin: 4px 0 0; font-size: 12px; opacity: 0.8; }
+.bugsbar-actions { display: flex; gap: 8px; }
+.bugsbar-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; }
+.bugsbar-group { margin: 0; padding: 6px 10px 8px; border: 1px solid rgba(0, 0, 0, 0.12); border-radius: 8px; background: rgba(255, 255, 255, 0.55); }
+.bugsbar-group legend { padding: 0 4px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.bugsbar-group label { margin: 3px 0; font-size: 13px; color: #1f2937; }
+.caught { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px; font-size: 11px; font-weight: 600; background: #e5e7eb; color: #374151; }
+.caught.agent, .caught.agent_rule { background: #ede9fe; color: #5b21b6; }
+.caught.builtin_rule, .caught.merchant_rule { background: #dbeafe; color: #1e40af; }
 
 /* ---------- issue page: revenue first, three summary cards, everything else folded ---------- */
 .hero { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; gap: 20px; align-items: stretch; margin: 6px 0 16px; }
@@ -267,3 +275,45 @@ a.found-later:hover { background: #ddd6fe; }
 .lost.pending .lost-line { color: #475569; }
 .lost .small-p { margin: 0; }
 .lost-line .synthetic-note, .small-p .synthetic-note { margin: 0 0 0 4px; vertical-align: middle; }
+
+/* Probes: declared, request and recorded, and the add-a-probe form. */
+.probes { margin: 20px 0 16px; }
+.probe-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; margin-top: 10px; }
+.probe-group h4 { margin: 0 0 6px; }
+.probe-table td { vertical-align: top; }
+.src { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #e5e7eb; color: #374151; }
+.src.request { background: #fef3c7; color: #92400e; }
+.src.recorded { background: #ede9fe; color: #5b21b6; }
+.probe-add { margin-top: 12px; }
+.probe-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin: 10px 0 6px; }
+.probe-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: #374151; }
+.probe-form input, .probe-form select { font: inherit; font-size: 13px; font-weight: 400; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; }
+.probe-preview { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: #f9fafb; border: 1px solid #e5e7eb; }
+.probe-status { display: inline-block; margin-right: 6px; font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px; background: #dcfce7; color: #166534; }
+.probe-status.disabled { background: #f3f4f6; color: #6b7280; }
+
+/* The agent suspects: churn watcher hypotheses (not findings), the inbox bell, and its toast. */
+.suggested.suspects { border: 1px dashed #a78bfa; background: #faf7ff; }
+.rule-card.hypothesis { border: 1px dashed #8b5cf6; background: #fff; box-shadow: 0 0 0 3px #f3e8ff; }
+.hyp-badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #ede9fe; color: #5b21b6; }
+.reason-chip { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa; }
+.confidence { font-size: 11px; font-weight: 600; color: #4b5563; }
+.confidence.high { color: #166534; }
+.confidence.low { color: #92400e; }
+.hyp-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin: 8px 0 10px; }
+.hyp-stat { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 10px; background: #f9fafb; border: 1px solid #e5e7eb; font-size: 12.5px; color: #4b5563; }
+.hyp-stat b { font-size: 22px; color: #111827; }
+.hyp-stat.bad { background: #fef2f2; border-color: #fecaca; }
+.hyp-stat.bad b { color: #b91c1c; }
+.hyp-number { margin: 6px 0 8px; font-size: 13px; line-height: 1.6; }
+.hyp-form { margin-top: 10px; }
+.hyp-form textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 13px; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 8px; }
+.inbox { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 8px; color: #cbd5e1; text-decoration: none; }
+.inbox:hover { background: #1f2937; color: #fff; }
+.inbox.has { color: #c4b5fd; }
+.inbox-count { position: absolute; top: 2px; right: 0; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; background: #7c3aed; color: #fff; font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; }
+.agent-toast { position: fixed; right: 20px; bottom: 20px; z-index: 50; width: min(380px, calc(100vw - 40px)); padding: 14px 16px; border-radius: 12px; background: #fff; border: 1px solid #c4b5fd; box-shadow: 0 10px 30px rgba(76, 29, 149, 0.18); font-size: 13px; }
+.agent-toast b { display: block; margin: 8px 0 4px; font-size: 14px; color: #111827; }
+.agent-toast p { margin: 0 0 10px; color: #4b5563; }
+.agent-toast-head { display: flex; align-items: center; justify-content: space-between; }
+.agent-toast-close { border: 0; background: none; font-size: 18px; line-height: 1; color: #6b7280; cursor: pointer; }
