@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import type { Cluster, Finding } from '@cp/schema';
-import { ArrowLeftIcon, CheckCircle2Icon, PlayIcon, RotateCcwIcon } from 'lucide-react';
+import { ArrowLeftIcon, CheckCircleIcon, PlayIcon, ArrowCounterClockwiseIcon } from '@phosphor-icons/react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { fetchCluster, fetchFinding, reopenFinding, resolveFinding, type FindingVersionView } from './api';
-import { KindBadge, SymptomChip } from './components/common';
+import { KindBadge, PageTabsList, SymptomChip } from './components/common';
 import { FindingHeader, FindingProofTab, FindingSummaryTab, FindingTechnicalTab, latestReplayHref } from './FindingPanel';
 import { ago, isResolved, symptomColor, symptomName, time } from './format';
 
@@ -178,7 +178,7 @@ export function IssuePage({ clusterId }: { clusterId: string }) {
         ) : (
           <div className="flex flex-col items-start gap-2">
             <KindBadge kind={cluster.kind} />
-            <h1 className="issue-title m-0 text-2xl font-semibold tracking-tight">{cluster.title}</h1>
+            <h1 className="issue-title m-0 font-display text-[30px] leading-[1.12] font-medium tracking-[-0.02em]">{cluster.title}</h1>
             <p className="m-0 text-[13px] text-muted-foreground">
               On {cluster.route} · {cluster.session_count} shoppers · last seen {ago(cluster.last_seen)}
             </p>
@@ -194,12 +194,12 @@ export function IssuePage({ clusterId }: { clusterId: string }) {
           {f &&
             (resolved ? (
               <Button variant="outline" disabled={busy} onClick={() => void toggleFixed(true)}>
-                <RotateCcwIcon data-icon="inline-start" aria-hidden="true" />
+                <ArrowCounterClockwiseIcon data-icon="inline-start" aria-hidden="true" />
                 Reopen
               </Button>
             ) : (
               <Button variant="outline" disabled={busy} onClick={() => void toggleFixed(false)}>
-                <CheckCircle2Icon data-icon="inline-start" aria-hidden="true" />
+                <CheckCircleIcon data-icon="inline-start" aria-hidden="true" />
                 {busy ? 'Saving…' : 'Mark as fixed'}
               </Button>
             ))}
@@ -208,7 +208,7 @@ export function IssuePage({ clusterId }: { clusterId: string }) {
 
       {resolved && (
         <div className="flex items-center gap-2 rounded-lg border border-success-border bg-success-muted px-3 py-2 text-sm text-success">
-          <CheckCircle2Icon aria-hidden="true" className="size-4" />
+          <CheckCircleIcon aria-hidden="true" className="size-4" />
           Marked fixed {ago(f.resolution!.resolved_at)}. If shoppers hit it again, it reopens by itself.
         </div>
       )}
@@ -216,14 +216,14 @@ export function IssuePage({ clusterId }: { clusterId: string }) {
 
       {f && finding ? (
         <Tabs value={tab} onValueChange={(v) => setTab(v as IssueTab)}>
-          <TabsList>
+          <PageTabsList>
             <TabsTrigger value="summary">Summary</TabsTrigger>
             <TabsTrigger value="proof">Proof</TabsTrigger>
             <TabsTrigger value="sessions">
               Sessions <span className="text-muted-foreground tabular-nums">{cluster.session_count}</span>
             </TabsTrigger>
             <TabsTrigger value="technical">Technical</TabsTrigger>
-          </TabsList>
+          </PageTabsList>
           <TabsContent value="summary" className="motion-reveal pt-4">
             <FindingSummaryTab finding={f} onOpenReview={() => setTab('technical')} />
           </TabsContent>

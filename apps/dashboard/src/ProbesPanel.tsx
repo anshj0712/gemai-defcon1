@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ProbeDoc, ProbePreview, RecordedProbeSpec } from '@cp/schema';
-import { CogIcon, EyeIcon, PlayIcon, PlusIcon, SparklesIcon, UserIcon, XIcon } from 'lucide-react';
+import { GearSixIcon, EyeIcon, PlayIcon, PlusIcon, DetectiveIcon, UserIcon, XIcon } from '@phosphor-icons/react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -212,7 +212,7 @@ export function ProbesPanel({ onChanged }: { onChanged?: () => void }) {
     <div className="flex flex-col gap-4">
       <p className="m-0 text-[13px] text-muted-foreground">The numbers rules compare, read from the last {view.sessions} sessions. Recorded probes read the page shoppers saw, so they also work on sessions recorded before them.</p>
 
-      <Module origin="agent" icon={SparklesIcon} title="Found by the agent" count={agent.rows.length + agent.idle.length} description="Numbers on your pages the agent found shoppers leaving over, registered when you approved its rule.">
+      <Module origin="agent" icon={DetectiveIcon} title="Found by the agent" count={agent.rows.length + agent.idle.length} description="Numbers on your pages the agent found shoppers leaving over, registered when you approved its rule.">
         {agent.rows.length + agent.idle.length === 0 ? (
           <p className="m-0 text-[13px] text-muted-foreground">None yet. Approving an agent hypothesis that proposes a new probe registers it here.</p>
         ) : (
@@ -341,7 +341,7 @@ export function ProbesPanel({ onChanged }: { onChanged?: () => void }) {
         )}
       </Module>
 
-      <Module origin="system" icon={CogIcon} title="Automatic" count={declared.length + requests.length} description="Numbers every session reports without setup: the store's own probes, and every network call (how long it took, how it ended).">
+      <Module origin="system" icon={GearSixIcon} title="Automatic" count={declared.length + requests.length} description="Numbers every session reports without setup: the store's own probes, and every network call (how long it took, how it ended).">
         <Tabs defaultValue="declared">
           <TabsList>
             <TabsTrigger value="declared">

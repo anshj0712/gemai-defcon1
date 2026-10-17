@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import type { Claim, Cluster, EvidenceItem, Finding } from '@cp/schema';
-import { ChevronDownIcon, ChevronUpIcon, InfoIcon, PlayIcon, ScaleIcon } from 'lucide-react';
+import { CaretDownIcon, CaretUpIcon, InfoIcon, PlayIcon, ScalesIcon } from '@phosphor-icons/react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -15,10 +15,10 @@ const OFFLINE_MODEL = 'offline-stand-in';
 
 /** The visual check's result, in words and a status tone (never color alone). */
 const VERDICTS: Record<string, { label: string; className: string }> = {
-  confirmed: { label: 'Visually confirmed', className: 'bg-success-solid text-tier-foreground' },
-  not_confirmed: { label: 'Not visible on screen', className: 'bg-tier-p0 text-tier-foreground' },
-  unclear: { label: 'Unclear on screen', className: 'bg-tier-p2 text-tier-foreground' },
-  not_checked: { label: 'Not visually checked', className: 'bg-tier-p3 text-tier-foreground' },
+  confirmed: { label: 'Visually confirmed', className: 'bg-success-muted text-success' },
+  not_confirmed: { label: 'Not visible on screen', className: 'bg-tier-p0/12 text-tier-p0-ink' },
+  unclear: { label: 'Unclear on screen', className: 'bg-tier-p2/14 text-tier-p2-ink' },
+  not_checked: { label: 'Not visually checked', className: 'bg-tier-p3/14 text-tier-p3-ink' },
 };
 
 /** Where an evidence item leads: signals and the screenshot open the replay at their moment. */
@@ -95,7 +95,7 @@ export function FindingHeader({ finding: f, cluster }: { finding: Finding; clust
           </FoundLaterBadge>
         )}
       </div>
-      <h1 className="issue-title m-0 text-2xl leading-tight font-semibold tracking-tight">{f.title}</h1>
+      <h1 className="issue-title m-0 font-display text-[30px] leading-[1.12] font-medium tracking-[-0.02em]">{f.title}</h1>
       <p className="m-0 text-[13px] text-muted-foreground">
         On {cluster.route} · {cluster.session_count} shoppers · first seen {time(cluster.first_seen)}
       </p>
@@ -114,7 +114,7 @@ function JuryLine({ v, onOpen }: { v: NonNullable<Finding['verdict']>; onOpen: (
   const outcome = OUTCOME[v.outcome as keyof typeof OUTCOME] ?? OUTCOME.unavailable;
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-sm">
-      <ScaleIcon aria-hidden="true" className="size-4 text-muted-foreground" />
+      <ScalesIcon aria-hidden="true" className="size-4 text-muted-foreground" />
       <span>
         Reviewed by {v.jurors_asked} AI jurors:
       </span>
@@ -140,7 +140,7 @@ export function FindingSummaryTab({ finding: f, onOpenReview }: { finding: Findi
         <Card size="sm" className={cn('gap-0.5 px-4', r.status === 'ok' ? 'bg-danger-muted ring-danger-border' : 'bg-muted')} title={r.status === 'ok' ? formulaLine(r) : undefined}>
           <span className="text-[13px] text-muted-foreground">Revenue lost so far</span>
           {r.status === 'ok' ? (
-            <span className="text-3xl leading-tight font-bold text-money">
+            <span className="text-3xl leading-tight font-semibold tracking-[-0.02em] text-money">
               <AnimatedNumber value={r.revenue_at_risk_minor} format={(n) => money(Math.round(n), r.currency)} ms={900} />
             </span>
           ) : (
@@ -149,13 +149,13 @@ export function FindingSummaryTab({ finding: f, onOpenReview }: { finding: Findi
         </Card>
         <Card size="sm" className="gap-0.5 px-4">
           <span className="text-[13px] text-muted-foreground">Shoppers with a cart who hit it</span>
-          <span className="text-3xl leading-tight font-semibold">
+          <span className="text-3xl leading-tight font-semibold tracking-[-0.02em]">
             <AnimatedNumber value={affected} />
           </span>
         </Card>
         <Card size="sm" className="gap-0.5 px-4">
           <span className="text-[13px] text-muted-foreground">Left without ordering</span>
-          <span className="text-3xl leading-tight font-semibold tabular-nums">
+          <span className="text-3xl leading-tight font-semibold tracking-[-0.02em] tabular-nums">
             {pct(r.abandonment_affected)} <span className="text-base font-normal text-muted-foreground">vs {pct(r.abandonment_baseline)} normally</span>
           </span>
         </Card>
@@ -279,7 +279,7 @@ function VerdictCard({ v, byId, defaultOpen = false }: { v: NonNullable<Finding[
   return (
     <Card size="sm" className={cn('gap-2 px-4', v.outcome === 'rejected' && 'bg-danger-muted ring-danger-border', v.outcome === 'unavailable' && 'ring-0 outline-1 outline-border outline-dashed')}>
       <button type="button" className="flex w-full cursor-pointer items-center gap-2 text-left" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-        <ScaleIcon aria-hidden="true" className="size-4 text-muted-foreground" />
+        <ScalesIcon aria-hidden="true" className="size-4 text-muted-foreground" />
         <Eyebrow>Jury verdict</Eyebrow>
         <Badge className={outcome.className}>{outcome.label}</Badge>
         {v.mean_score !== null && (
@@ -287,7 +287,7 @@ function VerdictCard({ v, byId, defaultOpen = false }: { v: NonNullable<Finding[
             {Math.round(v.mean_score * 100)}% <span className="text-xs font-normal text-muted-foreground">· the bar is above {bar}%</span>
           </span>
         )}
-        {open ? <ChevronUpIcon aria-hidden="true" className="size-4 text-muted-foreground" /> : <ChevronDownIcon aria-hidden="true" className="size-4 text-muted-foreground" />}
+        {open ? <CaretUpIcon aria-hidden="true" className="size-4 text-muted-foreground" /> : <CaretDownIcon aria-hidden="true" className="size-4 text-muted-foreground" />}
       </button>
       <div className="text-sm">{v.ruling ? <ClaimText claim={v.ruling} byId={byId} /> : <p className="m-0">{v.summary}</p>}</div>
       {v.ruling && <p className="m-0 text-xs text-muted-foreground">{v.summary}</p>}
@@ -381,7 +381,7 @@ export function FindingTechnicalTab({ finding: f, versions }: { finding: Finding
                   <TableCell className="w-12 align-top">
                     <span className={cn(chipClass, 'bg-muted text-muted-foreground')}>{e.id}</span>
                   </TableCell>
-                  <TableCell className="w-28 align-top text-xs text-muted-foreground uppercase">{e.kind}</TableCell>
+                  <TableCell className="w-28 align-top font-mono text-xs text-muted-foreground">{e.kind}</TableCell>
                   <TableCell className="text-[13px] whitespace-normal">{e.text}</TableCell>
                   <TableCell className="w-32 text-right align-top">{href && watchLink(href)}</TableCell>
                 </TableRow>

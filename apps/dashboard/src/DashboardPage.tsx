@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import type { FindingSummary } from '@cp/schema';
-import { ArrowRightIcon, HistoryIcon, ScrollTextIcon, SparklesIcon, UsersIcon } from 'lucide-react';
+import { ArrowRightIcon, ClockCounterClockwiseIcon, ScrollIcon, DetectiveIcon, UsersIcon } from '@phosphor-icons/react';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, LabelList, ReferenceLine, XAxis, YAxis } from 'recharts';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -26,7 +26,7 @@ const pageConfig = { revenue: { label: 'Revenue at risk', color: 'var(--money)' 
 /** A KPI card that leads somewhere. */
 function LinkStat({ href, icon: Icon, label, value, children }: { href: string; icon: typeof UsersIcon; label: string; value: ReactNode; children?: ReactNode }) {
   return (
-    <a href={href} className="group/stat flex flex-col gap-1 rounded-xl border bg-card px-4 py-3 text-card-foreground no-underline shadow-xs transition-[border-color,box-shadow,translate] duration-200 ease-out-expo hover:border-input hover:shadow-md motion-safe:hover:-translate-y-px">
+    <a href={href} className="group/stat flex flex-col gap-1 rounded-xl bg-card px-4 py-3 text-card-foreground no-underline ring-1 ring-border transition-[box-shadow,translate] duration-200 ease-out-expo hover:shadow-[0_10px_28px_-16px_rgb(31_30_28/0.35)] hover:ring-input motion-safe:hover:-translate-y-px">
       <span className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
         <Icon aria-hidden="true" className="size-4" />
         {label}
@@ -130,7 +130,7 @@ export function DashboardPage() {
         <LinkStat href="#/issues" icon={UsersIcon} label="Shoppers affected" value={<AnimatedNumber value={shoppers} />}>
           <span className="text-xs text-muted-foreground">across {ranked.length} open issue{ranked.length === 1 ? '' : 's'}</span>
         </LinkStat>
-        <LinkStat href="#/issues" icon={ScrollTextIcon} label="Open issues by priority" value={<AnimatedNumber value={ranked.length} />}>
+        <LinkStat href="#/issues" icon={ScrollIcon} label="Open issues by priority" value={<AnimatedNumber value={ranked.length} />}>
           {tierTotal > 0 && (
             <div className="mt-1 flex flex-col gap-1.5">
               <div className="flex h-2 gap-0.5 overflow-hidden rounded-full" role="img" aria-label={byTier.map((t) => `${t.tier}: ${t.n}`).join(', ')}>
@@ -151,13 +151,13 @@ export function DashboardPage() {
             </div>
           )}
         </LinkStat>
-        <LinkStat href="#/rules" icon={SparklesIcon} label="Waiting for your approval" value={<AnimatedNumber value={pending.length} />}>
+        <LinkStat href="#/rules" icon={DetectiveIcon} label="Waiting for your approval" value={<AnimatedNumber value={pending.length} />}>
           <span className="flex flex-wrap gap-1.5 text-xs">
             <Badge className="bg-agent-muted text-agent">{agentPending.length} from the agent</Badge>
             <Badge className="bg-info-muted text-info">{ownPending} yours</Badge>
           </span>
         </LinkStat>
-        <LinkStat href="#/history" icon={HistoryIcon} label="Found later" value={<AnimatedNumber value={laterSessions} />}>
+        <LinkStat href="#/history" icon={ClockCounterClockwiseIcon} label="Found later" value={<AnimatedNumber value={laterSessions} />}>
           <span className="text-xs text-muted-foreground">
             shoppers a new rule found in history{later.length ? `, in ${later.length} issue${later.length === 1 ? '' : 's'}` : ''}
           </span>
@@ -169,7 +169,7 @@ export function DashboardPage() {
           <div className="flex flex-wrap items-end justify-between gap-2">
             <div className="flex flex-col">
               <Eyebrow>Revenue at risk now</Eyebrow>
-              <span className="text-5xl leading-tight font-bold text-money">
+              <span className="text-[52px] leading-[1.05] font-semibold tracking-[-0.03em] text-money">
                 <AnimatedNumber value={atRisk} format={(n) => money(Math.round(n), currency)} ms={900} />
               </span>
               <span className="text-[13px] text-muted-foreground">
@@ -228,9 +228,9 @@ export function DashboardPage() {
                 <li key={c.cluster_id}>
                   <a
                     href={`#/issues/${c.cluster_id}`}
-                    className="issue group/top flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5 text-card-foreground no-underline transition-[border-color,box-shadow] duration-200 hover:border-input hover:shadow-sm"
+                    className="issue group/top flex items-center gap-3 rounded-lg bg-card px-3 py-2.5 text-card-foreground no-underline ring-1 ring-border transition-[box-shadow,background-color] duration-200 hover:bg-muted/40 hover:ring-input"
                   >
-                    <span aria-hidden="true" className="grid size-7 shrink-0 place-items-center rounded-full bg-muted text-sm font-semibold tabular-nums">
+                    <span aria-hidden="true" className="grid size-7 shrink-0 place-items-center rounded-md bg-muted font-mono text-[13px] font-medium tabular-nums">
                       {i + 1}
                     </span>
                     <span className="flex min-w-0 flex-col gap-0.5">
@@ -274,7 +274,7 @@ export function DashboardPage() {
         <Card className="gap-3 px-5">
           <div className="flex items-center justify-between">
             <h2 className="m-0 flex items-center gap-1.5 text-base font-semibold">
-              <SparklesIcon aria-hidden="true" className="size-4 text-agent" />
+              <DetectiveIcon aria-hidden="true" className="size-4 text-agent" />
               The agent suggests
             </h2>
             <a href="#/rules" className="flex items-center gap-1 text-sm font-medium no-underline hover:underline">
@@ -287,7 +287,7 @@ export function DashboardPage() {
             <ul className="m-0 flex list-none flex-col gap-2 p-0">
               {topSuggestions.map((r) => (
                 <li key={r.rule_id}>
-                  <a href="#/rules" className="flex items-center gap-3 rounded-lg border border-dashed border-agent-border bg-card px-3 py-2 text-card-foreground no-underline transition-colors hover:bg-agent-muted">
+                  <a href="#/rules" className="flex items-center gap-3 rounded-lg bg-card px-3 py-2 text-card-foreground no-underline ring-1 ring-agent-border/70 transition-colors duration-200 hover:bg-agent-muted">
                     <span className="min-w-0 truncate text-sm font-medium">{r.draft!.watch?.title ?? r.draft!.rule.title}</span>
                     <span className="ml-auto text-sm font-semibold whitespace-nowrap text-money tabular-nums">
                       {r.draft!.revenue_lost?.status === 'ok' ? money(r.draft!.revenue_lost.revenue_at_risk_minor, r.draft!.revenue_lost.currency) : ''}

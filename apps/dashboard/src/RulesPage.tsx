@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import type { DryRun, RescanStatus, RevenueAtRisk } from '@cp/schema';
-import { CheckIcon, ChevronDownIcon, CogIcon, PencilIcon, PlayIcon, PlusIcon, ScanSearchIcon, SparklesIcon, ThumbsDownIcon, Undo2Icon, UserIcon } from 'lucide-react';
+import { CheckIcon, CaretDownIcon, GearSixIcon, PencilSimpleIcon, PlayIcon, PlusIcon, BinocularsIcon, DetectiveIcon, ThumbsDownIcon, ArrowUUpLeftIcon, UserIcon } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -9,11 +9,11 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { ApiError, approveRule, draftRule, fetchClusters, fetchRules, redraftRule, rejectRule, rescanRule, runWatch, undoRule, type BuiltinRuleView, type ClusterSummary, type RuleView } from './api';
-import { Eyebrow, Module, OriginChip, PageHeader } from './components/common';
+import { Eyebrow, Module, OriginChip, PageHeader, PageTabsList } from './components/common';
 import { ago, formulaLine, money, pct, time } from './format';
 import { probeValue } from './lib/probes';
 import { liveOrigin } from './lib/rules';
@@ -161,7 +161,7 @@ function RescanBlock({ s, issue, onRescan, busy }: { s: RescanStatus; issue: Clu
         )}
         {s.status !== 'running' && (
           <Button variant="outline" size="sm" disabled={busy} onClick={onRescan}>
-            <ScanSearchIcon data-icon="inline-start" aria-hidden="true" />
+            <BinocularsIcon data-icon="inline-start" aria-hidden="true" />
             Re-scan again
           </Button>
         )}
@@ -177,7 +177,7 @@ function RescanBlock({ s, issue, onRescan, busy }: { s: RescanStatus; issue: Clu
 function RuleRow({ chips, title, figure, actions, children, tone }: { chips: ReactNode; title: ReactNode; figure?: ReactNode; actions: ReactNode; children: ReactNode; tone?: 'agent' }) {
   const [open, setOpen] = useState(false);
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className={cn('rounded-xl border bg-card transition-shadow duration-200', tone === 'agent' && 'border-dashed border-agent-border', open && 'shadow-sm')}>
+    <Collapsible open={open} onOpenChange={setOpen} className={cn('rounded-xl bg-card ring-1 ring-border transition-shadow duration-200', tone === 'agent' && 'ring-agent-border', open && 'shadow-[0_10px_28px_-18px_rgb(31_30_28/0.35)]')}>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex flex-wrap items-center gap-1.5">{chips}</div>
@@ -187,7 +187,7 @@ function RuleRow({ chips, title, figure, actions, children, tone }: { chips: Rea
         <div className="flex flex-wrap items-center gap-2">{actions}</div>
         <CollapsibleTrigger asChild>
           <Button variant="ghost" size="icon-sm" aria-label={open ? 'Hide details' : 'Show details'} title={open ? 'Hide details' : 'Show details'}>
-            <ChevronDownIcon aria-hidden="true" className={cn('transition-transform duration-200 ease-out-expo', open && 'rotate-180')} />
+            <CaretDownIcon aria-hidden="true" className={cn('transition-transform duration-200 ease-out-expo', open && 'rotate-180')} />
           </Button>
         </CollapsibleTrigger>
       </div>
@@ -244,7 +244,7 @@ function HypothesisRow({ r, a }: { r: RuleView; a: Actions }) {
         tone="agent"
         chips={
           <>
-            <OriginChip origin="agent" icon={SparklesIcon}>
+            <OriginChip origin="agent" icon={DetectiveIcon}>
               Hypothesis · not a finding yet
             </OriginChip>
             <Badge variant="outline" className="border-warn-border bg-warn-muted text-warn">
@@ -262,7 +262,7 @@ function HypothesisRow({ r, a }: { r: RuleView; a: Actions }) {
               {busyHere('approve') ? 'Approving…' : probe ? 'Approve probe and rule' : 'Approve rule'}
             </Button>
             <Button size="sm" variant="outline" disabled={a.busy !== null} onClick={() => setDialog('edit')}>
-              <PencilIcon data-icon="inline-start" aria-hidden="true" />
+              <PencilSimpleIcon data-icon="inline-start" aria-hidden="true" />
               {busyHere('redraft') ? 'Drafting again…' : 'Change the rule'}
             </Button>
             <Button size="sm" variant="outline" disabled={a.busy !== null} onClick={() => setDialog('reject')}>
@@ -377,7 +377,7 @@ function DraftRow({ r, a }: { r: RuleView; a: Actions }) {
         chips={
           <>
             {agent ? (
-              <OriginChip origin="agent" icon={SparklesIcon}>
+              <OriginChip origin="agent" icon={DetectiveIcon}>
                 Suggested for a recurring issue
               </OriginChip>
             ) : (
@@ -465,7 +465,7 @@ function LiveRow({ r, issue, busy, onUndo, onRescan }: { r: RuleView; issue: Clu
       }
       actions={
         <Button size="sm" variant="outline" disabled={busy} onClick={onUndo} title="Switch this rule off. What it already found stays as history.">
-          <Undo2Icon data-icon="inline-start" aria-hidden="true" />
+          <ArrowUUpLeftIcon data-icon="inline-start" aria-hidden="true" />
           Undo
         </Button>
       }
@@ -614,7 +614,7 @@ export function RulesPage({ tab }: { tab?: RulesTab }) {
     <>
       {header}
       <Tabs value={current} onValueChange={(v) => (window.location.hash = v === 'waiting' ? '#/rules' : `#/rules/${v}`)}>
-        <TabsList>
+        <PageTabsList>
           <TabsTrigger value="waiting">
             Waiting for approval <span className="text-muted-foreground tabular-nums">{drafts.length}</span>
           </TabsTrigger>
@@ -622,19 +622,19 @@ export function RulesPage({ tab }: { tab?: RulesTab }) {
             Live rules <span className="text-muted-foreground tabular-nums">{live.length + builtin.length}</span>
           </TabsTrigger>
           <TabsTrigger value="probes">Probes</TabsTrigger>
-        </TabsList>
+        </PageTabsList>
 
         <TabsContent value="waiting" className="motion-reveal flex flex-col gap-4 pt-4">
           <Module
             id="agent-suspects"
             origin="agent"
-            icon={SparklesIcon}
+            icon={DetectiveIcon}
             title="Suggested by the agent"
             count={agentDrafts.length}
             description="It watches every session for numbers shoppers leave over, and suggests rules for recurring issues. These are hypotheses: nothing is flagged until you approve."
             action={
               <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => void act('watch', async () => setWatchNote(watchSummary(await runWatch())))}>
-                <ScanSearchIcon data-icon="inline-start" aria-hidden="true" />
+                <BinocularsIcon data-icon="inline-start" aria-hidden="true" />
                 {busy === 'watch' ? 'Looking…' : 'Look now'}
               </Button>
             }
@@ -669,13 +669,13 @@ export function RulesPage({ tab }: { tab?: RulesTab }) {
         </TabsContent>
 
         <TabsContent value="live" className="motion-reveal flex flex-col gap-4 pt-4">
-          <Module origin="agent" icon={SparklesIcon} title="Proposed by the agent, approved by you" count={liveAgent.length} description="Rules the agent found and you switched on.">
+          <Module origin="agent" icon={DetectiveIcon} title="Proposed by the agent, approved by you" count={liveAgent.length} description="Rules the agent found and you switched on.">
             {liveAgent.length === 0 ? <p className="m-0 text-[13px] text-muted-foreground">None yet. Approve one of the agent's suggestions to see it here.</p> : liveAgent.map(liveRow)}
           </Module>
           <Module origin="human" icon={UserIcon} title="Added by you" count={liveOwn.length} description="Rules you wrote and approved.">
             {liveOwn.length === 0 ? <p className="m-0 text-[13px] text-muted-foreground">None yet.</p> : liveOwn.map(liveRow)}
           </Module>
-          <Module origin="system" icon={CogIcon} title="Built in" count={builtin.length} description="Checks every store gets.">
+          <Module origin="system" icon={GearSixIcon} title="Built in" count={builtin.length} description="Checks every store gets.">
             {builtin.map((b) => (
               <div key={b.rule_id} className="flex flex-wrap items-center gap-3 rounded-xl border bg-muted/30 px-4 py-3">
                 <Badge variant="secondary">v{b.version}</Badge>

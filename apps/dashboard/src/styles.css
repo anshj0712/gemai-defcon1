@@ -1,10 +1,11 @@
 /* Loaded in @layer legacy (see index.css): above Tailwind's preflight, below utilities. What is left of the
    pre-redesign stylesheet: element defaults for prose (preflight removes them) and the two animations the
    feed uses. Every screen is otherwise styled with shadcn components and tokens. */
-a { color: var(--primary); }
-code { font-size: 12px; background: var(--info-muted); padding: 1px 5px; border-radius: 4px; }
-h1 { font-size: 22px; font-weight: 600; margin: 4px 0 8px; }
-h2 { font-size: 18px; font-weight: 600; margin: 12px 0 8px; }
+a { color: var(--link); text-decoration-thickness: 1px; text-underline-offset: 3px; text-decoration-color: color-mix(in oklab, currentColor 35%, transparent); }
+a:hover { text-decoration-color: currentColor; }
+code { font-size: 12px; background: var(--muted); color: var(--foreground); padding: 1px 5px; border-radius: 4px; box-shadow: inset 0 0 0 1px var(--border); }
+h1 { font-size: 22px; font-weight: 600; margin: 4px 0 8px; letter-spacing: -0.015em; }
+h2 { font-size: 18px; font-weight: 600; margin: 12px 0 8px; letter-spacing: -0.01em; }
 h3 { font-size: 15px; font-weight: 600; margin: 8px 0; }
 h4 { font-size: 13px; font-weight: 600; margin: 8px 0 4px; }
 p { margin: 0 0 8px; }

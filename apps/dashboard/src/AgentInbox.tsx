@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { BellIcon, XIcon } from 'lucide-react';
+import { BellSimpleIcon, XIcon } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -39,7 +39,7 @@ function showProposal(r: RuleView): void {
   const line = toastLine(r);
   toast.custom(
     (id) => (
-      <div className="flex w-[356px] flex-col gap-2 rounded-lg border border-dashed border-agent-border bg-popover p-4 text-popover-foreground shadow-lg">
+      <div className="flex w-[356px] flex-col gap-2 rounded-lg border border-agent-border bg-popover p-4 text-popover-foreground shadow-[0_12px_32px_-16px_rgb(31_30_28/0.35)]">
         <div className="flex items-center justify-between gap-2">
           <Badge className="bg-agent-muted text-agent">{r.draft?.watch ? 'The agent suspects' : 'The agent suggests a rule'}</Badge>
           <Button variant="ghost" size="icon-xs" aria-label="Dismiss" onClick={() => toast.dismiss(id)}>
@@ -106,8 +106,8 @@ export function AgentInbox() {
     <>
       <Tooltip>
         <TooltipTrigger asChild>
-          <a href="#/rules" aria-label={label} className={cn(buttonVariants({ variant: 'ghost', size: 'icon' }), 'relative text-topbar-muted hover:bg-topbar-active hover:text-topbar-foreground dark:hover:bg-topbar-active', open.length > 0 && 'text-agent-border')} onClick={review}>
-            <BellIcon key={arrivals} aria-hidden="true" className={arrivals > 0 ? 'motion-nudge' : undefined} />
+          <a href="#/rules" aria-label={label} className={cn(buttonVariants({ variant: 'ghost', size: 'icon' }), 'relative text-topbar-muted hover:bg-topbar-active hover:text-topbar-foreground dark:hover:bg-topbar-active', open.length > 0 && 'text-agent')} onClick={review}>
+            <BellSimpleIcon key={arrivals} aria-hidden="true" className={arrivals > 0 ? 'motion-nudge' : undefined} />
             {open.length > 0 && (
               <span key={`${open.length}-${arrivals}`} aria-hidden="true" className="motion-pop absolute -top-0.5 -right-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-agent-strong px-1 text-[10px] leading-none font-semibold text-tier-foreground">
                 {open.length}

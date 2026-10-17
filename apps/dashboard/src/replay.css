@@ -3,7 +3,7 @@
    cannot reach the player's own rules. */
 .player .rr-player { float: none; }
 
-/* The shopper's pointer: a blue ring (instead of rrweb's black arrow) that flashes rose on click. */
+/* The shopper's pointer: an ink-blue ring (instead of rrweb's black arrow) that flashes brick on click. */
 .replayer-mouse {
   box-sizing: border-box;
   width: 24px;
@@ -11,8 +11,8 @@
   margin-left: -12px;
   margin-top: -12px;
   background-image: none !important;
-  background-color: rgba(37, 99, 235, 0.18);
-  border: 3px solid #2563eb !important;
+  background-color: rgba(61, 111, 168, 0.18);
+  border: 3px solid #3d6fa8 !important;
   border-radius: 50%;
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9);
   z-index: 10;
@@ -21,12 +21,26 @@
   position: absolute;
   left: 50%;
   top: 50%;
-  background: #f43f5e;
+  background: #b13d34;
   opacity: 0;
 }
-.replayer-mouse.active { border-color: #f43f5e !important; }
+.replayer-mouse.active { border-color: #b13d34 !important; }
 .replayer-mouse.active::after { animation: cp-click 0.5s ease-out 1; }
 @keyframes cp-click {
   0% { opacity: 0.7; width: 8px; height: 8px; }
   100% { opacity: 0; width: 64px; height: 64px; }
 }
+
+/* The player's controls in the dashboard's palette (rrweb-player ships its own indigo). Its selectors repeat the
+   svelte class for specificity, so these need !important. */
+.player .rr-controller { background: var(--card) !important; }
+.player .rr-timeline__time { color: var(--foreground) !important; font-variant-numeric: tabular-nums; }
+.player .rr-progress { background: var(--muted) !important; border-color: var(--card) !important; }
+.player .rr-progress__step { background: color-mix(in oklab, var(--ring) 24%, var(--card)) !important; }
+.player .rr-progress__handler { background: var(--primary) !important; }
+.player .rr-controller__btns button { color: var(--foreground); border-radius: 6px !important; }
+.player .rr-controller__btns button:active { background: var(--muted) !important; }
+.player .rr-controller__btns button.active { background: var(--primary) !important; color: var(--primary-foreground) !important; }
+.player .switch label:before { background: var(--input) !important; }
+.player .switch input[type='checkbox']:checked + label:before { background: var(--primary) !important; }
+.player .rr-controller__btns svg { fill: currentColor; }

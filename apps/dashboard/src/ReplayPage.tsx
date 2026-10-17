@@ -1,6 +1,6 @@
 import Player from 'rrweb-player';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeftIcon, PlayIcon, RotateCcwIcon, TriangleAlertIcon } from 'lucide-react';
+import { ArrowLeftIcon, PlayIcon, ArrowCounterClockwiseIcon, WarningIcon } from '@phosphor-icons/react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -12,16 +12,16 @@ import { clipWindow, ERROR_COLOR, FLAG_COLORS, formatOffset, forPlayer, isFlagEv
 
 /** Injected into the replay iframe: the outline drawn around the element a flag points at. */
 const FLAGGED_CSS =
-  '.cp-flagged { outline: 3px solid #ef4444 !important; outline-offset: 4px !important; box-shadow: 0 0 0 10px rgba(239, 68, 68, 0.25) !important; }';
+  '.cp-flagged { outline: 3px solid #b13d34 !important; outline-offset: 4px !important; box-shadow: 0 0 0 10px rgba(177, 61, 52, 0.22) !important; }';
 
 const PLAYER_WIDTH = 960;
 const PLAYER_HEIGHT = 540;
 
 /** The legend uses the player's own colors (replay.css and markers.ts), so it matches what the replay draws. */
 const LEGEND: { label: string; color: string; ring?: boolean }[] = [
-  { label: "shopper's pointer and trail", color: '#2563eb', ring: true },
-  { label: 'click', color: '#f43f5e' },
-  { label: 'flagged element and timeline mark', color: FLAG_COLORS.dead_click ?? '#ef4444' },
+  { label: "shopper's pointer and trail", color: '#3d6fa8', ring: true },
+  { label: 'click', color: '#b13d34' },
+  { label: 'flagged element and timeline mark', color: FLAG_COLORS.dead_click ?? '#b13d34' },
   { label: 'JS error', color: ERROR_COLOR },
 ];
 
@@ -155,7 +155,7 @@ export function ReplayPage({ sessionId, signalId }: Props) {
   return (
     <div className="flex flex-col gap-2">
       {back}
-      <h1 className="m-0 text-2xl font-semibold tracking-tight">Session replay</h1>
+      <h1 className="m-0 font-display text-[34px] leading-[1.08] font-medium tracking-[-0.022em]">Session replay</h1>
       <p className="m-0 text-[13px] text-muted-foreground">
         <code>{data.session.session_id}</code> · {data.session.route} · release {data.session.release} · {data.session.chunks} batches · {duration}
       </p>
@@ -164,7 +164,7 @@ export function ReplayPage({ sessionId, signalId }: Props) {
           <div className="min-h-11">
             {caption ? (
               <div role="status" className="caption flex items-center gap-2 rounded-lg border border-danger-border bg-danger-muted px-3 py-2.5 font-medium text-money">
-                <TriangleAlertIcon aria-hidden="true" className="size-4 shrink-0" />
+                <WarningIcon aria-hidden="true" className="size-4 shrink-0" />
                 <strong className="tabular-nums">{caption.at}</strong> {caption.label}
               </div>
             ) : (
@@ -192,12 +192,12 @@ export function ReplayPage({ sessionId, signalId }: Props) {
                   type="button"
                   aria-pressed={active}
                   className={cn(
-                    'flex w-full cursor-pointer gap-3 rounded-lg border border-l-4 border-l-destructive bg-card px-3 py-2 text-left text-sm transition-colors hover:bg-muted',
-                    active && 'border-danger-border bg-danger-muted hover:bg-danger-muted',
+                    'flex w-full cursor-pointer items-baseline gap-3 rounded-lg bg-card px-3 py-2 text-left text-sm ring-1 ring-border transition-colors duration-200 hover:bg-muted',
+                    active && 'bg-danger-muted ring-danger-border hover:bg-danger-muted',
                   )}
                   onClick={() => playClip(m)}
                 >
-                  <span className="font-semibold text-money tabular-nums">{formatOffset(m.replay_ts - replayStart)}</span>
+                  <span className="shrink-0 rounded-[4px] bg-danger-muted px-1.5 font-mono text-[12px] font-medium text-money tabular-nums">{formatOffset(m.replay_ts - replayStart)}</span>
                   <span>{m.label}</span>
                 </button>
               );
@@ -205,7 +205,7 @@ export function ReplayPage({ sessionId, signalId }: Props) {
           </div>
           <div className="mt-1 flex flex-col gap-2">
             <Button disabled={!selected} onClick={() => selected && playClip(selected)}>
-              <RotateCcwIcon data-icon="inline-start" aria-hidden="true" />
+              <ArrowCounterClockwiseIcon data-icon="inline-start" aria-hidden="true" />
               Replay flagged moment
             </Button>
             <Button variant="outline" onClick={() => player.current?.goto(0, true)}>

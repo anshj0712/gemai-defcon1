@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIcon, CircleAlertIcon, ExternalLinkIcon, HistoryIcon, LayoutDashboardIcon, ScrollTextIcon, type LucideIcon } from 'lucide-react';
+import { ArrowUpRightIcon } from '@phosphor-icons/react';
 import { Toaster } from '@/components/ui/sonner';
 import { AgentInbox } from './AgentInbox';
 import { DashboardPage } from './DashboardPage';
@@ -16,15 +16,26 @@ import { ThemeToggle } from './ThemeToggle';
 const SHOP_URL = import.meta.env.VITE_CP_SHOP_URL ?? 'http://localhost:5173';
 
 type Tab = 'dashboard' | 'issues' | 'rules' | 'history' | 'signals';
-const TABS: { id: Tab; href: string; label: string; icon: LucideIcon }[] = [
-  { id: 'dashboard', href: '#/', label: 'Dashboard', icon: LayoutDashboardIcon },
-  { id: 'issues', href: '#/issues', label: 'Issues', icon: CircleAlertIcon },
-  { id: 'rules', href: '#/rules', label: 'Rules', icon: ScrollTextIcon },
-  { id: 'history', href: '#/history', label: 'Time travel', icon: HistoryIcon },
-  { id: 'signals', href: '#/signals', label: 'Signals', icon: ActivityIcon },
+const TABS: { id: Tab; href: string; label: string }[] = [
+  { id: 'dashboard', href: '#/', label: 'Dashboard' },
+  { id: 'issues', href: '#/issues', label: 'Issues' },
+  { id: 'rules', href: '#/rules', label: 'Rules' },
+  { id: 'history', href: '#/history', label: 'Time travel' },
+  { id: 'signals', href: '#/signals', label: 'Signals' },
 ];
 
 const tabOf = (route: Route): Tab => (route.page === 'issue' || route.page === 'replay' ? 'issues' : route.page);
+
+/** The mark: a revenue line that dips and recovers, in a rounded square. */
+function BrandMark() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="size-6 shrink-0">
+      <rect x="1" y="1" width="22" height="22" rx="6" className="fill-foreground" />
+      <path d="M5 8.5 9.5 14l3-3 6.5 6" fill="none" stroke="var(--background)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="9.5" cy="14" r="1.6" fill="var(--tier-p0)" />
+    </svg>
+  );
+}
 
 export function App() {
   const [route, setRoute] = useState(() => parseRoute(window.location.hash));
@@ -47,47 +58,45 @@ export function App() {
       >
         Skip to content
       </a>
-      <header className="sticky top-0 z-40 bg-topbar text-topbar-foreground shadow-[0_1px_0_0_rgb(0_0_0/0.08),0_6px_16px_-10px_rgb(0_0_0/0.35)]">
-        <div className="mx-auto flex h-14 max-w-[1320px] items-center gap-6 px-6">
-          <a href="#/" className="group/brand flex items-center gap-2 text-[17px] font-bold text-topbar-foreground no-underline">
-            <span aria-hidden="true" className="grid size-7 place-items-center rounded-md bg-topbar-active ring-1 ring-white/10">
-              <span className="size-3 rounded-full border-[2.5px] border-destructive transition-transform duration-300 ease-out-expo group-hover/brand:scale-125" />
-            </span>
-            Churn Preventer
+      <header className="sticky top-0 z-40 border-b bg-topbar/85 text-topbar-foreground backdrop-blur-md supports-[backdrop-filter]:bg-topbar/75">
+        <div className="mx-auto flex h-14 max-w-[1320px] items-center gap-8 px-6">
+          <a href="#/" className="flex items-center gap-2.5 text-topbar-foreground no-underline">
+            <BrandMark />
+            <span className="font-display text-[19px] leading-none font-semibold tracking-[-0.015em]">Churn Preventer</span>
           </a>
-          <nav aria-label="Main" className="flex items-center gap-1">
+          <nav aria-label="Main" className="flex h-full items-stretch gap-6">
             {TABS.map((t) => (
               <a
                 key={t.id}
                 href={t.href}
                 aria-current={tab === t.id ? 'page' : undefined}
-                className="relative flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-topbar-muted no-underline transition-colors duration-200 hover:bg-topbar-active hover:text-topbar-foreground aria-[current=page]:bg-topbar-active aria-[current=page]:text-topbar-foreground"
+                className="relative flex items-center text-[13.5px] font-medium text-topbar-muted no-underline transition-colors duration-200 hover:text-topbar-foreground aria-[current=page]:text-topbar-foreground"
               >
-                <t.icon aria-hidden="true" className="size-4" />
                 {t.label}
-                {tab === t.id && <span aria-hidden="true" className="motion-pop absolute inset-x-3 -bottom-[9px] h-0.5 rounded-full bg-primary" />}
+                {tab === t.id && <span aria-hidden="true" className="motion-grow absolute inset-x-0 -bottom-px h-[2px] bg-topbar-foreground" />}
               </a>
             ))}
           </nav>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-3">
             <a
               href={SHOP_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 rounded-lg border border-white/15 px-3 py-1.5 text-sm font-medium text-topbar-foreground no-underline transition-colors duration-200 hover:bg-topbar-active"
+              className="group/shop flex items-center gap-1 text-[13.5px] font-medium text-topbar-foreground no-underline"
             >
               Demo shop
-              <ExternalLinkIcon aria-hidden="true" className="size-3.5 text-topbar-muted" />
+              <ArrowUpRightIcon aria-hidden="true" className="size-3.5 text-topbar-muted transition-transform duration-200 ease-out-expo group-hover/shop:translate-x-0.5 group-hover/shop:-translate-y-0.5" />
               <span className="sr-only">(opens in a new tab)</span>
             </a>
-            <div className="flex items-center gap-1">
+            <span aria-hidden="true" className="h-5 w-px bg-border" />
+            <div className="flex items-center gap-0.5">
               <ThemeToggle />
               <AgentInbox />
             </div>
           </div>
         </div>
       </header>
-      <main id="main" tabIndex={-1} className="mx-auto max-w-[1320px] px-6 py-6 outline-none">
+      <main id="main" tabIndex={-1} className="mx-auto max-w-[1320px] px-6 pt-8 pb-16 outline-none">
         {/* Keyed by route: each page arrives with a short fade and rise; live refreshes inside a page do not replay it. */}
         <div key={route.page === 'issue' ? route.clusterId : route.page === 'replay' ? route.sessionId : route.page} className="motion-enter">
           {route.page === 'replay' ? (

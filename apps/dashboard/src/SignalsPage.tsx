@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { FindingSummary } from '@cp/schema';
-import { ActivityIcon, ArrowRightIcon, ChevronDownIcon, PlayIcon } from 'lucide-react';
+import { PulseIcon, ArrowRightIcon, CaretDownIcon, PlayIcon } from '@phosphor-icons/react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -25,11 +25,11 @@ function Group({ g, finding, defaultOpen }: { g: SignalGroup; finding: FindingSu
   const rows = all ? g.signals : g.signals.slice(0, ROWS);
   const title = finding?.title ?? g.cluster?.title ?? 'Not in an issue yet';
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className={cn('rounded-xl border bg-card shadow-xs', !g.cluster && 'border-dashed')}>
+    <Collapsible open={open} onOpenChange={setOpen} className={cn('rounded-xl bg-card ring-1 ring-border', !g.cluster && 'bg-muted/40')}>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
         <CollapsibleTrigger asChild>
           <Button variant="ghost" size="icon-sm" aria-label={open ? `Hide signals of ${title}` : `Show signals of ${title}`}>
-            <ChevronDownIcon aria-hidden="true" className={cn('transition-transform duration-200 ease-out-expo', !open && '-rotate-90')} />
+            <CaretDownIcon aria-hidden="true" className={cn('transition-transform duration-200 ease-out-expo', !open && '-rotate-90')} />
           </Button>
         </CollapsibleTrigger>
         <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -93,7 +93,7 @@ function Group({ g, finding, defaultOpen }: { g: SignalGroup; finding: FindingSu
             </TableBody>
           </Table>
           {g.signals.length > ROWS && (
-            <Button variant="ghost" size="sm" className="mt-1 ml-1 text-primary" onClick={() => setAll(!all)}>
+            <Button variant="ghost" size="sm" className="mt-1 ml-1 text-link" onClick={() => setAll(!all)}>
               {all ? `Show the newest ${ROWS}` : `Show all ${g.signals.length} signals`}
             </Button>
           )}
@@ -153,7 +153,7 @@ export function SignalsPage() {
         <Empty className="border bg-card">
           <EmptyHeader>
             <EmptyMedia variant="icon">
-              <ActivityIcon aria-hidden="true" />
+              <PulseIcon aria-hidden="true" />
             </EmptyMedia>
             <EmptyTitle>No signals yet</EmptyTitle>
             <EmptyDescription>Open the demo shop (top right), add something to the bag, and use it like a shopper; signals appear here within seconds.</EmptyDescription>

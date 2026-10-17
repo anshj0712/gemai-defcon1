@@ -43,7 +43,7 @@ describe('injectMarkers', () => {
   });
 
   it('colors each detector on the timeline', () => {
-    expect(tagColors([marker(1), marker(2, 'rage_click')])).toEqual({ 'cp.error': '#db2777', 'cp.flag.dead_click': '#ef4444', 'cp.flag.rage_click': '#f97316' });
+    expect(tagColors([marker(1), marker(2, 'rage_click')])).toEqual({ 'cp.error': '#9c4a72', 'cp.flag.dead_click': '#b13d34', 'cp.flag.rage_click': '#c0662f' });
   });
 
   it('keeps DOM events, flags, and JS errors for the player; drops network and navigation metadata', () => {

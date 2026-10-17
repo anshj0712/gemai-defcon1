@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FindingSummary } from '@cp/schema';
-import { ArrowRightIcon, ChevronRightIcon, FlameIcon, InboxIcon, PlayIcon } from 'lucide-react';
+import { ArrowRightIcon, CaretRightIcon, TargetIcon, TrayIcon, PlayIcon } from '@phosphor-icons/react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
@@ -31,10 +31,10 @@ function FixFirst({ cluster: c, finding: f }: { cluster: ClusterSummary; finding
   const r = f.revenue;
   const latest = c.evidence[0];
   return (
-    <section aria-labelledby="fix-first-title" className="grid gap-5 rounded-2xl border border-danger-border bg-danger-muted p-5 lg:grid-cols-[1fr_auto]">
+    <section aria-labelledby="fix-first-title" className="grid gap-6 rounded-xl bg-[color-mix(in_oklab,var(--danger-muted)_65%,var(--card))] p-6 ring-1 ring-danger-border/80 lg:grid-cols-[1fr_auto]">
       <div className="flex min-w-0 flex-col gap-2">
-        <span className="flex items-center gap-1.5 text-xs font-semibold tracking-wider text-money uppercase">
-          <FlameIcon aria-hidden="true" className="size-4" />
+        <span className="flex items-center gap-1.5 text-[12.5px] font-medium text-money">
+          <TargetIcon aria-hidden="true" className="size-4" />
           Fix this first
         </span>
         <h2 id="fix-first-title" className="m-0 text-xl leading-snug font-semibold">
@@ -60,7 +60,7 @@ function FixFirst({ cluster: c, finding: f }: { cluster: ClusterSummary; finding
       </div>
       <div className="flex flex-col justify-center gap-1 lg:items-end lg:text-right">
         <span className="text-[13px] font-medium text-money">Revenue lost so far</span>
-        <span className="text-5xl leading-none font-bold text-money">
+        <span className="text-[52px] leading-none font-semibold tracking-[-0.03em] text-money">
           {r.status === 'ok' ? <AnimatedNumber value={r.revenue_at_risk_minor} format={(n) => money(Math.round(n), r.currency)} ms={900} /> : '…'}
         </span>
         {r.status === 'ok' && (
@@ -170,7 +170,7 @@ export function IssuesPage() {
         <Empty className="mt-4 border bg-card">
           <EmptyHeader>
             <EmptyMedia variant="icon">
-              <InboxIcon aria-hidden="true" />
+              <TrayIcon aria-hidden="true" />
             </EmptyMedia>
             <EmptyTitle>No issues yet</EmptyTitle>
             <EmptyDescription>
@@ -209,7 +209,7 @@ export function IssuesPage() {
             </Select>
           </div>
 
-          <div className="overflow-hidden rounded-xl border bg-card shadow-xs">
+          <div className="overflow-hidden rounded-xl bg-card ring-1 ring-border">
             <div className="hidden grid-cols-[88px_minmax(0,1fr)_200px_84px_120px_120px_20px] gap-4 border-b bg-muted/50 px-4 py-2 text-xs font-medium text-muted-foreground lg:grid">
               <span>Priority</span>
               <span>Problem</span>
@@ -261,7 +261,7 @@ export function IssuesPage() {
                     {f ? f.revenue.status === 'ok' ? <AnimatedNumber value={f.revenue.revenue_at_risk_minor} format={(n) => money(Math.round(n), f.revenue.currency)} /> : '…' : '-'}
                   </span>
                   <span className="text-xs text-muted-foreground lg:text-right">{ago(c.last_seen)}</span>
-                  <ChevronRightIcon aria-hidden="true" className="hidden size-4 text-muted-foreground transition-transform duration-200 ease-out-expo group-hover/issue:translate-x-0.5 group-hover/issue:text-foreground lg:block" />
+                  <CaretRightIcon aria-hidden="true" className="hidden size-4 text-muted-foreground transition-transform duration-200 ease-out-expo group-hover/issue:translate-x-0.5 group-hover/issue:text-foreground lg:block" />
                 </a>
               </div>
             ))}
@@ -272,7 +272,7 @@ export function IssuesPage() {
       {resolved.length > 0 && (
         <details className="group mt-4 rounded-xl border bg-card px-4 py-3">
           <summary className="flex cursor-pointer list-none items-baseline gap-2 font-medium [&::-webkit-details-marker]:hidden">
-            <ChevronRightIcon aria-hidden="true" className="size-4 translate-y-0.5 text-muted-foreground transition-transform group-open:rotate-90" />
+            <CaretRightIcon aria-hidden="true" className="size-4 translate-y-0.5 text-muted-foreground transition-transform group-open:rotate-90" />
             Resolved · {resolved.length}
             <span className="text-xs font-normal text-muted-foreground">marked fixed and not seen since; one reopens by itself if it comes back</span>
           </summary>

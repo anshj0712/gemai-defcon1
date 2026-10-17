@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { SparklesIcon, UserIcon } from 'lucide-react';
+import { DetectiveIcon, UserIcon } from '@phosphor-icons/react';
 import { Area, AreaChart, CartesianGrid, ReferenceLine, XAxis, YAxis } from 'recharts';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -12,11 +12,13 @@ import { useRevenueSeries } from './lib/useRevenueSeries';
 import { liveOrigin } from './lib/rules';
 
 /**
- * The categorical order for stacked issues (dataviz reference palette, slots 1-6, validated for this chart's surfaces:
- * light on #ffffff, dark on slate-900; adjacent CVD and normal-vision gates pass). The sixth slot is "Other".
+ * The categorical order for stacked issues: the calm palette's six slots, validated with the dataviz checker on this
+ * chart's surfaces (light on #ffffff, dark on #1c1b19; lightness band, chroma floor, adjacent CVD and normal-vision
+ * gates pass; the ochre's sub-3:1 contrast in light is relieved by the legend, tooltip and the issue lists below).
+ * The sixth slot is "Other".
  */
-const SERIES_LIGHT = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300'];
-const SERIES_DARK = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300'];
+const SERIES_LIGHT = ['#3d6fa8', '#c4663a', '#1f9479', '#c29530', '#b5628a', '#62801f'];
+const SERIES_DARK = ['#5f8fc9', '#d27a4c', '#2fa587', '#b08530', '#c9739b', '#7a9b31'];
 
 const clock = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -164,7 +166,7 @@ export function RuleImpact() {
                 <TableCell>
                   {origin === 'agent' ? (
                     <Badge className="gap-1 bg-agent-muted text-agent">
-                      <SparklesIcon data-icon="inline-start" aria-hidden="true" />
+                      <DetectiveIcon data-icon="inline-start" aria-hidden="true" />
                       Agent
                     </Badge>
                   ) : (

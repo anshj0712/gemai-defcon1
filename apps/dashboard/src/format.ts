@@ -10,7 +10,7 @@ export const SYMPTOMS: Record<string, string> = {
 };
 
 export const symptomName = (detector: string) => SYMPTOMS[detector] ?? detector.replace(/_/g, ' ');
-export const symptomColor = (detector: string) => FLAG_COLORS[detector] ?? '#6b7280';
+export const symptomColor = (detector: string) => FLAG_COLORS[detector] ?? '#8a867e';
 
 /** "just now", "42 s ago", "5 min ago", "3 h ago", or a date. */
 export function ago(ms: number, now: number = Date.now()): string {
@@ -36,9 +36,9 @@ export function money(minor: number | null | undefined, currency: string | null 
 
 export const pct = (x: number | null | undefined) => (typeof x === 'number' ? `${Math.round(x * 100)}%` : '-');
 
-export const TIER_COLORS: Record<string, string> = { P0: '#dc2626', P1: '#ea580c', P2: '#ca8a04', P3: '#64748b' };
+export const TIER_COLORS: Record<string, string> = { P0: '#b13d34', P1: '#c0662f', P2: '#b98a26', P3: '#8a867e' };
 export const TIER_NAMES: Record<string, string> = { P0: 'P0 · blocker', P1: 'P1 · pricing', P2: 'P2 · friction', P3: 'P3 · minor' };
-export const tierColor = (t: string) => TIER_COLORS[t] ?? '#64748b';
+export const tierColor = (t: string) => TIER_COLORS[t] ?? '#8a867e';
 
 export const CATEGORY_NAMES: Record<string, string> = {
   checkout_blocker: 'Checkout blocker',
