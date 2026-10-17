@@ -1,18 +1,41 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FindingSummary } from '@cp/schema';
+import { ArrowRightIcon, ChevronRightIcon, FlameIcon, InboxIcon } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
+import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 import { fetchClusters, fetchFindings, fetchQuality, type ClusterSummary, type QualityReport } from './api';
-import { ago, isResolved, money, symptomColor, symptomName, TIER_NAMES, tierColor } from './format';
-
-/** Scored issues first in finding order (tier, then score); issues the agent has not scored yet after them, newest first. */
-export function rankIssues(clusters: readonly ClusterSummary[], findings: readonly FindingSummary[]): { cluster: ClusterSummary; finding: FindingSummary | null }[] {
-  const byCluster = new Map(clusters.map((c) => [c.cluster_id, c]));
-  const scored = findings.filter((f) => byCluster.has(f.cluster_id)).map((f) => ({ cluster: byCluster.get(f.cluster_id)!, finding: f }));
-  const seen = new Set(scored.map((s) => s.cluster.cluster_id));
-  const unscored = clusters.filter((c) => !seen.has(c.cluster_id)).map((c) => ({ cluster: c, finding: null }));
-  return [...scored, ...unscored];
-}
+import { Eyebrow, FoundLaterBadge, KindBadge, NeedsReviewBadge, PageHeader, PendingTierBadge, Stat, SymptomChip, SyntheticNote, TierBadge } from './components/common';
+import { ago, isResolved, money, TIER_NAMES } from './format';
+import { rankIssues } from './lib/issues';
 
 const REFRESH_MS = 3000;
+
+function LiveStatus({ updatedAt }: { updatedAt: number | null }) {
+  return (
+    <span className="flex items-center gap-2 text-[13px] text-muted-foreground">
+      <span aria-hidden="true" className="live-dot" /> Live · updated {updatedAt ? ago(updatedAt) : '-'}
+    </span>
+  );
+}
+
+function FeedSkeleton() {
+  return (
+    <div className="flex flex-col gap-3" aria-busy="true" aria-label="Loading issues">
+      <div className="grid grid-cols-4 gap-3">
+        {[0, 1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-[74px] rounded-xl" />
+        ))}
+      </div>
+      {[0, 1, 2, 3].map((i) => (
+        <Skeleton key={i} className="h-[112px] rounded-xl" />
+      ))}
+    </div>
+  );
+}
 
 /**
  * The live feed: one card per issue (one broken thing across every affected session), ranked by the
@@ -60,8 +83,24 @@ export function IssuesPage() {
     };
   }, []);
 
-  if (error && !clusters) return <p className="muted">Could not load issues ({error}). Is the API running? Try <code>pnpm dev</code>.</p>;
-  if (!clusters) return <p className="muted">Loading…</p>;
+  if (error && !clusters) {
+    return (
+      <Alert variant="destructive">
+        <AlertTitle>Could not load issues</AlertTitle>
+        <AlertDescription>
+          {error}. Is the API running? Try <code>pnpm dev</code>.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+  if (!clusters) {
+    return (
+      <>
+        <PageHeader title="Issues" description="Ranked by revenue at risk. Each issue is one broken thing across every shopper it hit." />
+        <FeedSkeleton />
+      </>
+    );
+  }
 
   const all = rankIssues(clusters, findings);
   const ranked = all.filter((r) => !isResolved(r.finding));
@@ -77,83 +116,85 @@ export function IssuesPage() {
 
   return (
     <>
-      <div className="page-head">
-        <h1>Issues</h1>
-        <span className="live">
-          <span className="live-dot" /> Live · updated {updatedAt ? ago(updatedAt) : '-'}
-        </span>
-      </div>
-      <div className="stat-row">
-        <div className="stat">
-          <b>{open.length}</b>
-          <span>open issues</span>
-        </div>
-        <div className="stat">
-          <b>{sessions}</b>
-          <span>affected sessions</span>
-        </div>
-        <div className="stat">
-          <b>{signals}</b>
-          <span>signals grouped</span>
-        </div>
-        <div className="stat money">
-          <b>{estimated.length ? money(atRisk, currency) : '-'}</b>
-          <span>revenue at risk (synthetic)</span>
-        </div>
+      <PageHeader title="Issues" description="Ranked by revenue at risk. Each issue is one broken thing across every shopper it hit.">
+        <LiveStatus updatedAt={updatedAt} />
+      </PageHeader>
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Stat value={open.length} label="open issues" />
+        <Stat value={sessions} label="affected sessions" />
+        <Stat value={signals} label="signals grouped" />
+        <Stat value={estimated.length ? money(atRisk, currency) : '-'} tone="money" label={<>revenue at risk <span className="text-synthetic">(synthetic)</span></>} />
       </div>
 
       {first?.finding && (
-        <a className="fix-first" href={`#/issues/${first.cluster.cluster_id}`}>
-          <span className="fix-first-label">Fix this first</span>
-          <b>{first.finding.title}</b>
-          <span className="fix-first-meta">
+        <a
+          href={`#/issues/${first.cluster.cluster_id}`}
+          className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-danger-border bg-danger-muted px-4 py-3 text-foreground no-underline transition-colors hover:border-destructive"
+        >
+          <span className="flex items-center gap-1.5 text-xs font-semibold tracking-wider text-money uppercase">
+            <FlameIcon aria-hidden="true" className="size-4" />
+            Fix this first
+          </span>
+          <span className="font-semibold">{first.finding.title}</span>
+          <span className="text-[13px] text-muted-foreground">
             {first.finding.revenue.status === 'ok' ? `${money(first.finding.revenue.revenue_at_risk_minor, first.finding.revenue.currency)} lost · ` : ''}
             {TIER_NAMES[first.finding.tier] ?? first.finding.tier} · {first.cluster.session_count} sessions · {first.cluster.route}
           </span>
-          <span className="fix-first-go">Open →</span>
+          <span className="ml-auto flex items-center gap-1 text-sm font-semibold text-money">
+            Open <ArrowRightIcon aria-hidden="true" className="size-4" />
+          </span>
         </a>
       )}
 
       {clusters.length === 0 ? (
-        <div className="empty">
-          <h2>No issues yet</h2>
-          <p>
-            Shop at <a href="http://localhost:5173/?bugs=dead_button">localhost:5173/?bugs=dead_button</a> and press Apply Coupon 4+ times, or run{' '}
-            <code>pnpm sim -- --sessions 50</code> to seed synthetic shoppers.
-          </p>
-        </div>
+        <Empty className="mt-4 border bg-card">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <InboxIcon aria-hidden="true" />
+            </EmptyMedia>
+            <EmptyTitle>No issues yet</EmptyTitle>
+            <EmptyDescription>
+              Switch a bug on (top right of the bar above), then shop at <a href="http://localhost:5173/?bugs=dead_button">localhost:5173/?bugs=dead_button</a> and press Apply Coupon 4+ times, or run{' '}
+              <code>pnpm sim -- --sessions 50</code> to seed synthetic shoppers.
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       ) : (
-        <div className="issues">
+        <div className="mt-4 flex flex-col gap-2.5">
           {ranked.map(({ cluster: c, finding: f }) => (
-            <a key={c.cluster_id} href={`#/issues/${c.cluster_id}`} className={`issue ${bumped.has(c.cluster_id) ? 'bump' : ''}`}>
-              <div className="issue-main">
-                {f ? (
-                  <span className="tier" style={{ background: tierColor(f.tier) }}>
-                    {TIER_NAMES[f.tier] ?? f.tier}
-                  </span>
-                ) : (
-                  <span className="tier pending">scoring…</span>
-                )}{' '}
-                <span className={`kind ${c.kind}`}>{c.kind === 'invariant' ? 'Data rule' : 'Element'}</span>
-                {f?.status === 'suspect' && <span className="suspect">Needs review</span>}
-                {c.found_later && c.found_later.sessions > 0 && (
-                  <span className="found-later" title="A re-scan with a newer rule found shoppers this hurt before the rule existed">
-                    Found later · {c.found_later.sessions} session{c.found_later.sessions === 1 ? '' : 's'}
-                  </span>
-                )}
-                <h3>{f?.title ?? c.title}</h3>
-                {f && f.title !== c.title && <p className="muted small detected">{c.title}</p>}
-                <div className="chips">
+            <a
+              key={c.cluster_id}
+              href={`#/issues/${c.cluster_id}`}
+              className={cn(
+                'issue grid grid-cols-1 items-center gap-4 rounded-xl border bg-card px-5 py-4 text-card-foreground no-underline shadow-xs transition-colors hover:border-input lg:grid-cols-[1fr_auto] lg:gap-8',
+                bumped.has(c.cluster_id) && 'bump',
+              )}
+            >
+              <div className="flex min-w-0 flex-col gap-2">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {f ? <TierBadge tier={f.tier} /> : <PendingTierBadge />}
+                  <KindBadge kind={c.kind} />
+                  {f?.status === 'suspect' && <NeedsReviewBadge />}
+                  {c.found_later && c.found_later.sessions > 0 && (
+                    <FoundLaterBadge title="A re-scan with a newer rule found shoppers this hurt before the rule existed">
+                      Found later · {c.found_later.sessions} session{c.found_later.sessions === 1 ? '' : 's'}
+                    </FoundLaterBadge>
+                  )}
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <h3 className="m-0 text-base leading-snug font-semibold">{f?.title ?? c.title}</h3>
+                  {f && f.title !== c.title && <p className="m-0 truncate text-xs text-muted-foreground">{c.title}</p>}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
                   {Object.entries(c.detectors)
                     .sort((a, b) => b[1] - a[1])
                     .map(([d, n]) => (
-                      <span key={d} className="chip" style={{ borderColor: symptomColor(d), color: symptomColor(d) }}>
-                        {symptomName(d)} · {n}
-                      </span>
+                      <SymptomChip key={d} detector={d} count={n} />
                     ))}
                 </div>
                 {Object.keys(c.error_signatures).length > 0 && (
-                  <p className="muted small">
+                  <p className="m-0 truncate font-mono text-xs text-muted-foreground">
                     {Object.entries(c.error_signatures)
                       .sort((a, b) => b[1] - a[1])
                       .slice(0, 2)
@@ -162,24 +203,27 @@ export function IssuesPage() {
                   </p>
                 )}
               </div>
-              <div className="issue-stats">
-                <div className="rar-cell">
-                  <b>{f ? (f.revenue.status === 'ok' ? money(f.revenue.revenue_at_risk_minor, f.revenue.currency) : '…') : '-'}</b>
-                  <span>at risk</span>
+              <dl className="m-0 grid grid-cols-[minmax(96px,auto)_auto_auto_minmax(150px,auto)] items-center gap-x-6 text-right">
+                <div className="flex flex-col">
+                  <dd className="m-0 text-lg font-semibold text-money tabular-nums">{f ? (f.revenue.status === 'ok' ? money(f.revenue.revenue_at_risk_minor, f.revenue.currency) : '…') : '-'}</dd>
+                  <dt className="text-xs text-muted-foreground">at risk</dt>
                 </div>
-                <div>
-                  <b>{c.session_count}</b>
-                  <span>sessions</span>
+                <div className="flex flex-col">
+                  <dd className="m-0 text-lg font-semibold tabular-nums">{c.session_count}</dd>
+                  <dt className="text-xs text-muted-foreground">sessions</dt>
                 </div>
-                <div>
-                  <b>{c.signal_count}</b>
-                  <span>signals</span>
+                <div className="flex flex-col">
+                  <dd className="m-0 text-lg font-semibold tabular-nums">{c.signal_count}</dd>
+                  <dt className="text-xs text-muted-foreground">signals</dt>
                 </div>
-                <div className="when">
-                  <span>last seen {ago(c.last_seen)}</span>
-                  <span className="muted">{c.route}</span>
+                <div className="flex items-center justify-end gap-2">
+                  <div className="flex flex-col text-xs text-muted-foreground">
+                    <span>last seen {ago(c.last_seen)}</span>
+                    <span className="font-mono">{c.route}</span>
+                  </div>
+                  <ChevronRightIcon aria-hidden="true" className="size-4 text-muted-foreground" />
                 </div>
-              </div>
+              </dl>
             </a>
           ))}
         </div>
@@ -188,16 +232,21 @@ export function IssuesPage() {
       <QualityCard q={quality} />
 
       {resolved.length > 0 && (
-        <details className="resolved">
-          <summary>
-            Resolved · {resolved.length} <span className="muted small-inline">marked fixed and not seen since; one reopens by itself if it comes back</span>
+        <details className="group mt-4 rounded-xl border bg-card px-4 py-3">
+          <summary className="flex cursor-pointer list-none items-baseline gap-2 font-medium [&::-webkit-details-marker]:hidden">
+            <ChevronRightIcon aria-hidden="true" className="size-4 translate-y-0.5 text-muted-foreground transition-transform group-open:rotate-90" />
+            Resolved · {resolved.length}
+            <span className="text-xs font-normal text-muted-foreground">marked fixed and not seen since; one reopens by itself if it comes back</span>
           </summary>
-          {resolved.map(({ cluster: c, finding: f }) => (
-            <a key={c.cluster_id} href={`#/issues/${c.cluster_id}`} className="resolved-row">
-              <span className="kind">Fixed {f?.resolution ? ago(f.resolution.resolved_at) : ''}</span> {f?.title ?? c.title}
-              <span className="muted small-inline"> · {c.session_count} sessions</span>
-            </a>
-          ))}
+          <div className="mt-2 flex flex-col">
+            {resolved.map(({ cluster: c, finding: f }) => (
+              <a key={c.cluster_id} href={`#/issues/${c.cluster_id}`} className="flex items-center gap-2 border-b py-2 text-sm text-muted-foreground no-underline last:border-b-0 hover:text-foreground">
+                <Badge className="bg-success-muted text-success">Fixed {f?.resolution ? ago(f.resolution.resolved_at) : ''}</Badge>
+                <span className="text-foreground">{f?.title ?? c.title}</span>
+                <span className="text-xs">· {c.session_count} sessions</span>
+              </a>
+            ))}
+          </div>
         </details>
       )}
     </>
@@ -208,27 +257,42 @@ export function IssuesPage() {
 function QualityCard({ q }: { q: QualityReport | null }) {
   if (!q) {
     return (
-      <details className="quality">
-        <summary>Quality: how accurate is this?</summary>
-        <p className="muted small">Not measured yet. Run <code>pnpm sim -- --sessions 240</code>, then <code>pnpm sim:check</code>: it plays synthetic shoppers who hit known bugs and checks what the system found.</p>
-      </details>
+      <Card size="sm" className="mt-4 px-4">
+        <Eyebrow>Quality: how accurate is this?</Eyebrow>
+        <p className="m-0 text-sm text-muted-foreground">
+          Not measured yet. Run <code>pnpm sim -- --sessions 240</code>, then <code>pnpm sim:check</code>: it plays synthetic shoppers who hit known bugs and checks what the system found.
+        </p>
+      </Card>
     );
   }
   const p = (x: number) => `${Math.round(x * 100)}%`;
+  const cells: [string, string][] = [
+    [`${q.bugs_found}/${q.bugs_expected}`, 'bugs found, each as one issue'],
+    [p(q.lowest_recall), 'of shoppers caught (worst bug)'],
+    [String(q.clean_sessions_flagged), 'healthy shoppers wrongly flagged'],
+    [`${q.jury.approved}/${q.jury.reviewed}`, 'AI reports the jury approved'],
+  ];
   return (
-    <details className="quality" open>
-      <summary>
-        Quality: found {q.bugs_found} of {q.bugs_expected} planted bugs, {q.false_alarms} false alarm{q.false_alarms === 1 ? '' : 's'} <span className={`verdict-pill ${q.pass ? 'approved' : 'rejected'}`}>{q.pass ? 'test passed' : 'test failed'}</span>
-      </summary>
-      <div className="quality-grid">
-        <div><b>{q.bugs_found}/{q.bugs_expected}</b><span>bugs found, each as one issue</span></div>
-        <div><b>{p(q.lowest_recall)}</b><span>of shoppers caught (worst bug)</span></div>
-        <div><b>{q.clean_sessions_flagged}</b><span>healthy shoppers wrongly flagged</span></div>
-        <div><b>{q.jury.approved}/{q.jury.reviewed}</b><span>AI reports the jury approved</span></div>
+    <Card size="sm" className="mt-4 gap-3 px-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <Eyebrow>Quality</Eyebrow>
+        <span className="font-medium">
+          Found {q.bugs_found} of {q.bugs_expected} planted bugs, {q.false_alarms} false alarm{q.false_alarms === 1 ? '' : 's'}
+        </span>
+        <Badge className={q.pass ? 'bg-success-muted text-success' : 'bg-danger-muted text-money'}>{q.pass ? 'Test passed' : 'Test failed'}</Badge>
+        <SyntheticNote className="ml-auto">Synthetic shoppers</SyntheticNote>
       </div>
-      <p className="muted small">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {cells.map(([v, l]) => (
+          <div key={l} className="flex flex-col">
+            <span className="text-xl font-semibold tabular-nums">{v}</span>
+            <span className="text-xs text-muted-foreground">{l}</span>
+          </div>
+        ))}
+      </div>
+      <p className="m-0 text-xs text-muted-foreground">
         Measured {ago(q.checked_at)} on {q.sessions} synthetic shoppers (seed {q.seed}). We know which shoppers hit which bug, so this is a real score. Not real shoppers.
       </p>
-    </details>
+    </Card>
   );
 }

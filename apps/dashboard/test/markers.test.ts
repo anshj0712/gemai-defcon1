@@ -97,7 +97,7 @@ describe('parseRoute', () => {
 });
 
 describe('findings in the dashboard', async () => {
-  const { rankIssues } = await import('../src/IssuesPage');
+  const { rankIssues } = await import('../src/lib/issues');
   const { formulaLine, money } = await import('../src/format');
 
   it('puts scored issues first in finding order, then unscored ones', () => {
