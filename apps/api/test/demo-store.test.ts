@@ -38,6 +38,15 @@ describe('demo store', () => {
     expect(waits).toEqual([STORE_DELAYS.authorize, STORE_DELAYS.authorize, STORE_DELAYS.authorizeSlow, STORE_DELAYS.authorize]);
   });
 
+  it('lets the payment bugs take turns when both are live: timeout, then decline, then through', async () => {
+    const { app, waits } = store();
+    const auth = (attempt: number) => app.inject({ method: 'POST', url: '/api/payment/authorize', payload: { attempt }, headers: bugs('slow_payment,card_declined,checkout_error') });
+    expect((await auth(1)).json()).toEqual({ ok: false, reason: 'bank_timeout' });
+    expect((await auth(2)).json()).toEqual({ ok: false, reason: 'card_declined' });
+    expect((await auth(3)).json()).toMatchObject({ ok: true });
+    expect(waits).toEqual([STORE_DELAYS.authorizeSlow, STORE_DELAYS.authorize, STORE_DELAYS.authorize]);
+  });
+
   it('fails checkout only for Northeast with checkout_error', async () => {
     const { app } = store();
     const order = (region: string, header: string) => app.inject({ method: 'POST', url: '/api/checkout', payload: { region }, headers: bugs(header) });

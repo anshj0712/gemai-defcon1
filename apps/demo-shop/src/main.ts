@@ -8,8 +8,8 @@ import { icons } from './icons';
 
 /**
  * STRIDE: a synthetic store for exercising the pipeline (all data is made up). Thirteen bugs, one or more per
- * common churn reason. Each tab draws a random, compatible set of them (bugs.ts); `?bugs=dead_button,...` forces a
- * set instead. The store's backend is the API's synthetic store (apps/api/src/demo-store.ts).
+ * common churn reason. Every tab runs the five crucial ones (slow_payment, checkout_error, card_declined, cart_total,
+ * shipping_shock) plus a random set of the others (bugs.ts); `?bugs=dead_button,...` forces a set instead. The store's backend is the API's synthetic store (apps/api/src/demo-store.ts).
  *   dead_button     Apply Coupon silently stops responding after the third click
  *   ghost_line      Remove leaves a bag line in the bag at quantity 0 (₹0) and then stops responding; totals agree, so
  *                   no built-in rule fires (the agent suggests one)
@@ -22,7 +22,8 @@ import { icons } from './icons';
  *   returns_hidden  the Returns policy button on the product page does nothing
  *   support_down    Chat with us at checkout fails with a 503 and a JS error
  *   recs_sold_out   Picked for you (bag) suggests sold-out shoes, and Quick add does nothing
- *   card_declined   every card is declined at payment, and Use another card does nothing
+ *   card_declined   every card is declined at payment, and Use another card does nothing (with slow_payment also
+ *                   live: the try after the bank timeout is declined, and the next one goes through)
  *   checkout_error  the Northeast region gets a 500 and a JS error at payment
  *   slow_payment    payment authorisation hangs 6.5 s, then the bank times out (the agent proposes a speed rule)
  *
@@ -43,8 +44,8 @@ declare global {
 
 /**
  * Which bugs are live in this tab. An explicit ?bugs= in the URL (the simulator and e2e use it, even empty) wins.
- * Otherwise a fresh tab draws its own random, compatible set once (see bugs.ts), kept for the whole tab session,
- * so every shopper meets a different mix and some meet none.
+ * Otherwise a fresh tab gets the five crucial bugs plus its own random set of the others (see bugs.ts), kept for the
+ * whole tab session, so every shopper meets the money-path bugs and a different mix of the rest.
  */
 function loadBugs(): Set<Bug> {
   const fromUrl = new URLSearchParams(location.search).get('bugs');
@@ -604,8 +605,8 @@ function renderHelp(): void {
         <li><strong>returns_hidden</strong>: on a product page, Returns policy does nothing.</li>
         <li><strong>support_down</strong>: at checkout, Chat with us fails.</li>
         <li><strong>recs_sold_out</strong>: in your Bag, Quick add under Picked for you does nothing.</li>
-        <li><strong>card_declined</strong>: Place Order: the card is declined, and Use another card does nothing.</li>
-        <li><strong>slow_payment</strong>: Place Order waits 6.5 seconds, then the bank times out (a second try works).</li>
+        <li><strong>card_declined</strong>: Place Order: the card is declined, and Use another card does nothing. With slow_payment also live, it is the try after the timeout that is declined; press Place Order once more and it goes through.</li>
+        <li><strong>slow_payment</strong>: Place Order waits 6.5 seconds, then the bank times out (a second try works, unless card_declined is live too).</li>
       </ul>
       <p>The agent finds the slow, shipping and delivery bugs on its own: watch the Rules tab for "The agent suspects".</p>
       <h2>Privacy</h2>

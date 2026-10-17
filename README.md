@@ -37,7 +37,7 @@ Recent changes:
 
 - **Issue page redesign.** Revenue lost leads, then three compact cards (what shoppers hit, proof with the visual check, how to recreate). Click a card for the full detail with evidence chips; scoring, evidence, symptoms and the audit trail sit in closed sections.
 - **Failed payments are now detected on their own.** `error_correlation` 1.1.0 raises a signal when a click is followed within 2 s by a JS error or a 4xx, 5xx or network failure that no other signal explains. Before, one failed Place Order raised nothing because `rage_click` needs 3 or more clicks.
-- **Each shop session gets its own bugs.** A fresh shop tab draws a random, compatible set of the 13 bugs (about 1 in 5 tabs gets none, the baseline); `?bugs=...` forces a set, as the simulator does. The list is in [docs/DEMO_BUGS.md](docs/DEMO_BUGS.md). Bug rules: `dead_button` stops after the 3rd press, and `cart_total` fires for any bag of 2 or more items with SAVE10 applied (the same shoe or different ones).
+- **Each shop session gets its own bugs.** Every shop tab runs the five crucial bugs (Slow bank, Checkout error, Card declined, Cart total, Shipping shock; the payment ones take turns) plus a random set of the other eight; `?bugs=...` forces a set, as the simulator does. The list is in [docs/DEMO_BUGS.md](docs/DEMO_BUGS.md). Bug rules: `dead_button` stops after the 3rd press, and `cart_total` fires for any bag of 2 or more items with SAVE10 applied (the same shoe or different ones).
 - **Gemini on Vertex AI with an API key.** Keys that start with `AQ.` are Vertex keys, and the AI Studio endpoint refuses them. Set `AGENT_LLM=vertex` (see below).
 
 ### Gemini findings in the dashboard (synthetic data, live Gemini)
@@ -125,7 +125,7 @@ pnpm smoke    # in a second terminal: sends a synthetic Apply Coupon session, wa
 ## See a flagged moment replayed (local, synthetic)
 
 1. Run `pnpm dev`. It starts the collector, processor, clusterer, API, demo shop, and dashboard, with all logs in one stream.
-2. Open the dashboard (**http://localhost:5174**) and, from its top bar, **Demo shop** (**http://localhost:5173**). This is STRIDE, a fictional sneaker store with synthetic data. Each new tab gets a random, compatible set of bugs ([docs/DEMO_BUGS.md](docs/DEMO_BUGS.md)); `http://localhost:5173/?bugs=dead_button` pins one set for that tab, and the simulator uses it.
+2. Open the dashboard (**http://localhost:5174**) and, from its top bar, **Demo shop** (**http://localhost:5173**). This is STRIDE, a fictional sneaker store with synthetic data. Each new tab runs the five crucial bugs plus a random set of the rest ([docs/DEMO_BUGS.md](docs/DEMO_BUGS.md)); `http://localhost:5173/?bugs=dead_button` pins one set for that tab, and the simulator uses it.
    1. Accept the banner.
    2. Open a shoe, pick a size, and press **Add to Bag**.
    3. Open the **Bag**, type `SAVE10`, and press **Apply Coupon** 4 or more times, about a second apart. From the 4th press on, the button silently does nothing.

@@ -4,14 +4,12 @@ STRIDE, the demo shop, has 13 deliberate bugs. They cover the reasons shoppers m
 
 ## How sessions get bugs
 
-Each shopper's tab draws a random, compatible set of bugs once and keeps it for the whole session (`apps/demo-shop/src/bugs.ts`):
+Every shopper's tab gets its bugs once and keeps them for the whole session (`apps/demo-shop/src/bugs.ts`):
 
-- **Clean sessions:** about 1 in 5 get no bug. They are the baseline that revenue at risk and the agent's comparisons measure against.
-- **Buggy sessions:** the rest get 2 to 4 bugs, with at most one from each conflict group:
-  - **Payment step:** Card declined, Checkout error, Slow bank. Each stops the order before the others could show.
-  - **Bag totals:** Cart total, Quantity price. Both rewrite the bag amounts.
-  - The other eight touch different controls and combine freely.
-- **Scripts:** the simulator and the end-to-end check force a set with `?bugs=...` in the shop URL.
+- **The five crucial bugs are live in every session:** Slow bank (the payment gateway timeout), Checkout error, Card declined, Cart total and Shipping shock. They sit on the money path from the bag to payment.
+- **The three payment bugs take turns,** so each one shows: the first Place Order hangs 6.5 s and the bank times out, the second is declined (and Use another card does nothing), and the third goes through to checkout, where an order from the Northeast region fails with a 500.
+- **Each of the other bugs** is live with an even chance. Quantity price never runs alongside Cart total, since both rewrite the bag amounts, so it only appears when a script forces it.
+- **Scripts:** the simulator and the end-to-end check force a set with `?bugs=...` in the shop URL. The simulator keeps clean shoppers, so revenue at risk still has a baseline to compare against.
 
 ## The bugs
 
@@ -27,8 +25,8 @@ Each shopper's tab draws a random, compatible set of bugs once and keeps it for 
 | Returns hidden | Product | The Returns policy button does nothing | Returns hassle | Dead clicks, live |
 | Support down | Checkout | Chat with us fails with a 503 and a JS error | Customer service | Error after a click, live |
 | Sold-out picks | Bag | Picked for you suggests sold-out shoes; Quick add does nothing | Personalization | Dead clicks, live |
-| Card declined | Checkout | Every card is declined, and Use another card does nothing | Declined card | Dead clicks, live |
+| Card declined | Checkout | The card is declined, and Use another card does nothing (with Slow bank live: the try after the timeout) | Declined card | Dead clicks, live |
 | Checkout error | Checkout | Region Northeast fails at payment with a 500 and a JS error | Payment gateway | Error after a click and rage clicks, live |
-| Slow bank | Checkout | Payment authorisation hangs 6.5 s, then the bank times out | Payment gateway | The agent proposes a speed rule on the request |
+| Slow bank | Checkout | Payment authorisation hangs 6.5 s, then the bank times out (crucial: the payment gateway timeout) | Payment gateway | The agent proposes a speed rule on the request |
 
 **Not covered:** competitor offers and discount-only shoppers. These are real churn reasons, but they are not page defects a session can show.

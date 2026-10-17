@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BUG_NAMES, CONFLICT_GROUPS, MAX_BUGS, MIN_BUGS, pickSessionBugs } from '../src/bugs';
+import { BUG_NAMES, CONFLICT_GROUPS, CRUCIAL_BUGS, pickSessionBugs, type Bug } from '../src/bugs';
 
 /** A small seeded generator (mulberry32), so the draws are repeatable. */
 function seeded(seed: number): () => number {
@@ -13,29 +13,30 @@ function seeded(seed: number): () => number {
   };
 }
 
-describe('the shop picks a random, compatible set of bugs per session', () => {
+describe('every shop session runs the five crucial bugs, plus a random set of the others', () => {
   const draws = Array.from({ length: 2000 }, (_, i) => pickSessionBugs(seeded(i + 1)));
+  const others = BUG_NAMES.filter((b) => !CRUCIAL_BUGS.includes(b) && !CONFLICT_GROUPS.some((g) => g.includes(b) && g.some((c) => CRUCIAL_BUGS.includes(c))));
 
-  it('never puts two bugs from one conflict group in a session', () => {
+  it('always includes the five crucial bugs, and never a bug that clashes with one', () => {
+    expect(CRUCIAL_BUGS).toEqual(['slow_payment', 'checkout_error', 'card_declined', 'cart_total', 'shipping_shock']);
     for (const set of draws) {
+      for (const bug of CRUCIAL_BUGS) expect(set).toContain(bug);
       for (const group of CONFLICT_GROUPS) expect(set.filter((b) => group.includes(b)).length).toBeLessThanOrEqual(1);
+      expect(set).not.toContain('qty_price' satisfies Bug);
     }
   });
 
-  it('draws none (the baseline) or 2 to 4 distinct known bugs', () => {
+  it('draws distinct known bugs, each other compatible bug about half the time', () => {
     for (const set of draws) {
       expect(new Set(set).size).toBe(set.length);
       expect(set.every((b) => (BUG_NAMES as readonly string[]).includes(b))).toBe(true);
-      expect(set.length === 0 || (set.length >= MIN_BUGS && set.length <= MAX_BUGS)).toBe(true);
     }
-  });
-
-  it('leaves about one session in five clean and reaches every bug', () => {
-    const clean = draws.filter((s) => s.length === 0).length / draws.length;
-    expect(clean).toBeGreaterThan(0.15);
-    expect(clean).toBeLessThan(0.25);
-    const seen = new Set(draws.flat());
-    expect(seen.size).toBe(BUG_NAMES.length);
+    expect(others).toHaveLength(7);
+    for (const bug of others) {
+      const share = draws.filter((s) => s.includes(bug)).length / draws.length;
+      expect(share).toBeGreaterThan(0.4);
+      expect(share).toBeLessThan(0.6);
+    }
   });
 
   it('is repeatable for the same random source', () => {
