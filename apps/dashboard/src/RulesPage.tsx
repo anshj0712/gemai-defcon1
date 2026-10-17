@@ -177,7 +177,7 @@ function RescanBlock({ s, issue, onRescan, busy }: { s: RescanStatus; issue: Clu
 function RuleRow({ chips, title, figure, actions, children, tone }: { chips: ReactNode; title: ReactNode; figure?: ReactNode; actions: ReactNode; children: ReactNode; tone?: 'agent' }) {
   const [open, setOpen] = useState(false);
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className={cn('rounded-xl bg-card ring-1 ring-border transition-shadow duration-200', tone === 'agent' && 'ring-agent-border', open && 'shadow-[0_10px_28px_-18px_rgb(31_30_28/0.35)]')}>
+    <Collapsible open={open} onOpenChange={setOpen} className={cn('rounded-xl bg-card ring-1 ring-border transition-shadow duration-200', tone === 'agent' && 'ring-agent-border', open && 'shadow-[0_10px_28px_-18px_rgb(15_23_42/0.35)]')}>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex flex-wrap items-center gap-1.5">{chips}</div>

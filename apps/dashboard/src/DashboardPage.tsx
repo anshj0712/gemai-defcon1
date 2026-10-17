@@ -26,7 +26,7 @@ const pageConfig = { revenue: { label: 'Revenue at risk', color: 'var(--money)' 
 /** A KPI card that leads somewhere. */
 function LinkStat({ href, icon: Icon, label, value, children }: { href: string; icon: typeof UsersIcon; label: string; value: ReactNode; children?: ReactNode }) {
   return (
-    <a href={href} className="group/stat flex flex-col gap-1 rounded-xl bg-card px-4 py-3 text-card-foreground no-underline ring-1 ring-border transition-[box-shadow,translate] duration-200 ease-out-expo hover:shadow-[0_10px_28px_-16px_rgb(31_30_28/0.35)] hover:ring-input motion-safe:hover:-translate-y-px">
+    <a href={href} className="group/stat flex flex-col gap-1 rounded-xl bg-card px-4 py-3 text-card-foreground no-underline ring-1 ring-border transition-[box-shadow,translate] duration-200 ease-out-expo hover:shadow-[0_10px_28px_-16px_rgb(15_23_42/0.35)] hover:ring-input motion-safe:hover:-translate-y-px">
       <span className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
         <Icon aria-hidden="true" className="size-4" />
         {label}

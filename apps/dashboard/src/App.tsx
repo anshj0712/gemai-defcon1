@@ -26,13 +26,13 @@ const TABS: { id: Tab; href: string; label: string }[] = [
 
 const tabOf = (route: Route): Tab => (route.page === 'issue' || route.page === 'replay' ? 'issues' : route.page);
 
-/** The mark: a revenue line that dips and recovers, in a rounded square. */
+/** The mark: a revenue line that dips and recovers, on the top bar's raised navy. */
 function BrandMark() {
   return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className="size-6 shrink-0">
-      <rect x="1" y="1" width="22" height="22" rx="6" className="fill-foreground" />
-      <path d="M5 8.5 9.5 14l3-3 6.5 6" fill="none" stroke="var(--background)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="9.5" cy="14" r="1.6" fill="var(--tier-p0)" />
+    <svg aria-hidden="true" viewBox="0 0 28 28" className="size-7 shrink-0">
+      <rect x="0.5" y="0.5" width="27" height="27" rx="6.5" fill="var(--topbar-active)" stroke="rgb(255 255 255 / 0.1)" />
+      <path d="M6.5 10 11 15.5l3-3 7.5 7" fill="none" stroke="var(--topbar-foreground)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="11" cy="15.5" r="2" fill="var(--destructive)" />
     </svg>
   );
 }
@@ -58,11 +58,11 @@ export function App() {
       >
         Skip to content
       </a>
-      <header className="sticky top-0 z-40 border-b bg-topbar/85 text-topbar-foreground backdrop-blur-md supports-[backdrop-filter]:bg-topbar/75">
+      <header className="sticky top-0 z-40 bg-topbar text-topbar-foreground shadow-[0_1px_0_0_rgb(0_0_0/0.08),0_6px_16px_-10px_rgb(0_0_0/0.35)]">
         <div className="mx-auto flex h-14 max-w-[1320px] items-center gap-8 px-6">
           <a href="#/" className="flex items-center gap-2.5 text-topbar-foreground no-underline">
             <BrandMark />
-            <span className="font-display text-[19px] leading-none font-semibold tracking-[-0.015em]">Churn Preventer</span>
+            <span className="text-[16px] leading-none font-semibold tracking-[-0.01em]">Churn Preventer</span>
           </a>
           <nav aria-label="Main" className="flex h-full items-stretch gap-6">
             {TABS.map((t) => (
@@ -73,7 +73,7 @@ export function App() {
                 className="relative flex items-center text-[13.5px] font-medium text-topbar-muted no-underline transition-colors duration-200 hover:text-topbar-foreground aria-[current=page]:text-topbar-foreground"
               >
                 {t.label}
-                {tab === t.id && <span aria-hidden="true" className="motion-grow absolute inset-x-0 -bottom-px h-[2px] bg-topbar-foreground" />}
+                {tab === t.id && <span aria-hidden="true" className="motion-grow absolute inset-x-0 bottom-0 h-[2px] rounded-full bg-primary" />}
               </a>
             ))}
           </nav>
@@ -88,7 +88,7 @@ export function App() {
               <ArrowUpRightIcon aria-hidden="true" className="size-3.5 text-topbar-muted transition-transform duration-200 ease-out-expo group-hover/shop:translate-x-0.5 group-hover/shop:-translate-y-0.5" />
               <span className="sr-only">(opens in a new tab)</span>
             </a>
-            <span aria-hidden="true" className="h-5 w-px bg-border" />
+            <span aria-hidden="true" className="h-5 w-px bg-white/15" />
             <div className="flex items-center gap-0.5">
               <ThemeToggle />
               <AgentInbox />

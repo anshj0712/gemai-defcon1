@@ -15,8 +15,6 @@
     --font-heading: var(--font-sans);
     --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
     --font-mono: 'Geist Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace;
-    /* Page titles and the brand only: a reading serif, set tight. */
-    --font-display: 'Newsreader Variable', ui-serif, Georgia, serif;
     /* One easing for arrivals: fast start, long soft landing. Exits use ease-in and run shorter. */
     --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
     --color-sidebar-ring: var(--sidebar-ring);
@@ -98,157 +96,154 @@
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* Light (the default). Warm paper neutrals and one ink-blue accent (links, focus, info). Every other hue carries a
-   meaning and is kept quiet: priority (brick, rust, ochre, stone), revenue (brick), the agent (dusty violet), success
-   (sage). See design-system/churn-preventer/MASTER.md. */
+/* Light (the default): the dashboard's original monitoring palette. Slate neutrals, a navy top bar, blue for actions,
+   links and focus; red, orange, amber and slate for priority; violet for the agent. See MASTER.md. */
 :root {
-    --background: #f7f6f3;
-    --foreground: #1f1e1c;
+    --background: #f6f7fb;
+    --foreground: #111827;
     --card: #ffffff;
-    --card-foreground: #1f1e1c;
+    --card-foreground: #111827;
     --popover: #ffffff;
-    --popover-foreground: #1f1e1c;
-    --primary: #1f1e1c;
-    --primary-foreground: #faf9f7;
-    --secondary: #efede9;
-    --secondary-foreground: #1f1e1c;
-    --muted: #f0eeea;
-    --muted-foreground: #6b6862;
-    --accent: #efede9;
-    --accent-foreground: #1f1e1c;
-    --destructive: #b13d34;
-    --border: #e7e4de;
-    --input: #d9d5cd;
-    --ring: #3d6fa8;
-    --link: #2f5f96;
-    --chart-1: #3d6fa8;
-    --chart-2: #7564a8;
-    --chart-3: #c29530;
-    --chart-4: #3c7d50;
-    --chart-5: #8a867e;
+    --popover-foreground: #111827;
+    --primary: #2563eb;
+    --primary-foreground: #ffffff;
+    --secondary: #f3f4f6;
+    --secondary-foreground: #111827;
+    --muted: #f3f4f6;
+    --muted-foreground: #666d7a;
+    --accent: #f3f4f6;
+    --accent-foreground: #111827;
+    --destructive: #dc2626;
+    --border: #e5e7eb;
+    --input: #d1d5db;
+    --ring: #2563eb;
+    --link: #2563eb;
+    --chart-1: #2563eb;
+    --chart-2: #7c3aed;
+    --chart-3: #f59e0b;
+    --chart-4: #16a34a;
+    --chart-5: #64748b;
     --radius: 0.5rem;
     --sidebar: #ffffff;
-    --sidebar-foreground: #1f1e1c;
-    --sidebar-primary: #1f1e1c;
-    --sidebar-primary-foreground: #faf9f7;
-    --sidebar-accent: #efede9;
-    --sidebar-accent-foreground: #1f1e1c;
-    --sidebar-border: #e7e4de;
-    --sidebar-ring: #3d6fa8;
+    --sidebar-foreground: #111827;
+    --sidebar-primary: #2563eb;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #f3f4f6;
+    --sidebar-accent-foreground: #111827;
+    --sidebar-border: #e5e7eb;
+    --sidebar-ring: #2563eb;
 
-    --topbar: #f7f6f3;
-    --topbar-foreground: #1f1e1c;
-    --topbar-muted: #6b6862;
-    --topbar-active: #ebe8e2;
-    --money: #a3362c;
-    --danger-muted: #f8ebe8;
-    --danger-border: #ecccc6;
-    --info: #2f5f96;
-    --info-muted: #e8eef5;
-    --info-border: #c7d5e6;
-    --kind: #4a5468;
-    --kind-muted: #eceef1;
-    --agent: #5a4a8a;
-    --agent-muted: #efecf5;
-    --agent-border: #cdc5e2;
-    --agent-strong: #7564a8;
-    --synthetic: #6b4c12;
-    --synthetic-muted: #f6eedb;
-    --synthetic-border: #e6d4a8;
-    --warn: #8a4512;
-    --warn-muted: #f8eee2;
-    --warn-border: #ebd2b3;
-    --warn-strong: #c08636;
-    --success: #2d6a3e;
-    --success-muted: #e6efe6;
-    --success-border: #bdd5c1;
-    --success-strong: #4f9a66;
-    --success-solid: #3c7d50;
-    --tier-p0: #b13d34;
-    --tier-p1: #c0662f;
-    --tier-p2: #b98a26;
-    --tier-p3: #8a867e;
-    --tier-p0-ink: #922f27;
-    --tier-p1-ink: #8f4517;
-    --tier-p2-ink: #77560e;
-    --tier-p3-ink: #55524c;
+    --topbar: #111827;
+    --topbar-foreground: #ffffff;
+    --topbar-muted: #cbd5e1;
+    --topbar-active: #1f2937;
+    --money: #b91c1c;
+    --danger-muted: #fef2f2;
+    --danger-border: #fecaca;
+    --info: #1e40af;
+    --info-muted: #dbeafe;
+    --info-border: #bfdbfe;
+    --kind: #3730a3;
+    --kind-muted: #eef2ff;
+    --agent: #5b21b6;
+    --agent-muted: #ede9fe;
+    --agent-border: #a78bfa;
+    --agent-strong: #7c3aed;
+    --synthetic: #78350f;
+    --synthetic-muted: #fef3c7;
+    --synthetic-border: #fde68a;
+    --warn: #9a3412;
+    --warn-muted: #fff7ed;
+    --warn-border: #fed7aa;
+    --warn-strong: #f59e0b;
+    --success: #166534;
+    --success-muted: #dcfce7;
+    --success-border: #86efac;
+    --success-strong: #22c55e;
+    --success-solid: #16a34a;
+    --tier-p0: #dc2626;
+    --tier-p1: #ea580c;
+    --tier-p2: #ca8a04;
+    --tier-p3: #64748b;
+    --tier-p0-ink: #991b1b;
+    --tier-p1-ink: #9a3412;
+    --tier-p2-ink: #854d0e;
+    --tier-p3-ink: #334155;
     --tier-foreground: #ffffff;
-    --grain-opacity: 0.035;
 }
 
-/* Dark (opt-in from the top bar): warm charcoal, the same meanings one step lighter. Not an inversion. */
+/* Dark (opt-in from the theme menu): the same hues, tonal rather than inverted. */
 .dark {
-    --background: #131211;
-    --foreground: #ebe8e3;
-    --card: #1c1b19;
-    --card-foreground: #ebe8e3;
-    --popover: #201f1c;
-    --popover-foreground: #ebe8e3;
-    --primary: #ebe8e3;
-    --primary-foreground: #161513;
-    --secondary: #262421;
-    --secondary-foreground: #ebe8e3;
-    --muted: #262421;
-    --muted-foreground: #a39f97;
-    --accent: #262421;
-    --accent-foreground: #ebe8e3;
-    --destructive: #d9776c;
-    --border: rgb(255 255 255 / 0.08);
-    --input: rgb(255 255 255 / 0.14);
-    --ring: #7fa6d6;
-    --link: #8fb2dc;
-    --chart-1: #5f8fc9;
-    --chart-2: #9a88cf;
-    --chart-3: #b08530;
-    --chart-4: #67ad7d;
-    --chart-5: #9a968e;
-    --sidebar: #1c1b19;
-    --sidebar-foreground: #ebe8e3;
-    --sidebar-primary: #ebe8e3;
-    --sidebar-primary-foreground: #161513;
-    --sidebar-accent: #262421;
-    --sidebar-accent-foreground: #ebe8e3;
-    --sidebar-border: rgb(255 255 255 / 0.08);
-    --sidebar-ring: #7fa6d6;
+    --background: oklch(0.129 0.042 264.695);
+    --foreground: oklch(0.984 0.003 247.858);
+    --card: oklch(0.208 0.042 265.755);
+    --card-foreground: oklch(0.984 0.003 247.858);
+    --popover: oklch(0.208 0.042 265.755);
+    --popover-foreground: oklch(0.984 0.003 247.858);
+    --primary: oklch(0.707 0.165 254.624);
+    --primary-foreground: oklch(0.129 0.042 264.695);
+    --secondary: oklch(0.279 0.041 260.031);
+    --secondary-foreground: oklch(0.984 0.003 247.858);
+    --muted: oklch(0.279 0.041 260.031);
+    --muted-foreground: oklch(0.704 0.04 256.788);
+    --accent: oklch(0.279 0.041 260.031);
+    --accent-foreground: oklch(0.984 0.003 247.858);
+    --destructive: oklch(0.704 0.191 22.216);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.707 0.165 254.624);
+    --link: oklch(0.707 0.165 254.624);
+    --chart-1: oklch(0.707 0.165 254.624);
+    --chart-2: oklch(0.702 0.183 293.541);
+    --chart-3: oklch(0.828 0.189 84.429);
+    --chart-4: oklch(0.723 0.219 149.579);
+    --chart-5: oklch(0.704 0.04 256.788);
+    --sidebar: oklch(0.208 0.042 265.755);
+    --sidebar-foreground: oklch(0.984 0.003 247.858);
+    --sidebar-primary: oklch(0.707 0.165 254.624);
+    --sidebar-primary-foreground: oklch(0.129 0.042 264.695);
+    --sidebar-accent: oklch(0.279 0.041 260.031);
+    --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
+    --sidebar-border: oklch(1 0 0 / 10%);
+    --sidebar-ring: oklch(0.707 0.165 254.624);
 
-    --topbar: #131211;
-    --topbar-foreground: #ebe8e3;
-    --topbar-muted: #a39f97;
-    --topbar-active: #262421;
-    --money: #e58a7f;
-    --danger-muted: #2b1a17;
-    --danger-border: #5a2f29;
-    --info: #8fb2dc;
-    --info-muted: #1b2533;
-    --info-border: #2f4561;
-    --kind: #b7bfcf;
-    --kind-muted: #23262c;
-    --agent: #b9abe0;
-    --agent-muted: #251f33;
-    --agent-border: #4a4068;
-    --agent-strong: #9a88cf;
-    --synthetic: #e3cc8e;
-    --synthetic-muted: #2a2416;
-    --synthetic-border: #574a26;
-    --warn: #e2b27a;
-    --warn-muted: #2b2117;
-    --warn-border: #5a4428;
-    --warn-strong: #c99145;
-    --success: #9ccba8;
-    --success-muted: #1b2820;
-    --success-border: #335a40;
-    --success-strong: #67ad7d;
-    --success-solid: #3c7d50;
-    --tier-p0: #d9776c;
-    --tier-p1: #da8b55;
-    --tier-p2: #cfa24a;
-    --tier-p3: #9a968e;
-    --tier-p0-ink: #f0aaa2;
-    --tier-p1-ink: #f0b88f;
-    --tier-p2-ink: #e6c57e;
-    --tier-p3-ink: #c9c5bd;
-    --tier-foreground: #161513;
-    --grain-opacity: 0.05;
+    --topbar: oklch(0.208 0.042 265.755);
+    --topbar-foreground: oklch(0.984 0.003 247.858);
+    --topbar-muted: oklch(0.869 0.022 252.894);
+    --topbar-active: oklch(0.279 0.041 260.031);
+    --money: oklch(0.704 0.191 22.216);
+    --danger-muted: oklch(0.258 0.092 26.042);
+    --danger-border: oklch(0.396 0.141 25.723);
+    --info: oklch(0.809 0.105 251.813);
+    --info-muted: oklch(0.282 0.091 267.935);
+    --info-border: oklch(0.424 0.199 265.638);
+    --kind: oklch(0.785 0.115 274.713);
+    --kind-muted: oklch(0.257 0.09 281.288);
+    --agent: oklch(0.811 0.111 293.571);
+    --agent-muted: oklch(0.283 0.141 291.089);
+    --agent-border: oklch(0.491 0.27 292.581);
+    --agent-strong: oklch(0.702 0.183 293.541);
+    --synthetic: oklch(0.924 0.12 95.746);
+    --synthetic-muted: oklch(0.279 0.077 45.635);
+    --synthetic-border: oklch(0.473 0.137 46.201);
+    --warn: oklch(0.837 0.128 66.29);
+    --warn-muted: oklch(0.266 0.079 36.259);
+    --warn-border: oklch(0.47 0.157 37.304);
+    --warn-strong: oklch(0.828 0.189 84.429);
+    --success: oklch(0.871 0.15 154.449);
+    --success-muted: oklch(0.266 0.065 152.934);
+    --success-border: oklch(0.448 0.119 151.328);
+    --success-strong: oklch(0.723 0.219 149.579);
+    --success-solid: #16a34a;
+    --tier-p0: #dc2626;
+    --tier-p1: #ea580c;
+    --tier-p2: #ca8a04;
+    --tier-p3: #64748b;
+    --tier-p0-ink: #fca5a5;
+    --tier-p1-ink: #fdba74;
+    --tier-p2-ink: #fcd34d;
+    --tier-p3-ink: #cbd5e1;
+    --tier-foreground: #0f172a;
 }
 
 @layer base {
@@ -264,16 +259,6 @@
     line-height: 1.55;
     /* Every number lines up: prices, counts, times. */
     font-variant-numeric: tabular-nums;
-  }
-  /* Paper grain on the canvas only: fixed, behind everything, never on a scrolling layer. */
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    z-index: -1;
-    pointer-events: none;
-    opacity: var(--grain-opacity);
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   }
   h1, h2, h3, h4 {
     text-wrap: balance;
@@ -304,10 +289,6 @@
 /* ---------- Motion ----------
    Motion explains change in a working tool: a page arriving, a section opening, a number moving, a new proposal.
    Arrivals use ease-out-expo (150-300 ms); nothing makes the reader wait. */
-@utility font-display {
-  font-family: var(--font-display);
-  font-optical-sizing: auto;
-}
 @utility motion-enter {
   animation: cp-enter 260ms var(--ease-out-expo) both;
 }

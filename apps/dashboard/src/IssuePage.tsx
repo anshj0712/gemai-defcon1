@@ -178,7 +178,7 @@ export function IssuePage({ clusterId }: { clusterId: string }) {
         ) : (
           <div className="flex flex-col items-start gap-2">
             <KindBadge kind={cluster.kind} />
-            <h1 className="issue-title m-0 font-display text-[30px] leading-[1.12] font-medium tracking-[-0.02em]">{cluster.title}</h1>
+            <h1 className="issue-title m-0 text-[26px] leading-tight font-semibold tracking-[-0.02em]">{cluster.title}</h1>
             <p className="m-0 text-[13px] text-muted-foreground">
               On {cluster.route} · {cluster.session_count} shoppers · last seen {ago(cluster.last_seen)}
             </p>

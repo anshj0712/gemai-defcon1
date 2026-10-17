@@ -143,7 +143,7 @@ export function PageHeader({ title, description, children, titleClassName }: { t
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
       <div className="flex min-w-0 flex-col gap-1.5">
-        <h1 className={cn('m-0 font-display text-[34px] leading-[1.08] font-medium tracking-[-0.022em]', titleClassName)}>{title}</h1>
+        <h1 className={cn('m-0 text-[28px] leading-tight font-semibold tracking-[-0.02em]', titleClassName)}>{title}</h1>
         {description && <p className="m-0 max-w-[68ch] text-[14px] leading-relaxed text-muted-foreground">{description}</p>}
       </div>
       {children}

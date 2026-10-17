@@ -34,11 +34,11 @@ export interface FlagEvent extends TimedEvent {
 }
 
 export const FLAG_COLORS: Record<string, string> = {
-  dead_click: '#b13d34',
-  rage_click: '#c0662f',
-  response_decay: '#b98a26',
-  invariant_check: '#7564a8',
-  error_correlation: '#b5628a',
+  dead_click: '#ef4444',
+  rage_click: '#f97316',
+  response_decay: '#eab308',
+  invariant_check: '#a855f7',
+  error_correlation: '#ec4899',
 };
 
 export const flagTag = (detector: string) => `${FLAG_TAG_PREFIX}${detector}`;
@@ -71,13 +71,13 @@ export function injectMarkers<E extends TimedEvent>(events: readonly E[], marker
 }
 
 /** JS errors stay on the timeline as context, in their own color. */
-export const ERROR_COLOR = '#9c4a72';
+export const ERROR_COLOR = '#db2777';
 
 /** Timeline colors: one per detector present, plus recorded JS errors. */
 export function tagColors(markers: readonly Marker[]): Record<string, string> {
   return {
     [CUSTOM_TAGS.error]: ERROR_COLOR,
-    ...Object.fromEntries(markers.map((m) => [flagTag(m.detector), FLAG_COLORS[m.detector] ?? '#b13d34'])),
+    ...Object.fromEntries(markers.map((m) => [flagTag(m.detector), FLAG_COLORS[m.detector] ?? '#ef4444'])),
   };
 }
 

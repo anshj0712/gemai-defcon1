@@ -16,7 +16,7 @@ export function ThemeToggle() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="text-topbar-muted hover:bg-topbar-active hover:text-topbar-foreground" aria-label={`Theme: ${current.label}`}>
+        <Button variant="ghost" size="icon" className="text-topbar-muted hover:bg-topbar-active hover:text-topbar-foreground aria-expanded:bg-topbar-active aria-expanded:text-topbar-foreground dark:hover:bg-topbar-active" aria-label={`Theme: ${current.label}`}>
           <current.icon key={pref} aria-hidden="true" className="motion-pop" />
         </Button>
       </DropdownMenuTrigger>

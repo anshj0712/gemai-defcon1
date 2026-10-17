@@ -12,16 +12,16 @@ import { clipWindow, ERROR_COLOR, FLAG_COLORS, formatOffset, forPlayer, isFlagEv
 
 /** Injected into the replay iframe: the outline drawn around the element a flag points at. */
 const FLAGGED_CSS =
-  '.cp-flagged { outline: 3px solid #b13d34 !important; outline-offset: 4px !important; box-shadow: 0 0 0 10px rgba(177, 61, 52, 0.22) !important; }';
+  '.cp-flagged { outline: 3px solid #ef4444 !important; outline-offset: 4px !important; box-shadow: 0 0 0 10px rgba(239, 68, 68, 0.25) !important; }';
 
 const PLAYER_WIDTH = 960;
 const PLAYER_HEIGHT = 540;
 
 /** The legend uses the player's own colors (replay.css and markers.ts), so it matches what the replay draws. */
 const LEGEND: { label: string; color: string; ring?: boolean }[] = [
-  { label: "shopper's pointer and trail", color: '#3d6fa8', ring: true },
-  { label: 'click', color: '#b13d34' },
-  { label: 'flagged element and timeline mark', color: FLAG_COLORS.dead_click ?? '#b13d34' },
+  { label: "shopper's pointer and trail", color: '#2563eb', ring: true },
+  { label: 'click', color: '#f43f5e' },
+  { label: 'flagged element and timeline mark', color: FLAG_COLORS.dead_click ?? '#ef4444' },
   { label: 'JS error', color: ERROR_COLOR },
 ];
 
@@ -155,7 +155,7 @@ export function ReplayPage({ sessionId, signalId }: Props) {
   return (
     <div className="flex flex-col gap-2">
       {back}
-      <h1 className="m-0 font-display text-[34px] leading-[1.08] font-medium tracking-[-0.022em]">Session replay</h1>
+      <h1 className="m-0 text-[28px] leading-tight font-semibold tracking-[-0.02em]">Session replay</h1>
       <p className="m-0 text-[13px] text-muted-foreground">
         <code>{data.session.session_id}</code> · {data.session.route} · release {data.session.release} · {data.session.chunks} batches · {duration}
       </p>
