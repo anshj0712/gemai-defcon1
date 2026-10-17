@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { FindingSummary } from '@cp/schema';
 import { fetchFinding, fetchFindings, fetchHistory, type HistoryMomentView } from '../api';
 import { isResolved } from '../format';
-import { revenueSeries, type SeriesItem, type SeriesKey, type SeriesPoint } from './series';
+import { revenueSeries, withCurrent, type SeriesItem, type SeriesKey, type SeriesPoint } from './series';
 
 export interface RevenueSeries {
   points: SeriesPoint[];
@@ -27,15 +27,17 @@ async function build(): Promise<RevenueSeries> {
   const items: SeriesItem[] = findings.map((f, i) => ({
     id: f.cluster_id,
     title: f.title,
-    versions: details[i]?.versions ?? [],
+    versions: withCurrent(details[i]?.versions ?? [], { at: f.updated_at, revenue_at_risk_minor: f.revenue.status === 'ok' ? f.revenue.revenue_at_risk_minor : 0 }),
     resolvedAt: isResolved(f) ? f.resolution!.resolved_at : null,
   }));
   const firsts = items.flatMap((it) => it.versions.map((v) => v.recorded_from));
   const from = firsts.length ? Math.min(...firsts) - 60_000 : now - 3_600_000;
-  const history = await fetchHistory(now, from, now).catch(() => null);
-  const { points, keys } = revenueSeries(items, from, now);
+  // A finding re-scored while we were fetching is newer than 'now': end the series there so it matches the totals.
+  const to = Math.max(now, ...findings.map((f) => f.updated_at));
+  const history = await fetchHistory(to, from, to).catch(() => null);
+  const { points, keys } = revenueSeries(items, from, to);
   const fixes = findings.filter((f) => isResolved(f)).map((f) => ({ at: f.resolution!.resolved_at, id: f.cluster_id, title: f.title }));
-  return { points, keys, from, to: now, moments: history?.moments ?? [], fixes, findings };
+  return { points, keys, from, to, moments: history?.moments ?? [], fixes, findings };
 }
 
 /** Shared by the Dashboard and Time travel: at most one build per 30 s across pages. */

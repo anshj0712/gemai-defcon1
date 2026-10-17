@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIcon, CircleAlertIcon, ExternalLinkIcon, HistoryIcon, LayoutDashboardIcon, ScrollTextIcon, type LucideIcon } from 'lucide-react';
 import { Toaster } from '@/components/ui/sonner';
 import { AgentInbox } from './AgentInbox';
+import { DashboardPage } from './DashboardPage';
 import { HistoryPage } from './HistoryPage';
 import { IssuePage } from './IssuePage';
 import { IssuesPage } from './IssuesPage';
@@ -99,8 +100,10 @@ export function App() {
             <RulesPage />
           ) : route.page === 'history' ? (
             <HistoryPage />
-          ) : (
+          ) : route.page === 'issues' ? (
             <IssuesPage />
+          ) : (
+            <DashboardPage />
           )}
         </div>
       </main>

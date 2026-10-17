@@ -68,3 +68,17 @@ export function revenueSeries(items: readonly SeriesItem[], from: number, to: nu
   });
   return { points, keys };
 }
+
+/**
+ * The record writes a version when an issue's inputs change; revenue that moves as carts settle updates only the live
+ * finding. So the live value continues the history from its last update: the open version is closed there and the
+ * live revenue runs on from it. Returns the versions unchanged when the live value is not newer.
+ */
+export function withCurrent(versions: readonly SeriesVersion[], current: { at: number; revenue_at_risk_minor: number }): SeriesVersion[] {
+  const sorted = [...versions].sort((a, b) => a.recorded_from - b.recorded_from);
+  const last = sorted[sorted.length - 1];
+  if (last && current.at <= last.recorded_from) return sorted;
+  if (last && last.revenue_at_risk_minor === current.revenue_at_risk_minor && last.recorded_to === null) return sorted;
+  const closed = sorted.map((v) => (v.recorded_to === null || v.recorded_to > current.at ? { ...v, recorded_to: current.at } : v));
+  return [...closed, { recorded_from: current.at, recorded_to: null, revenue_at_risk_minor: current.revenue_at_risk_minor }];
+}

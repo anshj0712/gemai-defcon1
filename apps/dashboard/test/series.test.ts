@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ClusterSummary, SignalRowView } from '../src/api';
-import { revenueAt, revenueSeries, type SeriesItem } from '../src/lib/series';
+import { revenueAt, revenueSeries, withCurrent, type SeriesItem } from '../src/lib/series';
 import { groupSignals } from '../src/lib/signals';
 
 /** Dashboard charts and grouping. All numbers are synthetic. */
@@ -48,6 +48,21 @@ describe('revenue at risk over time', () => {
     const { points, keys } = revenueSeries([item('a', [[0, null, 900]], 60), item('b', [[0, null, 100]])], 0, 100, 2, 1);
     expect(keys[0]).toMatchObject({ id: 'a' });
     expect(points.map((p) => p.total)).toEqual([1_000, 1_000, 100]);
+  });
+
+  it('continues the history with the live value from its last update', () => {
+    const v = [
+      { recorded_from: 0, recorded_to: 100, revenue_at_risk_minor: 10 },
+      { recorded_from: 100, recorded_to: null, revenue_at_risk_minor: 20 },
+    ];
+    expect(withCurrent(v, { at: 150, revenue_at_risk_minor: 35 })).toEqual([
+      { recorded_from: 0, recorded_to: 100, revenue_at_risk_minor: 10 },
+      { recorded_from: 100, recorded_to: 150, revenue_at_risk_minor: 20 },
+      { recorded_from: 150, recorded_to: null, revenue_at_risk_minor: 35 },
+    ]);
+    expect(withCurrent(v, { at: 50, revenue_at_risk_minor: 99 })).toEqual(v);
+    expect(withCurrent(v, { at: 150, revenue_at_risk_minor: 20 })).toEqual(v);
+    expect(withCurrent([], { at: 5, revenue_at_risk_minor: 7 })).toEqual([{ recorded_from: 5, recorded_to: null, revenue_at_risk_minor: 7 }]);
   });
 });
 
