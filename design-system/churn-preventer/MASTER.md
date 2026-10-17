@@ -49,7 +49,7 @@ The dashboard's original colors, exposed as shadcn semantic variables (`:root` f
 | `--tier-p0` … `--tier-p3` | #dc2626, #ea580c, #ca8a04, #64748b (white text) | Tier pills; also the visual-check badges |
 | `--kind`, `--kind-muted` | #3730a3, #eef2ff | ELEMENT badge |
 | `--agent`, `--agent-muted`, `--agent-border`, `--agent-strong` | #5b21b6, #ede9fe, #a78bfa, #7c3aed | DATA RULE badge, hypotheses (dashed), found later, the bell count, the time-travel slider |
-| `--synthetic`, `--synthetic-muted`, `--synthetic-border` | #78350f, #fef3c7, #fde68a | Synthetic data markers (AGENTS rule 10) |
+| `--synthetic`, `--synthetic-muted`, `--synthetic-border` | #78350f, #fef3c7, #fde68a | Amber notices: the offline stand-in alert, a probe that reads nothing (no synthetic markers since 18 Oct) |
 | `--warn`, `--warn-muted`, `--warn-border` | #9a3412, #fff7ed, #fed7aa | Churn reason chip |
 | `--success`, `--success-muted`, `--success-strong`, `--success-solid` | #166534, #dcfce7, #22c55e, #16a34a | Approved, live, fixed; the live dot; Visually confirmed |
 | `--info`, `--info-muted`, `--info-border` | #1e40af, #dbeafe, #bfdbfe | Drafts, evidence chips |
@@ -122,7 +122,7 @@ Reduced motion means fewer and gentler, not none. Rises, pops, nudges and the pu
   - focus returns to the trigger.
 - **Not color alone:** tiers, states and verdicts always carry text.
 - **Announcements:** the inbox count is announced as a full phrase ("3 agent proposals to review") in one status region.
-- **Synthetic labels:** the "Synthetic data" pill, the offline stand-in's "templated" label and the "synthetic" markers on revenue stay visible (AGENTS rule 10).
+- **Synthetic labels:** none in the UI since 18 Oct; the writeup and the video say the demo data is synthetic (AGENTS rule 10). The offline stand-in's "templated" label stays: it says what wrote the text, not where the data came from.
 
 ## Anti-patterns (do not use)
 
@@ -145,4 +145,4 @@ Reduced motion means fewer and gentler, not none. Rises, pops, nudges and the pu
 - [ ] `prefers-reduced-motion` removes movement and keeps fades and color feedback
 - [ ] Hover states 150–200 ms; disabled states clear
 - [ ] Tables scroll inside their card; no horizontal page scroll at 1280 and 1440
-- [ ] Synthetic markers and the templated label visible
+- [ ] No "synthetic" text in the UI; the templated label is visible when the agents run offline
