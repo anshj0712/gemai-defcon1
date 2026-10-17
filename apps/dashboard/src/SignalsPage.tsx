@@ -76,7 +76,7 @@ export function SignalsPage() {
   return (
     <>
       <PageHeader title="Signals" description={DESCRIPTION}>
-        <span className="text-[13px] text-muted-foreground tabular-nums">{signals.length} shown · synthetic sessions</span>
+        <span className="text-[13px] text-muted-foreground tabular-nums">{signals.length} shown</span>
       </PageHeader>
       <Card className="gap-0 py-1">
         <Table className="signals">

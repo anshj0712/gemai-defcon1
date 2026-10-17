@@ -45,6 +45,9 @@ describe('time travel helpers', () => {
 
   it('routes to the rules and time travel pages', () => {
     expect(parseRoute('#/rules')).toEqual({ page: 'rules' });
+    expect(parseRoute('#/rules/live')).toEqual({ page: 'rules', tab: 'live' });
+    expect(parseRoute('#/rules/probes')).toEqual({ page: 'rules', tab: 'probes' });
+    expect(parseRoute('#/rules/other')).toEqual({ page: 'dashboard' });
     expect(parseRoute('#/history')).toEqual({ page: 'history' });
   });
 });

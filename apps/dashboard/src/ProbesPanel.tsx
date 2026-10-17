@@ -12,7 +12,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { addProbe, ApiError, disableProbe, fetchProbes, previewProbe, type ProbesView, type ProbeStatsView } from './api';
-import { SyntheticNote } from './components/common';
 import { ago, time } from './format';
 import { probeValue } from './lib/probes';
 
@@ -61,7 +60,7 @@ function PreviewBlock({ p, spec }: { p: ProbePreview; spec: RecordedProbeSpec })
         <b className="tabular-nums">
           {p.values ? (p.values.min === p.values.max ? probeValue(spec.name, p.values.min, spec.kind) : `${probeValue(spec.name, p.values.min, spec.kind)} – ${probeValue(spec.name, p.values.max, spec.kind)}`) : '–'}
         </b>
-        {p.values && p.values.min !== p.values.max && <> (median {probeValue(spec.name, p.values.median, spec.kind)})</>}. <SyntheticNote />
+        {p.values && p.values.min !== p.values.max && <> (median {probeValue(spec.name, p.values.median, spec.kind)})</>}.
       </p>
       {p.samples.length > 0 && (
         <Table>

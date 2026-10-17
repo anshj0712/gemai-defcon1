@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { fetchHistory, type HistoryFindingView, type HistoryView } from './api';
-import { FoundLaterBadge, PageHeader, Stat, SyntheticNote, TierBadge } from './components/common';
+import { FoundLaterBadge, PageHeader, Stat, TierBadge } from './components/common';
 import { money } from './format';
 import { defaultAsOf, totalAtRisk } from './lib/history';
 
@@ -85,9 +85,7 @@ export function HistoryPage() {
 
   const later = useMemo(() => new Set(data?.found_later ?? []), [data]);
   const header = (
-    <PageHeader title="Time travel" description={DESCRIPTION}>
-      <SyntheticNote>Synthetic data: demo sessions only</SyntheticNote>
-    </PageHeader>
+    <PageHeader title="Time travel" description={DESCRIPTION} />
   );
   if (error && !data) {
     return (
@@ -181,7 +179,7 @@ export function HistoryPage() {
           className={cn(laterList.length > 0 && 'bg-agent-muted ring-agent-border')}
           label={
             <>
-              found later · {money(laterMoney.minor, laterMoney.currency)} at risk <span className="text-synthetic">(synthetic)</span>
+              found later · {money(laterMoney.minor, laterMoney.currency)} at risk
             </>
           }
         />
@@ -197,7 +195,7 @@ export function HistoryPage() {
           {data.current.length === 0 ? <p className="m-0 px-2 text-sm text-muted-foreground">No issues on record for this stretch.</p> : data.current.map((f) => <Row key={f.finding_id} f={f} foundLater={later.has(f.finding_id)} />)}
         </Card>
       </div>
-      <p className="mt-4 mb-0 text-xs text-muted-foreground">Both columns come from the versioned findings record (valid time and transaction time), not the live feed. All sessions and numbers are synthetic.</p>
+      <p className="mt-4 mb-0 text-xs text-muted-foreground">Both columns come from the versioned findings record (valid time and transaction time), not the live feed.</p>
     </>
   );
 }

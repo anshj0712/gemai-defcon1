@@ -1,26 +1,29 @@
 import { useEffect, useState } from 'react';
-import { ActivityIcon, CircleAlertIcon, HistoryIcon, ScrollTextIcon, type LucideIcon } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { ActivityIcon, CircleAlertIcon, ExternalLinkIcon, HistoryIcon, LayoutDashboardIcon, ScrollTextIcon, type LucideIcon } from 'lucide-react';
 import { Toaster } from '@/components/ui/sonner';
 import { AgentInbox } from './AgentInbox';
-import { BugsBar } from './BugsBar';
 import { HistoryPage } from './HistoryPage';
 import { IssuePage } from './IssuePage';
 import { IssuesPage } from './IssuesPage';
-import { parseRoute } from './lib/route';
+import { parseRoute, type Route } from './lib/route';
 import { ReplayPage } from './ReplayPage';
 import { RulesPage } from './RulesPage';
 import { SignalsPage } from './SignalsPage';
 import { ThemeToggle } from './ThemeToggle';
 
+/** The demo shop is deployed on its own; the top bar links to it. */
+const SHOP_URL = import.meta.env.VITE_CP_SHOP_URL ?? 'http://localhost:5173';
 
-type Tab = 'issues' | 'rules' | 'history' | 'signals';
+type Tab = 'dashboard' | 'issues' | 'rules' | 'history' | 'signals';
 const TABS: { id: Tab; href: string; label: string; icon: LucideIcon }[] = [
-  { id: 'issues', href: '#/', label: 'Issues', icon: CircleAlertIcon },
+  { id: 'dashboard', href: '#/', label: 'Dashboard', icon: LayoutDashboardIcon },
+  { id: 'issues', href: '#/issues', label: 'Issues', icon: CircleAlertIcon },
   { id: 'rules', href: '#/rules', label: 'Rules', icon: ScrollTextIcon },
   { id: 'history', href: '#/history', label: 'Time travel', icon: HistoryIcon },
   { id: 'signals', href: '#/signals', label: 'Signals', icon: ActivityIcon },
 ];
+
+const tabOf = (route: Route): Tab => (route.page === 'issue' || route.page === 'replay' ? 'issues' : route.page);
 
 export function App() {
   const [route, setRoute] = useState(() => parseRoute(window.location.hash));
@@ -30,7 +33,7 @@ export function App() {
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
 
-  const tab: Tab = route.page === 'signals' || route.page === 'rules' || route.page === 'history' ? route.page : 'issues';
+  const tab = tabOf(route);
   return (
     <>
       <a
@@ -66,7 +69,16 @@ export function App() {
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-2">
-            <Badge className="synthetic h-6 border-0 bg-synthetic-border px-2.5 text-synthetic">Synthetic data: demo sessions only</Badge>
+            <a
+              href={SHOP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 rounded-lg border border-white/15 px-3 py-1.5 text-sm font-medium text-topbar-foreground no-underline transition-colors duration-200 hover:bg-topbar-active"
+            >
+              Demo shop
+              <ExternalLinkIcon aria-hidden="true" className="size-3.5 text-topbar-muted" />
+              <span className="sr-only">(opens in a new tab)</span>
+            </a>
             <div className="flex items-center gap-1">
               <ThemeToggle />
               <AgentInbox />
@@ -74,7 +86,6 @@ export function App() {
           </div>
         </div>
       </header>
-      <BugsBar />
       <main id="main" tabIndex={-1} className="mx-auto max-w-[1320px] px-6 py-6 outline-none">
         {/* Keyed by route: each page arrives with a short fade and rise; live refreshes inside a page do not replay it. */}
         <div key={route.page === 'issue' ? route.clusterId : route.page === 'replay' ? route.sessionId : route.page} className="motion-enter">

@@ -8,7 +8,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { fetchClusters, fetchFindings, fetchQuality, type ClusterSummary, type QualityReport } from './api';
-import { AnimatedNumber, Eyebrow, FoundLaterBadge, KindBadge, NeedsReviewBadge, PageHeader, PendingTierBadge, Stat, SymptomChip, SyntheticNote, TierBadge } from './components/common';
+import { AnimatedNumber, Eyebrow, FoundLaterBadge, KindBadge, NeedsReviewBadge, PageHeader, PendingTierBadge, Stat, SymptomChip, TierBadge } from './components/common';
 import { ago, isResolved, money, TIER_NAMES } from './format';
 import { rankIssues } from './lib/issues';
 
@@ -124,7 +124,7 @@ export function IssuesPage() {
         <Stat value={<AnimatedNumber value={open.length} />} label="open issues" />
         <Stat value={<AnimatedNumber value={sessions} />} label="affected sessions" />
         <Stat value={<AnimatedNumber value={signals} />} label="signals grouped" />
-        <Stat value={estimated.length ? <AnimatedNumber value={atRisk} format={(n) => money(Math.round(n), currency)} ms={900} /> : '-'} tone="money" label={<>revenue at risk <span className="text-synthetic">(synthetic)</span></>} />
+        <Stat value={estimated.length ? <AnimatedNumber value={atRisk} format={(n) => money(Math.round(n), currency)} ms={900} /> : '-'} tone="money" label="revenue at risk" />
       </div>
 
       {first?.finding && (
@@ -156,7 +156,7 @@ export function IssuesPage() {
             <EmptyTitle>No issues yet</EmptyTitle>
             <EmptyDescription>
               Switch a bug on (top right of the bar above), then shop at <a href="http://localhost:5173/?bugs=dead_button">localhost:5173/?bugs=dead_button</a> and press Apply Coupon 4+ times, or run{' '}
-              <code>pnpm sim -- --sessions 50</code> to seed synthetic shoppers.
+              <code>pnpm sim -- --sessions 50</code> to seed test shoppers.
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
@@ -262,7 +262,7 @@ function QualityCard({ q }: { q: QualityReport | null }) {
       <Card size="sm" className="mt-4 px-4">
         <Eyebrow>Quality: how accurate is this?</Eyebrow>
         <p className="m-0 text-sm text-muted-foreground">
-          Not measured yet. Run <code>pnpm sim -- --sessions 240</code>, then <code>pnpm sim:check</code>: it plays synthetic shoppers who hit known bugs and checks what the system found.
+          Not measured yet. Run <code>pnpm sim -- --sessions 240</code>, then <code>pnpm sim:check</code>: it plays test shoppers who hit known bugs and checks what the system found.
         </p>
       </Card>
     );
@@ -282,7 +282,6 @@ function QualityCard({ q }: { q: QualityReport | null }) {
           Found {q.bugs_found} of {q.bugs_expected} planted bugs, {q.false_alarms} false alarm{q.false_alarms === 1 ? '' : 's'}
         </span>
         <Badge className={q.pass ? 'bg-success-muted text-success' : 'bg-danger-muted text-money'}>{q.pass ? 'Test passed' : 'Test failed'}</Badge>
-        <SyntheticNote className="ml-auto">Synthetic shoppers</SyntheticNote>
       </div>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {cells.map(([v, l]) => (
@@ -293,7 +292,7 @@ function QualityCard({ q }: { q: QualityReport | null }) {
         ))}
       </div>
       <p className="m-0 text-xs text-muted-foreground">
-        Measured {ago(q.checked_at)} on {q.sessions} synthetic shoppers (seed {q.seed}). We know which shoppers hit which bug, so this is a real score. Not real shoppers.
+        Measured {ago(q.checked_at)} on {q.sessions} test shoppers with planted bugs (seed {q.seed}). We know which shopper hit which bug, so this is a real score.
       </p>
     </Card>
   );

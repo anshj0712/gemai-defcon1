@@ -157,7 +157,7 @@ export function ReplayPage({ sessionId, signalId }: Props) {
       {back}
       <h1 className="m-0 text-2xl font-semibold tracking-tight">Session replay</h1>
       <p className="m-0 text-[13px] text-muted-foreground">
-        <code>{data.session.session_id}</code> · {data.session.route} · release {data.session.release} · {data.session.chunks} batches · {duration} · synthetic session
+        <code>{data.session.session_id}</code> · {data.session.route} · release {data.session.release} · {data.session.chunks} batches · {duration}
       </p>
       <div className="mt-2 grid items-start gap-5 xl:grid-cols-[auto_1fr]">
         <Card className="gap-2 p-3">

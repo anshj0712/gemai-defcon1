@@ -86,12 +86,13 @@ describe('parseRoute', () => {
     expect(parseRoute('#/sessions/s_abc123xyz')).toEqual({ page: 'replay', sessionId: 's_abc123xyz', signalId: null });
   });
 
-  it('routes the issues feed, issue pages, and the signals list', () => {
-    expect(parseRoute('#/')).toEqual({ page: 'issues' });
-    expect(parseRoute('')).toEqual({ page: 'issues' });
+  it('routes the dashboard, the issues list, issue pages, and the signals list', () => {
+    expect(parseRoute('#/')).toEqual({ page: 'dashboard' });
+    expect(parseRoute('')).toEqual({ page: 'dashboard' });
+    expect(parseRoute('#/issues')).toEqual({ page: 'issues' });
     expect(parseRoute('#/issues/0123456789abcdef0123')).toEqual({ page: 'issue', clusterId: '0123456789abcdef0123' });
     expect(parseRoute('#/signals')).toEqual({ page: 'signals' });
-    expect(parseRoute('#/sessions/../../x')).toEqual({ page: 'issues' });
+    expect(parseRoute('#/sessions/../../x')).toEqual({ page: 'dashboard' });
     expect(parseRoute('#/issues/not-an-id')).toEqual({ page: 'issues' });
   });
 });

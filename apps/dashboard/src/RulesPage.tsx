@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { ApiError, approveRule, draftRule, fetchClusters, fetchRules, redraftRule, rejectRule, rescanRule, runWatch, undoRule, type BuiltinRuleView, type ClusterSummary, type RuleView } from './api';
-import { Eyebrow, PageHeader, SyntheticNote } from './components/common';
+import { Eyebrow, PageHeader } from './components/common';
 import { ago, formulaLine, money, pct, time } from './format';
 import { probeValue } from './lib/probes';
 import { chanceText, CHURN_REASONS, watchSummary, watchValue } from './lib/watch';
@@ -79,7 +79,6 @@ function RevenueLost({ r, prominent, at }: { r: RevenueAtRisk; prominent: boolea
     return (
       <p className="m-0 flex flex-wrap items-center gap-2 text-[13px]" title={ok ? `${LOST_HOW} ${formulaLine(r)}` : undefined}>
         Estimated revenue lost to date: {ok ? <b className="text-money tabular-nums">{money(r.revenue_at_risk_minor, r.currency)}</b> : <span className="text-muted-foreground">{r.note ?? 'not enough data yet'}</span>} {asOf}
-        <SyntheticNote />
       </p>
     );
   }
@@ -87,7 +86,6 @@ function RevenueLost({ r, prominent, at }: { r: RevenueAtRisk; prominent: boolea
     <div className={cn('flex flex-col gap-1 rounded-lg border px-3 py-2', ok ? 'border-danger-border bg-danger-muted' : 'bg-muted')}>
       <p className="m-0 flex flex-wrap items-center gap-2 text-sm">
         Estimated revenue lost to date: {ok ? <b className="text-lg text-money tabular-nums">{money(r.revenue_at_risk_minor, r.currency)}</b> : <span className="text-muted-foreground">not enough data yet</span>} {asOf}
-        <SyntheticNote />
       </p>
       {ok ? (
         <p className="m-0 text-xs text-muted-foreground" title={formulaLine(r)}>
@@ -541,9 +539,7 @@ export function RulesPage() {
           and approving it runs it on live traffic and re-scans the last 30 days. Shoppers it already hurt show up as <Badge className="bg-agent-muted text-agent">found later</Badge>.
         </>
       }
-    >
-      <SyntheticNote>Synthetic data: demo sessions only</SyntheticNote>
-    </PageHeader>
+    />
   );
 
   if (loadError && !rules) {
@@ -718,7 +714,6 @@ export function RulesPage() {
           </Card>
         ))}
       </section>
-      <p className="mt-4 mb-0 text-xs text-muted-foreground">All sessions and numbers are synthetic.</p>
     </>
   );
 }

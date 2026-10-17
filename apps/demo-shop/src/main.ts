@@ -3,12 +3,13 @@ import '@fontsource-variable/oswald';
 import './styles.css';
 import { init, type CpClient } from '@cp/sdk';
 import { BRAND, CATEGORIES, PRODUCTS, SIZES, money, productById, shoeSvg, type Product } from './catalog';
+import { isBug, pickSessionBugs, type Bug } from './bugs';
 import { icons } from './icons';
 
 /**
  * STRIDE: a synthetic store for exercising the pipeline (all data is made up). Thirteen bugs, one or more per
- * common churn reason, can be switched on with `?bugs=dead_button,shipping_shock,...` or from the dashboard
- * (localhost:5174). The store's backend is the API's synthetic store (apps/api/src/demo-store.ts).
+ * common churn reason. Each tab draws a random, compatible set of them (bugs.ts); `?bugs=dead_button,...` forces a
+ * set instead. The store's backend is the API's synthetic store (apps/api/src/demo-store.ts).
  *   dead_button     Apply Coupon silently stops responding after the third click
  *   ghost_line      Remove leaves a bag line in the bag at quantity 0 (₹0) and then stops responding; totals agree, so
  *                   no built-in rule fires (the agent suggests one)
@@ -40,53 +41,18 @@ declare global {
 // Bug flags and the recorder
 // ---------------------------------------------------------------------------------------------
 
-const BUG_NAMES = [
-  'dead_button',
-  'cart_total',
-  'checkout_error',
-  'qty_price',
-  'ghost_line',
-  'shipping_shock',
-  'slow_delivery',
-  'slow_payment',
-  'slow_stock',
-  'card_declined',
-  'returns_hidden',
-  'support_down',
-  'recs_sold_out',
-] as const;
-type Bug = (typeof BUG_NAMES)[number];
-const isBug = (s: string): s is Bug => (BUG_NAMES as readonly string[]).includes(s);
-
-// The original fetch, taken before the SDK wraps it: polling the dashboard switch must not be recorded,
-// or a poll landing just after a click would look like that click's response and hide a dead click.
-const rawFetch = window.fetch.bind(window);
-
-/** An explicit ?bugs= in the URL (the simulator and e2e use it, even empty) wins for that tab. */
+/**
+ * Which bugs are live in this tab. An explicit ?bugs= in the URL (the simulator and e2e use it, even empty) wins.
+ * Otherwise a fresh tab draws its own random, compatible set once (see bugs.ts), kept for the whole tab session,
+ * so every shopper meets a different mix and some meet none.
+ */
 function loadBugs(): Set<Bug> {
   const fromUrl = new URLSearchParams(location.search).get('bugs');
   if (fromUrl !== null) sessionStorage.setItem('demo_bugs', fromUrl);
+  if (sessionStorage.getItem('demo_bugs') === null) sessionStorage.setItem('demo_bugs', pickSessionBugs().join(','));
   return new Set((sessionStorage.getItem('demo_bugs') ?? '').split(',').filter(isBug));
 }
 const bugs = loadBugs();
-const tabOverride = sessionStorage.getItem('demo_bugs') !== null;
-
-/** Otherwise the dashboard (localhost:5174) decides which bugs are live; follow it every 2 s. */
-async function followDashboardBugs(): Promise<void> {
-  if (tabOverride) return;
-  try {
-    const res = await rawFetch('/v1/demo/bugs', { cache: 'no-store' });
-    if (!res.ok) return;
-    const body = (await res.json()) as { bugs?: unknown };
-    const live = Array.isArray(body.bugs) ? body.bugs.filter((b): b is Bug => typeof b === 'string' && isBug(b)) : [];
-    bugs.clear();
-    for (const b of live) bugs.add(b);
-  } catch {
-    // The API is not running: keep the current set.
-  }
-}
-void followDashboardBugs();
-setInterval(() => void followDashboardBugs(), 2000);
 
 const DASHBOARD_URL = import.meta.env.VITE_CP_DASHBOARD ?? 'http://localhost:5174';
 const cp = init({

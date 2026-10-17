@@ -203,7 +203,6 @@ export function IssuePage({ clusterId }: { clusterId: string }) {
           </div>
         </Fold>
       </div>
-      <p className="m-0 text-xs text-muted-foreground">All sessions and numbers are synthetic.</p>
     </div>
   );
 }

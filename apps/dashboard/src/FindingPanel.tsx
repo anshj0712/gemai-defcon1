@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import { screenshotUrl, type FindingVersionView } from './api';
-import { AnimatedNumber, Eyebrow, Fold, FoundLaterBadge, NeedsReviewBadge, SyntheticNote, TierBadge } from './components/common';
+import { AnimatedNumber, Eyebrow, Fold, FoundLaterBadge, NeedsReviewBadge, TierBadge } from './components/common';
 import { CATEGORY_NAMES, formulaLine, money, pct, plain, time } from './format';
 
 
@@ -187,7 +187,6 @@ export function FindingSummary({ finding: f, cluster }: { finding: Finding; clus
               <p className="m-0 text-[13px] text-muted-foreground">{r.note}</p>
             </>
           )}
-          <SyntheticNote className="mt-1">Synthetic demo data</SyntheticNote>
         </Card>
 
         <div className="flex min-w-0 flex-col items-start justify-center gap-2">

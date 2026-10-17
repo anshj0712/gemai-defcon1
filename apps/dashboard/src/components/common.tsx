@@ -74,15 +74,6 @@ export function SymptomChip({ detector, count }: { detector: string; count?: num
   );
 }
 
-/** AGENTS rule 10: demo numbers say they are synthetic. */
-export function SyntheticNote({ children = 'Synthetic data', className }: { children?: ReactNode; className?: string }) {
-  return (
-    <Badge variant="outline" className={cn('border-synthetic-border bg-synthetic-muted font-medium text-synthetic', className)}>
-      {children}
-    </Badge>
-  );
-}
-
 export function NeedsReviewBadge({ title }: { title?: string }) {
   return (
     <Badge className="bg-danger-muted text-money" title={title}>

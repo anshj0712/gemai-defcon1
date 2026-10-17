@@ -2,11 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { WatchMeta } from '@cp/schema';
 import type { RuleView } from '../src/api';
 import { openProposals, toastLine } from '../src/lib/inbox';
-import { groupBugs } from '../src/lib/bugs';
 import { probeValue } from '../src/lib/probes';
 import { chanceText, watchSummary, watchValue } from '../src/lib/watch';
 
-/** Dashboard helpers for the churn watcher, probes and the bug switches. All data is synthetic. */
+/** Dashboard helpers for the churn watcher and probes. All data is synthetic. */
 
 const watch: WatchMeta = {
   feature: { key: 'dom:/checkout|span#delivery-fee', name: 'delivery_fee', source: 'discovered', selector: 'span#delivery-fee', route: '/checkout', unit: 'money' },
@@ -35,7 +34,7 @@ describe('the agent inbox', () => {
   });
 
   it('says what the agent suspects, with the gap, or that it suggests a rule', () => {
-    expect(toastLine(view('a', 1, watch))).toEqual({ title: 'Unexpected ₹499 delivery fee at checkout', detail: '83% of 12 shoppers left, against 24% of the others (synthetic data).' });
+    expect(toastLine(view('a', 1, watch))).toEqual({ title: 'Unexpected ₹499 delivery fee at checkout', detail: '83% of 12 shoppers left, against 24% of the others.' });
     expect(toastLine(view('b', 1))).toEqual({ title: 'Rule b', detail: 'A rule suggested for a recurring issue.' });
   });
 });
@@ -63,7 +62,7 @@ describe('hypothesis cards', () => {
   });
 });
 
-describe('probes and bug switches', () => {
+describe('probes', () => {
   it('formats probe values by name and kind', () => {
     expect(probeValue('req_post_api_payment_authorize_ms', 6517)).toBe('6.5 s');
     expect(probeValue('req_get_api_stock_ms', 153)).toBe('153 ms');
@@ -71,21 +70,5 @@ describe('probes and bug switches', () => {
     expect(probeValue('cart_total', 699_500)).toBe('₹6,995');
     expect(probeValue('qty', 2)).toBe('2');
     expect(probeValue('delivery_days', 9, 'count')).toBe('9');
-  });
-
-  it('groups the switches by churn reason, in order', () => {
-    const groups = groupBugs({
-      bugs: [],
-      known: [
-        { id: 'dead_button', label: 'Dead button', detail: '', reason: 'ux' },
-        { id: 'cart_total', label: 'Cart total', detail: '', reason: 'price' },
-        { id: 'slow_stock', label: 'Slow stock check', detail: '', reason: 'ux' },
-      ],
-      reasons: { ux: 'Poor user experience', price: 'Price trust' },
-    });
-    expect(groups.map((g) => [g.label, g.bugs.map((b) => b.id)])).toEqual([
-      ['Poor user experience', ['dead_button', 'slow_stock']],
-      ['Price trust', ['cart_total']],
-    ]);
   });
 });

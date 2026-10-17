@@ -12,7 +12,7 @@ export function toastLine(r: RuleView): { title: string; detail: string } {
   if (!w) return { title: d.rule.title, detail: 'A rule suggested for a recurring issue.' };
   return {
     title: w.title,
-    detail: `${Math.round(w.segment.abandonment * 100)}% of ${w.segment.sessions} shoppers left, against ${Math.round(w.baseline.abandonment * 100)}% of the others (synthetic data).`,
+    detail: `${Math.round(w.segment.abandonment * 100)}% of ${w.segment.sessions} shoppers left, against ${Math.round(w.baseline.abandonment * 100)}% of the others.`,
   };
 }
 
