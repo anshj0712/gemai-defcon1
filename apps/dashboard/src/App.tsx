@@ -97,7 +97,7 @@ export function App() {
           ) : route.page === 'signals' ? (
             <SignalsPage />
           ) : route.page === 'rules' ? (
-            <RulesPage />
+            <RulesPage tab={route.tab} />
           ) : route.page === 'history' ? (
             <HistoryPage />
           ) : route.page === 'issues' ? (

@@ -1,26 +1,20 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { ProbeDoc, ProbePreview, ProbeSource, RecordedProbeSpec } from '@cp/schema';
-import { ChevronDownIcon, ChevronUpIcon, EyeIcon, PlayIcon, PlusIcon } from 'lucide-react';
+import type { ProbeDoc, ProbePreview, RecordedProbeSpec } from '@cp/schema';
+import { CogIcon, EyeIcon, PlayIcon, PlusIcon, SparklesIcon, UserIcon, XIcon } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { addProbe, ApiError, disableProbe, fetchProbes, previewProbe, type ProbesView, type ProbeStatsView } from './api';
+import { Module } from './components/common';
 import { ago, time } from './format';
 import { probeValue } from './lib/probes';
-
-const SOURCE_LABEL: Record<ProbeSource, string> = { declared: 'In site code', request: 'Requests', recorded: 'Recorded' };
-const SOURCE_HINT: Record<ProbeSource, string> = {
-  declared: "Declared in the store's SDK setup: the browser reads the element and sends only the number.",
-  request: 'Automatic: every network call, as how long it took (_ms) and how it ended (_status).',
-  recorded: 'Read from the recorded page by a selector, added here or proposed by the agent. Nothing new leaves the browser, and it also reads sessions recorded before it existed.',
-};
 
 /** Examples for the demo shop (synthetic): two numbers the shop shows but never declared as probes. */
 export const PROBE_EXAMPLES: { label: string; spec: RecordedProbeSpec }[] = [
@@ -55,7 +49,7 @@ function PreviewBlock({ p, spec }: { p: ProbePreview; spec: RecordedProbeSpec })
   }
   return (
     <div className="flex flex-col gap-2 rounded-lg border bg-muted/50 p-3">
-      <p className="m-0 flex flex-wrap items-center gap-1 text-[13px]">
+      <p className="m-0 text-[13px]">
         Read on <b className="tabular-nums">{p.sessions_with_value}</b> of {p.sessions_scanned} recent sessions ({p.snapshots} snapshots), on {p.routes.join(', ')}. Values{' '}
         <b className="tabular-nums">
           {p.values ? (p.values.min === p.values.max ? probeValue(spec.name, p.values.min, spec.kind) : `${probeValue(spec.name, p.values.min, spec.kind)} – ${probeValue(spec.name, p.values.max, spec.kind)}`) : '–'}
@@ -80,14 +74,77 @@ function PreviewBlock({ p, spec }: { p: ProbePreview; spec: RecordedProbeSpec })
   );
 }
 
+/** A table of probes: name (and selector), pages, the values seen, and how often. */
+function ProbeTable({ rows, registry, onStop, busy }: { rows: ProbeStatsView[]; registry: Map<string, ProbeDoc>; onStop?: (name: string) => void; busy: boolean }) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Probe</TableHead>
+          <TableHead>Pages</TableHead>
+          <TableHead>Values</TableHead>
+          <TableHead className="text-right">Snapshots</TableHead>
+          {onStop && <TableHead className="text-right">Status</TableHead>}
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map((p) => {
+          const doc = registry.get(p.name);
+          return (
+            <TableRow key={p.name}>
+              <TableCell>
+                <code>{p.name}</code>
+                {doc && <span className="ml-2 font-mono text-xs text-muted-foreground">{doc.spec.selector}</span>}
+              </TableCell>
+              <TableCell className="font-mono text-xs text-muted-foreground">{p.routes.join(', ')}</TableCell>
+              <TableCell className="tabular-nums">{range(p, doc?.spec.kind)}</TableCell>
+              <TableCell className="text-right text-muted-foreground tabular-nums">{p.snapshots}</TableCell>
+              {onStop && (
+                <TableCell className="text-right">
+                  <div className="flex items-center justify-end gap-2">
+                    {doc && <ProbeDocBadge d={doc} />}
+                    {doc?.status === 'active' && (
+                      <Button variant="outline" size="xs" disabled={busy} onClick={() => onStop(p.name)}>
+                        Stop reading
+                      </Button>
+                    )}
+                  </div>
+                </TableCell>
+              )}
+            </TableRow>
+          );
+        })}
+      </TableBody>
+    </Table>
+  );
+}
+
+/** Registered probes with no value read yet (or stopped): name, selector and status. */
+function RegistryOnly({ docs }: { docs: ProbeDoc[] }) {
+  if (docs.length === 0) return null;
+  return (
+    <ul className="m-0 flex list-none flex-col gap-1 p-0 text-[13px]">
+      {docs.map((d) => (
+        <li key={d.name} className="flex flex-wrap items-center gap-2">
+          <code>{d.name}</code>
+          <span className="font-mono text-xs text-muted-foreground">{d.spec.selector}</span>
+          <span className="text-xs text-muted-foreground">{d.spec.routes?.join(', ') ?? 'every page'}</span>
+          <span className="text-xs text-muted-foreground">· {d.status === 'active' ? 'no value read yet' : 'not read'}</span>
+          <ProbeDocBadge d={d} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /**
- * Probes: every number the store's sessions report, by where it comes from, and a form to add a recorded probe
- * (a selector read from the recorded page). Rules compare probes; a new probe can be used by a rule at once.
+ * Probes: the numbers rules compare, by where they come from. Probes the agent found and probes the merchant added
+ * are separate modules; probes that come for free (site code and network requests) sit apart as automatic.
  */
 export function ProbesPanel({ onChanged }: { onChanged?: () => void }) {
   const [view, setView] = useState<ProbesView | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [spec, setSpec] = useState<RecordedProbeSpec>({ name: '', selector: '', kind: 'money' });
   const [preview, setPreview] = useState<{ spec: RecordedProbeSpec; p: ProbePreview } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -127,117 +184,60 @@ export function ProbesPanel({ onChanged }: { onChanged?: () => void }) {
     setPreview(null);
   };
   const cleanSpec = (): RecordedProbeSpec => ({ name: spec.name.trim(), selector: spec.selector.trim(), kind: spec.kind, ...(spec.routes?.length ? { routes: spec.routes } : {}) });
+  const stop = (name: string) => void act(`off-${name}`, async () => (await disableProbe(name), await load(), onChanged?.()));
 
-  const registry = new Map((view?.registry ?? []).map((d) => [d.name, d]));
-  const groups: ProbeSource[] = ['declared', 'request', 'recorded'];
-  const routes = view?.catalog.routes ?? [];
+  if (loadError && !view) {
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>Could not load probes ({loadError}).</AlertDescription>
+      </Alert>
+    );
+  }
+  if (!view) return <Skeleton className="h-48 rounded-xl" aria-busy="true" aria-label="Loading probes" />;
+
+  const registry = new Map(view.registry.map((d) => [d.name, d]));
+  const recorded = view.catalog.probes.filter((p) => p.source === 'recorded');
+  const bySource = (source: ProbeDoc['source']) => ({
+    rows: recorded.filter((p) => registry.get(p.name)?.source === source),
+    idle: view.registry.filter((d) => d.source === source && !recorded.some((p) => p.name === d.name)),
+  });
+  const agent = bySource('agent');
+  const own = bySource('merchant');
+  const declared = view.catalog.probes.filter((p) => p.source === 'declared');
+  const requests = view.catalog.probes.filter((p) => p.source === 'request');
+  const routes = view.catalog.routes;
   const canSave = preview !== null && preview.p.sessions_with_value > 0 && JSON.stringify(preview.spec) === JSON.stringify(cleanSpec());
 
   return (
-    <section className="mt-6 flex flex-col gap-3">
-      <div className="flex flex-wrap items-baseline gap-3">
-        <h2 className="m-0 text-lg font-semibold tracking-tight">Probes</h2>
-        <span className="text-[13px] text-muted-foreground">The numbers rules compare. {view ? `From the last ${view.sessions} sessions.` : ''}</span>
-      </div>
-      {loadError && !view && (
-        <Alert variant="destructive">
-          <AlertDescription>Could not load probes ({loadError}).</AlertDescription>
-        </Alert>
-      )}
-      {view && (
-        <Card className="gap-3 px-5">
-          <Tabs defaultValue="declared">
-            <TabsList>
-              {groups.map((g) => (
-                <TabsTrigger key={g} value={g}>
-                  {SOURCE_LABEL[g]}
-                  <span className="text-muted-foreground tabular-nums">{view.catalog.probes.filter((p) => p.source === g).length + (g === 'recorded' ? view.registry.filter((d) => !view.catalog.probes.some((p) => p.name === d.name)).length : 0)}</span>
-                </TabsTrigger>
-              ))}
-            </TabsList>
-            {groups.map((g) => {
-              const list = view.catalog.probes.filter((p) => p.source === g);
-              const recordedOff = g === 'recorded' ? view.registry.filter((d) => !list.some((p) => p.name === d.name)) : [];
-              return (
-                <TabsContent key={g} value={g} className="motion-reveal flex flex-col gap-2 pt-2">
-                  <p className="m-0 text-[13px] text-muted-foreground">{SOURCE_HINT[g]}</p>
-                  {list.length === 0 && recordedOff.length === 0 ? (
-                    <p className="m-0 text-[13px] text-muted-foreground">{g === 'recorded' ? 'None yet. Add one below, or approve one the agent proposes.' : 'None seen in recent sessions.'}</p>
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Probe</TableHead>
-                          <TableHead>Pages</TableHead>
-                          <TableHead>Values</TableHead>
-                          <TableHead className="text-right">Snapshots</TableHead>
-                          {g === 'recorded' && <TableHead className="text-right">Status</TableHead>}
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {list.map((p) => {
-                          const doc = registry.get(p.name);
-                          return (
-                            <TableRow key={p.name}>
-                              <TableCell>
-                                <code>{p.name}</code>
-                                {doc && <span className="ml-2 font-mono text-xs text-muted-foreground">{doc.spec.selector}</span>}
-                              </TableCell>
-                              <TableCell className="font-mono text-xs text-muted-foreground">{p.routes.join(', ')}</TableCell>
-                              <TableCell className="tabular-nums">{range(p, doc?.spec.kind)}</TableCell>
-                              <TableCell className="text-right text-muted-foreground tabular-nums">{p.snapshots}</TableCell>
-                              {g === 'recorded' && (
-                                <TableCell className="text-right">
-                                  <div className="flex items-center justify-end gap-2">
-                                    {doc && <ProbeDocBadge d={doc} />}
-                                    {doc?.status === 'active' && (
-                                      <Button variant="outline" size="xs" disabled={busy !== null} onClick={() => void act(`off-${p.name}`, async () => (await disableProbe(p.name), await load(), onChanged?.()))}>
-                                        Stop reading
-                                      </Button>
-                                    )}
-                                  </div>
-                                </TableCell>
-                              )}
-                            </TableRow>
-                          );
-                        })}
-                        {recordedOff.map((d) => (
-                          <TableRow key={d.name}>
-                            <TableCell>
-                              <code>{d.name}</code> <span className="ml-2 font-mono text-xs text-muted-foreground">{d.spec.selector}</span>
-                            </TableCell>
-                            <TableCell className="font-mono text-xs text-muted-foreground">{d.spec.routes?.join(', ') ?? 'every page'}</TableCell>
-                            <TableCell className="text-muted-foreground">{d.status === 'active' ? 'no value read yet' : 'not read'}</TableCell>
-                            <TableCell />
-                            <TableCell className="text-right">
-                              <ProbeDocBadge d={d} />
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
-                </TabsContent>
-              );
-            })}
-          </Tabs>
-        </Card>
-      )}
+    <div className="flex flex-col gap-4">
+      <p className="m-0 text-[13px] text-muted-foreground">The numbers rules compare, read from the last {view.sessions} sessions. Recorded probes read the page shoppers saw, so they also work on sessions recorded before them.</p>
 
-      <Card className="gap-3 px-5">
-        <div className="flex items-center gap-3">
-          <Button variant="outline" onClick={() => setOpen(!open)} aria-expanded={open}>
-            <PlusIcon data-icon="inline-start" aria-hidden="true" />
-            Add a probe
-            {open ? <ChevronUpIcon data-icon="inline-end" aria-hidden="true" /> : <ChevronDownIcon data-icon="inline-end" aria-hidden="true" />}
+      <Module origin="agent" icon={SparklesIcon} title="Found by the agent" count={agent.rows.length + agent.idle.length} description="Numbers on your pages the agent found shoppers leaving over, registered when you approved its rule.">
+        {agent.rows.length + agent.idle.length === 0 ? (
+          <p className="m-0 text-[13px] text-muted-foreground">None yet. Approving an agent hypothesis that proposes a new probe registers it here.</p>
+        ) : (
+          <>
+            {agent.rows.length > 0 && <ProbeTable rows={agent.rows} registry={registry} onStop={stop} busy={busy !== null} />}
+            <RegistryOnly docs={agent.idle} />
+          </>
+        )}
+      </Module>
+
+      <Module
+        origin="human"
+        icon={UserIcon}
+        title="Added by you"
+        count={own.rows.length + own.idle.length}
+        description="Numbers you pointed at on a page by a selector."
+        action={
+          <Button size="sm" variant={adding ? 'outline' : 'default'} onClick={() => setAdding(!adding)} aria-expanded={adding}>
+            {adding ? <XIcon data-icon="inline-start" aria-hidden="true" /> : <PlusIcon data-icon="inline-start" aria-hidden="true" />}
+            {adding ? 'Close' : 'Add a probe'}
           </Button>
-          <span className="text-[13px] text-muted-foreground">Point at a number the page shows, and rules can use it at once.</span>
-        </div>
-        {open && (
-          <div className="motion-reveal flex flex-col gap-3">
-            <p className="m-0 text-[13px] text-muted-foreground">
-              It is read from the sessions already recorded (text was masked in the browser), so it works on past sessions too, and nothing new is collected from shoppers.
-            </p>
+        }
+      >
+        {adding && (
+          <div className="motion-reveal flex flex-col gap-3 rounded-lg border bg-muted/30 p-3">
             <div className="flex flex-wrap gap-1.5">
               {PROBE_EXAMPLES.map((ex) => (
                 <Button key={ex.label} variant="outline" size="xs" onClick={() => edit(ex.spec)}>
@@ -287,7 +287,7 @@ export function ProbesPanel({ onChanged }: { onChanged?: () => void }) {
                 </Select>
               </Field>
             </FieldGroup>
-            <FieldDescription>Selectors: tag, #id, .class, [attr] or [attr="value"], and descendant or &gt; combinators.</FieldDescription>
+            <FieldDescription>Selectors: tag, #id, .class, [attr] or [attr="value"], and descendant or &gt; combinators. Nothing new is collected from shoppers.</FieldDescription>
             <div className="flex flex-wrap gap-2">
               <Button
                 variant="outline"
@@ -310,6 +310,7 @@ export function ProbesPanel({ onChanged }: { onChanged?: () => void }) {
                     await addProbe(cleanSpec());
                     setPreview(null);
                     setSpec({ name: '', selector: '', kind: 'money' });
+                    setAdding(false);
                     await load();
                     onChanged?.();
                   })
@@ -330,18 +331,45 @@ export function ProbesPanel({ onChanged }: { onChanged?: () => void }) {
             )}
           </div>
         )}
-      </Card>
-    </section>
+        {own.rows.length + own.idle.length === 0 ? (
+          !adding && <p className="m-0 text-[13px] text-muted-foreground">None yet. Point at a number the page shows, and a rule can use it at once.</p>
+        ) : (
+          <>
+            {own.rows.length > 0 && <ProbeTable rows={own.rows} registry={registry} onStop={stop} busy={busy !== null} />}
+            <RegistryOnly docs={own.idle} />
+          </>
+        )}
+      </Module>
+
+      <Module origin="system" icon={CogIcon} title="Automatic" count={declared.length + requests.length} description="Numbers every session reports without setup: the store's own probes, and every network call (how long it took, how it ended).">
+        <Tabs defaultValue="declared">
+          <TabsList>
+            <TabsTrigger value="declared">
+              In site code <span className="text-muted-foreground tabular-nums">{declared.length}</span>
+            </TabsTrigger>
+            <TabsTrigger value="request">
+              Requests <span className="text-muted-foreground tabular-nums">{requests.length}</span>
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="declared" className="motion-reveal pt-2">
+            {declared.length ? <ProbeTable rows={declared} registry={registry} busy={busy !== null} /> : <p className="m-0 text-[13px] text-muted-foreground">None seen in recent sessions.</p>}
+          </TabsContent>
+          <TabsContent value="request" className="motion-reveal pt-2">
+            {requests.length ? <ProbeTable rows={requests} registry={registry} busy={busy !== null} /> : <p className="m-0 text-[13px] text-muted-foreground">None seen in recent sessions.</p>}
+          </TabsContent>
+        </Tabs>
+      </Module>
+    </div>
   );
 }
 
 function ProbeDocBadge({ d }: { d: ProbeDoc }) {
   return (
     <Badge
-      className={d.status === 'active' ? (d.source === 'agent' ? 'bg-agent-muted text-agent' : 'bg-success-muted text-success') : 'bg-muted text-muted-foreground'}
+      className={d.status === 'active' ? 'bg-success-muted text-success' : 'bg-muted text-muted-foreground'}
       title={`v${d.version} · ${d.source === 'agent' ? 'proposed by the agent' : 'added by a merchant'} · approved by ${d.approved_by} ${ago(d.updated_at)}`}
     >
-      {d.status === 'active' ? (d.source === 'agent' ? 'agent · live' : 'live') : 'stopped'}
+      {d.status === 'active' ? 'live' : 'stopped'}
     </Badge>
   );
 }

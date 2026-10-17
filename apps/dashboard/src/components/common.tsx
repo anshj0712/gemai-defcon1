@@ -138,3 +138,60 @@ export function PageHeader({ title, description, children, titleClassName }: { t
     </div>
   );
 }
+
+/** Who a rule, draft or probe comes from. Each module and row says so with an icon chip, never color alone. */
+export type Origin = 'agent' | 'human' | 'system';
+const ORIGIN_CHIP: Record<Origin, string> = {
+  agent: 'bg-agent-muted text-agent',
+  human: 'bg-info-muted text-info',
+  system: 'bg-muted text-muted-foreground',
+};
+
+/** A section of one origin: an icon chip and title, a count, one line on what it holds, and an action. */
+export function Module({
+  origin,
+  icon: Icon,
+  title,
+  count,
+  description,
+  action,
+  children,
+  id,
+}: {
+  origin: Origin;
+  icon: typeof ChevronRightIcon;
+  title: ReactNode;
+  count?: number;
+  description?: ReactNode;
+  action?: ReactNode;
+  children: ReactNode;
+  id?: string;
+}) {
+  return (
+    <Card id={id} className={cn('scroll-mt-20 gap-3 px-5', origin === 'agent' && 'ring-agent-border/70')}>
+      <div className="flex flex-wrap items-start gap-3">
+        <span aria-hidden="true" className={cn('grid size-8 shrink-0 place-items-center rounded-lg', ORIGIN_CHIP[origin])}>
+          <Icon className="size-4" />
+        </span>
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <h2 className="m-0 flex items-center gap-2 text-base font-semibold">
+            {title}
+            {count !== undefined && <span className="text-sm font-normal text-muted-foreground tabular-nums">{count}</span>}
+          </h2>
+          {description && <p className="m-0 text-[13px] text-muted-foreground">{description}</p>}
+        </div>
+        {action}
+      </div>
+      <div className="flex flex-col gap-2">{children}</div>
+    </Card>
+  );
+}
+
+export function OriginChip({ origin, icon: Icon, children }: { origin: Origin; icon: typeof ChevronRightIcon; children: ReactNode }) {
+  return (
+    <Badge className={cn('gap-1', ORIGIN_CHIP[origin])}>
+      <Icon aria-hidden="true" data-icon="inline-start" />
+      {children}
+    </Badge>
+  );
+}
