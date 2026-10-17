@@ -9,6 +9,7 @@ import { fetchHistory, type HistoryFindingView, type HistoryView } from './api';
 import { FoundLaterBadge, PageHeader, Stat, TierBadge } from './components/common';
 import { money } from './format';
 import { defaultAsOf, totalAtRisk } from './lib/history';
+import { RevenueTimeline, RuleImpact } from './RevenueTimeline';
 
 const WINDOWS = [
   { label: '24 hours', ms: 86_400_000 },
@@ -121,6 +122,11 @@ export function HistoryPage() {
   return (
     <>
       {header}
+
+      <div className="mb-4 flex flex-col gap-4">
+        <RevenueTimeline asOf={asOf} onPick={(t) => setAsOf(Math.max(minT, Math.min(now, t)))} />
+        <RuleImpact />
+      </div>
 
       <Card className="gap-3 px-5">
         <div className="flex flex-wrap items-center justify-between gap-3">

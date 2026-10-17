@@ -16,6 +16,7 @@ import { ApiError, approveRule, draftRule, fetchClusters, fetchRules, redraftRul
 import { Eyebrow, Module, OriginChip, PageHeader } from './components/common';
 import { ago, formulaLine, money, pct, time } from './format';
 import { probeValue } from './lib/probes';
+import { liveOrigin } from './lib/rules';
 import type { RulesTab } from './lib/route';
 import { chanceText, CHURN_REASONS, watchSummary, watchValue } from './lib/watch';
 import { ProbesPanel } from './ProbesPanel';
@@ -36,13 +37,6 @@ const LOST_HOW = 'Affected sessions with a cart × average cart × (their abando
 /** "Model gemini-3.8-flash" or the offline stand-in, said plainly. */
 function authorLine(a: { model: string; offline: boolean }): string {
   return a.offline ? 'Drafted by the offline stand-in (a template parser, not Gemini).' : `Drafted by ${a.model}`;
-}
-
-/** Who a live rule came from. Rules approved before origin was recorded fall back to the approval feedback. */
-export function liveOrigin(r: RuleView): 'agent' | 'human' {
-  if (r.active?.origin) return r.active.origin;
-  const approved = [...(r.feedback ?? [])].reverse().find((f) => f.verdict === 'approved');
-  return approved?.feature_key ? 'agent' : 'human';
 }
 
 const ruleCode = (text: string) => (

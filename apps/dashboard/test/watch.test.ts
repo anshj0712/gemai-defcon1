@@ -3,6 +3,7 @@ import type { WatchMeta } from '@cp/schema';
 import type { RuleView } from '../src/api';
 import { openProposals, toastLine } from '../src/lib/inbox';
 import { probeValue } from '../src/lib/probes';
+import { liveOrigin } from '../src/lib/rules';
 import { chanceText, watchSummary, watchValue } from '../src/lib/watch';
 
 /** Dashboard helpers for the churn watcher and probes. All data is synthetic. */
@@ -70,5 +71,16 @@ describe('probes', () => {
     expect(probeValue('cart_total', 699_500)).toBe('₹6,995');
     expect(probeValue('qty', 2)).toBe('2');
     expect(probeValue('delivery_days', 9, 'count')).toBe('9');
+  });
+});
+
+describe('who a live rule came from', () => {
+  const live = (extra: Partial<RuleView>): RuleView => ({ rule_id: 'r', title: 't', active: { approved_at: 1, approved_by: 'x' }, ...extra }) as unknown as RuleView;
+
+  it('reads the recorded origin, else falls back to the approval feedback', () => {
+    expect(liveOrigin(live({ active: { origin: 'agent' } as never }))).toBe('agent');
+    expect(liveOrigin(live({ feedback: [{ verdict: 'approved', feature_key: 'probe:delivery_fee:gte' }] as never }))).toBe('agent');
+    expect(liveOrigin(live({ feedback: [{ verdict: 'approved', feature_key: null }] as never }))).toBe('human');
+    expect(liveOrigin(live({}))).toBe('human');
   });
 });
