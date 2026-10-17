@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { ProbeDoc, ProbePreview, ProbeSource, RecordedProbeSpec } from '@cp/schema';
 import { addProbe, ApiError, disableProbe, fetchProbes, previewProbe, type ProbesView, type ProbeStatsView } from './api';
 import { ago, money, time } from './format';
+import { probeValue } from './lib/probes';
 
 const SOURCE_LABEL: Record<ProbeSource, string> = { declared: 'In site code', request: 'Request', recorded: 'Recorded' };
 const SOURCE_HINT: Record<ProbeSource, string> = {
@@ -15,14 +16,6 @@ export const PROBE_EXAMPLES: { label: string; spec: RecordedProbeSpec }[] = [
   { label: 'Delivery fee at checkout', spec: { name: 'delivery_fee', selector: '#delivery-fee', routes: ['/checkout'], kind: 'money' } },
   { label: 'Delivery estimate (days)', spec: { name: 'delivery_days', selector: '#delivery-eta', routes: ['/product/:id'], kind: 'count' } },
 ];
-
-/** How a probe's numbers read: milliseconds and statuses for requests, rupees for money-like names, else plain. */
-export function probeValue(name: string, v: number, kind?: 'money' | 'count'): string {
-  if (name.endsWith('_ms')) return v >= 1000 ? `${(v / 1000).toFixed(1)} s` : `${Math.round(v)} ms`;
-  if (name.endsWith('_status')) return String(v);
-  if (kind === 'money' || (kind === undefined && /(total|price|fee|discount|amount|subtotal)/.test(name))) return money(v, 'INR');
-  return v.toLocaleString('en-IN');
-}
 
 function range(p: ProbeStatsView, kind?: 'money' | 'count'): string {
   return p.min === p.max ? probeValue(p.name, p.min, kind) : `${probeValue(p.name, p.min, kind)} – ${probeValue(p.name, p.max, kind)}`;

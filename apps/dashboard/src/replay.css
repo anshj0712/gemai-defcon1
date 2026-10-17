@@ -1,0 +1,32 @@
+/* Replay player overrides. Unlayered on purpose and imported after rrweb-player's own (unlayered) CSS,
+   so these win over it by order exactly as before the redesign. Tailwind's preflight is layered and
+   cannot reach the player's own rules. */
+.player .rr-player { float: none; }
+
+/* The shopper's pointer: a blue ring (instead of rrweb's black arrow) that flashes rose on click. */
+.replayer-mouse {
+  box-sizing: border-box;
+  width: 24px;
+  height: 24px;
+  margin-left: -12px;
+  margin-top: -12px;
+  background-image: none !important;
+  background-color: rgba(37, 99, 235, 0.18);
+  border: 3px solid #2563eb !important;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9);
+  z-index: 10;
+}
+.replayer-mouse::after {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background: #f43f5e;
+  opacity: 0;
+}
+.replayer-mouse.active { border-color: #f43f5e !important; }
+.replayer-mouse.active::after { animation: cp-click 0.5s ease-out 1; }
+@keyframes cp-click {
+  0% { opacity: 0.7; width: 8px; height: 8px; }
+  100% { opacity: 0; width: 64px; height: 64px; }
+}

@@ -1,32 +1,26 @@
 import { useEffect, useState } from 'react';
+import { ActivityIcon, CircleAlertIcon, HistoryIcon, ScrollTextIcon, type LucideIcon } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Toaster } from '@/components/ui/sonner';
 import { AgentInbox } from './AgentInbox';
 import { BugsBar } from './BugsBar';
 import { HistoryPage } from './HistoryPage';
 import { IssuePage } from './IssuePage';
 import { IssuesPage } from './IssuesPage';
+import { parseRoute } from './lib/route';
 import { ReplayPage } from './ReplayPage';
 import { RulesPage } from './RulesPage';
 import { SignalsPage } from './SignalsPage';
+import { ThemeToggle } from './ThemeToggle';
 
-type Route =
-  | { page: 'issues' }
-  | { page: 'issue'; clusterId: string }
-  | { page: 'signals' }
-  | { page: 'rules' }
-  | { page: 'history' }
-  | { page: 'replay'; sessionId: string; signalId: string | null };
 
-/** Hash routes: #/ (issues), #/issues/<id>, #/signals, #/rules, #/history (time travel), #/sessions/<id>?signal=<signal_id> (replay). */
-export function parseRoute(hash: string): Route {
-  const replay = /^#\/sessions\/([A-Za-z0-9_-]+)(?:\?(.*))?$/.exec(hash);
-  if (replay?.[1]) return { page: 'replay', sessionId: replay[1], signalId: new URLSearchParams(replay[2] ?? '').get('signal') };
-  const issue = /^#\/issues\/([0-9a-f]{20})$/.exec(hash);
-  if (issue?.[1]) return { page: 'issue', clusterId: issue[1] };
-  if (hash === '#/signals') return { page: 'signals' };
-  if (hash === '#/rules') return { page: 'rules' };
-  if (hash === '#/history') return { page: 'history' };
-  return { page: 'issues' };
-}
+type Tab = 'issues' | 'rules' | 'history' | 'signals';
+const TABS: { id: Tab; href: string; label: string; icon: LucideIcon }[] = [
+  { id: 'issues', href: '#/', label: 'Issues', icon: CircleAlertIcon },
+  { id: 'rules', href: '#/rules', label: 'Rules', icon: ScrollTextIcon },
+  { id: 'history', href: '#/history', label: 'Time travel', icon: HistoryIcon },
+  { id: 'signals', href: '#/signals', label: 'Signals', icon: ActivityIcon },
+];
 
 export function App() {
   const [route, setRoute] = useState(() => parseRoute(window.location.hash));
@@ -36,32 +30,51 @@ export function App() {
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
 
-  const tab = route.page === 'signals' || route.page === 'rules' || route.page === 'history' ? route.page : 'issues';
+  const tab: Tab = route.page === 'signals' || route.page === 'rules' || route.page === 'history' ? route.page : 'issues';
   return (
     <>
-      <header className="topbar">
-        <a href="#/" className="brand">
-          Churn Preventer
-        </a>
-        <nav className="tabs">
-          <a href="#/" className={tab === 'issues' ? 'on' : ''}>
-            Issues
+      <a
+        href="#main"
+        onClick={(e) => {
+          e.preventDefault();
+          document.getElementById('main')?.focus();
+        }}
+        className="sr-only z-50 rounded-md bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2"
+      >
+        Skip to content
+      </a>
+      <header className="sticky top-0 z-40 border-b bg-card">
+        <div className="mx-auto flex h-14 max-w-[1320px] items-center gap-6 px-6">
+          <a href="#/" className="flex items-center gap-2 text-[15px] font-semibold text-foreground no-underline">
+            <span aria-hidden="true" className="grid size-7 place-items-center rounded-md bg-foreground">
+              <span className="size-3 rounded-full border-[2.5px] border-money" />
+            </span>
+            Churn Preventer
           </a>
-          <a href="#/rules" className={tab === 'rules' ? 'on' : ''}>
-            Rules
-          </a>
-          <a href="#/history" className={tab === 'history' ? 'on' : ''}>
-            Time travel
-          </a>
-          <a href="#/signals" className={tab === 'signals' ? 'on' : ''}>
-            Signals
-          </a>
-        </nav>
-        <span className="synthetic">Synthetic data: demo sessions only</span>
-        <AgentInbox />
+          <nav aria-label="Main" className="flex items-center gap-1">
+            {TABS.map((t) => (
+              <a
+                key={t.id}
+                href={t.href}
+                aria-current={tab === t.id ? 'page' : undefined}
+                className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground no-underline transition-colors hover:bg-muted hover:text-foreground aria-[current=page]:bg-secondary aria-[current=page]:text-foreground"
+              >
+                <t.icon aria-hidden="true" className="size-4" />
+                {t.label}
+              </a>
+            ))}
+          </nav>
+          <div className="ml-auto flex items-center gap-2">
+            <Badge variant="outline" className="synthetic h-6 border-synthetic-border bg-synthetic-muted px-2.5 text-synthetic">
+              Synthetic data: demo sessions only
+            </Badge>
+            <ThemeToggle />
+            <AgentInbox />
+          </div>
+        </div>
       </header>
       <BugsBar />
-      <main>
+      <main id="main" tabIndex={-1} className="mx-auto max-w-[1320px] px-6 py-6 outline-none">
         {route.page === 'replay' ? (
           <ReplayPage key={route.sessionId} sessionId={route.sessionId} signalId={route.signalId} />
         ) : route.page === 'issue' ? (
@@ -76,6 +89,7 @@ export function App() {
           <IssuesPage />
         )}
       </main>
+      <Toaster position="bottom-right" />
     </>
   );
 }

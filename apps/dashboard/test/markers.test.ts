@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseRoute } from '../src/App';
+import { parseRoute } from '../src/lib/route';
 import { clipWindow, formatOffset, forPlayer, injectMarkers, isFlagEvent, tagColors, type Marker } from '../src/markers';
 
 const marker = (replay_ts: number, detector = 'dead_click'): Marker => ({

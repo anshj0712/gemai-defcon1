@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { WatchMeta } from '@cp/schema';
 import type { RuleView } from '../src/api';
-import { openProposals, toastLine } from '../src/AgentInbox';
-import { groupBugs } from '../src/BugsBar';
-import { probeValue } from '../src/ProbesPanel';
-import { chanceText, watchSummary, watchValue } from '../src/RulesPage';
+import { openProposals, toastLine } from '../src/lib/inbox';
+import { groupBugs } from '../src/lib/bugs';
+import { probeValue } from '../src/lib/probes';
+import { chanceText, watchSummary, watchValue } from '../src/lib/watch';
 
 /** Dashboard helpers for the churn watcher, probes and the bug switches. All data is synthetic. */
 

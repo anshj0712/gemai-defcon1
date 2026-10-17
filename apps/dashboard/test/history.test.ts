@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { HistoryFindingView } from '../src/api';
-import { parseRoute } from '../src/App';
-import { defaultAsOf, totalAtRisk } from '../src/HistoryPage';
+import { parseRoute } from '../src/lib/route';
+import { defaultAsOf, totalAtRisk } from '../src/lib/history';
 
 const f = (over: Partial<HistoryFindingView>): HistoryFindingView => ({
   finding_id: 'a',
