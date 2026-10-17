@@ -54,6 +54,12 @@ const AgentEnv = z.object({
   RULE_SUGGEST_MIN_DETECTOR_SHARE: z.coerce.number().min(0).max(1).default(0.5),
   /** Most of the issue's sessions read back from raw for the suggester's probe statistics. */
   RULE_SUGGEST_MAX_SESSIONS: z.coerce.number().int().min(1).default(25),
+  /** The jury reviews each finished AI report: independent jurors score it and code approves above the threshold. */
+  JURY: boolEnv.default(true),
+  /** Jurors who sit (1 to 4). With 4, one may fail to answer; with fewer, all must. */
+  JURY_SIZE: z.coerce.number().int().min(1).max(4).default(4),
+  /** A report is approved only when the jurors' mean score is above this. */
+  JURY_THRESHOLD: z.coerce.number().min(0).max(1).default(0.66),
   /** The churn watcher: look at recent sessions for numbers that make shoppers leave, and draft a probe and rule (a person approves). */
   WATCH: boolEnv.default(true),
   /** How often it looks (ms); 0 disables the timer (POST /watch/run still works). */

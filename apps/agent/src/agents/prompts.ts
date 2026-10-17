@@ -8,12 +8,12 @@ import type { AgentInput, AgentSpec } from '../llm/run-agent.js';
  * Bump PROMPT_VERSION on any prompt or schema change: it is part of the cache key, so cached
  * outputs from older prompts are re-generated.
  */
-export const PROMPT_VERSION = 'p3.1';
+export const PROMPT_VERSION = 'p3.2';
 
 /** Marker line before the JSON payload in every user turn (the offline stand-in reads it too). */
 export const INPUT_MARKER = 'INPUT_JSON:';
 
-const COMMON = [
+export const COMMON = [
   'You work for a checkout monitoring service that finds bugs in an online store from recorded, privacy-masked shopper sessions.',
   'You receive structured evidence only: detector facts, CSS selectors, normalized error signatures, numbers, and sometimes one masked screenshot. You never see raw page HTML or recordings.',
   'Ground every statement in the evidence. Each claim lists the ids of the evidence items it rests on in evidence_ids, using only ids that appear in the input (for example E1, E3). Never invent ids, numbers, code, file names, or causes the evidence does not support; say what is uncertain instead.',

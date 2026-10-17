@@ -78,6 +78,66 @@ export function Fold({ title, hint, children }: { title: string; hint?: string; 
  * The top of an issue page: what it costs, what happened, the proof, and how to see it yourself. Each
  * piece is a compact card that opens for the full story (claims linked to their evidence).
  */
+const JUROR_NAMES: Record<string, { name: string; asks: string }> = {
+  evidence_auditor: { name: 'Fact checker', asks: 'Does every claim rest on the evidence it cites?' },
+  skeptic: { name: 'False-alarm hunter', asks: 'Could this just be normal shopper behaviour?' },
+  impact_analyst: { name: 'Money and priority', asks: 'Do the numbers and the priority fit the evidence?' },
+  repro_reviewer: { name: 'Steps check', asks: 'Could an engineer reproduce and fix it from this?' },
+};
+
+/** The jury's verdict: four independent scores, the bar they had to clear, and the judge's ruling in words. */
+function VerdictCard({ v, byId }: { v: NonNullable<Finding['verdict']>; byId: Map<string, EvidenceItem> }) {
+  const [open, setOpen] = useState(false);
+  const bar = Math.round(v.threshold * 100);
+  const label = v.outcome === 'approved' ? 'Approved' : v.outcome === 'rejected' ? 'Held back' : 'Not reviewed';
+  return (
+    <div className={`verdict ${v.outcome}`}>
+      <button className="verdict-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <span className="verdict-label">Jury verdict</span>
+        <span className={`verdict-pill ${v.outcome}`}>{label}</span>
+        {v.mean_score !== null && (
+          <span className="verdict-mean">
+            {Math.round(v.mean_score * 100)}% <span className="muted small-inline">· the bar is above {bar}%</span>
+          </span>
+        )}
+        <span className="chev">{open ? '▾' : '▸'}</span>
+      </button>
+      <p className="verdict-summary">{v.ruling ? <ClaimText claim={v.ruling} byId={byId} /> : v.summary}</p>
+      {v.ruling && <p className="muted small verdict-code">{v.summary}</p>}
+      {open && (
+        <div className="jurors">
+          {v.jurors.map((j) => {
+            const n = JUROR_NAMES[j.role] ?? { name: j.role, asks: '' };
+            const pctScore = j.score === null ? 0 : Math.round(j.score * 100);
+            return (
+              <div key={j.role} className="juror">
+                <div className="juror-top">
+                  <b>{n.name}</b>
+                  <span className="muted small-inline">{n.asks}</span>
+                  <span className="juror-score">{j.score === null ? 'did not answer' : `${pctScore}%`}</span>
+                </div>
+                <div className="juror-bar" title={`The bar is ${bar}%`}>
+                  <span className={pctScore / 100 > v.threshold ? 'pass' : 'fail'} style={{ width: `${pctScore}%` }} />
+                  <i style={{ left: `${bar}%` }} />
+                </div>
+                {j.rationale && (
+                  <p className="small">
+                    <ClaimText claim={j.rationale} byId={byId} />
+                  </p>
+                )}
+              </div>
+            );
+          })}
+          <p className="muted small">
+            {v.jurors_answered} of {v.jurors_asked} jurors answered. Code takes the decision from their average and two checks (the AI steps passed their own checks; the screenshot did not contradict the report); the judge only writes the words.
+            {v.offline ? ' Scored by the offline stand-in, not Gemini.' : ''}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function FindingSummary({ finding: f, cluster }: { finding: Finding; cluster: Cluster }) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const toggle = (k: string) => setOpen((o) => ({ ...o, [k]: !o[k] }));
@@ -118,7 +178,7 @@ export function FindingSummary({ finding: f, cluster }: { finding: Finding; clus
             </span>
             {f.triage && <span className="kind">{CATEGORY_NAMES[f.triage.category] ?? f.triage.category}</span>}
             {f.status === 'suspect' && (
-              <span className="suspect" title="The visual check did not show the defect on screen. A person should look before acting.">
+              <span className="suspect" title={f.verdict?.outcome === 'rejected' ? f.verdict.summary : 'The visual check did not show the defect on screen. A person should look before acting.'}>
                 Needs review
               </span>
             )}
@@ -271,6 +331,7 @@ export function FindingSummary({ finding: f, cluster }: { finding: Finding; clus
           }
         />
       </div>
+      {f.verdict && <VerdictCard v={f.verdict} byId={byId} />}
     </section>
   );
 }
