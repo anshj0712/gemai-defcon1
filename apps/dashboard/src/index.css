@@ -223,6 +223,10 @@
     outline: 2px solid var(--ring);
     outline-offset: 2px;
   }
+  /* Tailwind v4's preflight gives buttons the default cursor; anything clickable shows a pointer. */
+  button:not(:disabled), [role='button']:not([aria-disabled='true']), [role='tab'], [role='switch'], summary, input[type='range'] {
+    cursor: pointer;
+  }
 }
 
 /* Reduced motion: no flash, no pulse, no transitions. */
