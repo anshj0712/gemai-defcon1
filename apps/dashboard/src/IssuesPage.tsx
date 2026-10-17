@@ -1,18 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FindingSummary } from '@cp/schema';
-import { ArrowRightIcon, ChevronRightIcon, FlameIcon, InboxIcon } from 'lucide-react';
+import { ArrowRightIcon, ChevronRightIcon, FlameIcon, InboxIcon, PlayIcon } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Card } from '@/components/ui/card';
+import { buttonVariants } from '@/components/ui/button';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/lib/utils';
-import { fetchClusters, fetchFindings, fetchQuality, type ClusterSummary, type QualityReport } from './api';
-import { AnimatedNumber, Eyebrow, FoundLaterBadge, KindBadge, NeedsReviewBadge, PageHeader, PendingTierBadge, Stat, SymptomChip, TierBadge } from './components/common';
-import { ago, isResolved, money, TIER_NAMES } from './format';
+import { fetchClusters, fetchFindings, type ClusterSummary } from './api';
+import { AnimatedNumber, FoundLaterBadge, NeedsReviewBadge, PageHeader, PendingTierBadge, SymptomChip, TierBadge } from './components/common';
+import { ago, isResolved, money, pct, plain, TIER_NAMES } from './format';
 import { rankIssues } from './lib/issues';
 
 const REFRESH_MS = 3000;
+const ALL = 'all';
+const TIERS = ['P0', 'P1', 'P2', 'P3'] as const;
 
 function LiveStatus({ updatedAt }: { updatedAt: number | null }) {
   return (
@@ -22,33 +26,66 @@ function LiveStatus({ updatedAt }: { updatedAt: number | null }) {
   );
 }
 
-function FeedSkeleton() {
+/** The one issue to fix first, with what it is costing as the biggest number on the page. */
+function FixFirst({ cluster: c, finding: f }: { cluster: ClusterSummary; finding: FindingSummary }) {
+  const r = f.revenue;
+  const latest = c.evidence[0];
   return (
-    <div className="flex flex-col gap-3" aria-busy="true" aria-label="Loading issues">
-      <div className="grid grid-cols-4 gap-3">
-        {[0, 1, 2, 3].map((i) => (
-          <Skeleton key={i} className="h-[74px] rounded-xl" />
-        ))}
+    <section aria-labelledby="fix-first-title" className="grid gap-5 rounded-2xl border border-danger-border bg-danger-muted p-5 lg:grid-cols-[1fr_auto]">
+      <div className="flex min-w-0 flex-col gap-2">
+        <span className="flex items-center gap-1.5 text-xs font-semibold tracking-wider text-money uppercase">
+          <FlameIcon aria-hidden="true" className="size-4" />
+          Fix this first
+        </span>
+        <h2 id="fix-first-title" className="m-0 text-xl leading-snug font-semibold">
+          {f.title}
+        </h2>
+        {f.triage && <p className="m-0 line-clamp-2 max-w-3xl text-sm text-foreground/80">{plain(f.triage.summary.text)}</p>}
+        <div className="flex flex-wrap items-center gap-2 text-[13px] text-muted-foreground">
+          <TierBadge tier={f.tier} />
+          <span>{c.route}</span>·<span>{c.session_count} shoppers</span>·<span>last seen {ago(c.last_seen)}</span>
+        </div>
+        <div className="mt-1 flex flex-wrap gap-2">
+          <a className={cn(buttonVariants(), 'no-underline')} href={`#/issues/${c.cluster_id}`}>
+            Open the issue
+            <ArrowRightIcon data-icon="inline-end" aria-hidden="true" />
+          </a>
+          {latest && (
+            <a className={cn(buttonVariants({ variant: 'outline' }), 'bg-card no-underline')} href={`#/sessions/${latest.session_id}?signal=${latest.signal_id}`}>
+              <PlayIcon data-icon="inline-start" aria-hidden="true" />
+              Watch it happen
+            </a>
+          )}
+        </div>
       </div>
-      {[0, 1, 2, 3].map((i) => (
-        <Skeleton key={i} className="h-[112px] rounded-xl" />
-      ))}
-    </div>
+      <div className="flex flex-col justify-center gap-1 lg:items-end lg:text-right">
+        <span className="text-[13px] font-medium text-money">Revenue lost so far</span>
+        <span className="text-5xl leading-none font-bold text-money">
+          {r.status === 'ok' ? <AnimatedNumber value={r.revenue_at_risk_minor} format={(n) => money(Math.round(n), r.currency)} ms={900} /> : '…'}
+        </span>
+        {r.status === 'ok' && (
+          <span className="text-[13px] text-muted-foreground">
+            {pct(r.abandonment_affected)} of these shoppers left, against {pct(r.abandonment_baseline)} normally
+          </span>
+        )}
+      </div>
+    </section>
   );
 }
 
 /**
- * The live feed: one card per issue (one broken thing across every affected session), ranked by the
- * agent's findings (tier, then revenue at risk), with issues not yet scored at the end. Refreshes
- * every 3 s; a card flashes when it gains signals.
+ * The full issue list: the one to fix first, then every open issue as one compact row (priority, problem, page,
+ * symptoms, shoppers, money, last seen), filterable by priority and page. Refreshes every 3 s; a row flashes when it
+ * gains signals. Detail (selectors, errors, evidence) lives on each issue's page.
  */
 export function IssuesPage() {
   const [clusters, setClusters] = useState<ClusterSummary[] | null>(null);
   const [findings, setFindings] = useState<FindingSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [quality, setQuality] = useState<QualityReport | null>(null);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const [bumped, setBumped] = useState<Set<string>>(new Set());
+  const [tier, setTier] = useState<string>(ALL);
+  const [page, setPage] = useState<string>(ALL);
   const [, setTick] = useState(0);
   const lastCounts = useRef<Map<string, number>>(new Map());
 
@@ -73,7 +110,6 @@ export function IssuesPage() {
         (e: Error) => alive && setError(e.message),
       );
     void load();
-    void fetchQuality().then((q) => alive && setQuality(q));
     const timer = setInterval(load, REFRESH_MS);
     const clock = setInterval(() => setTick((t) => t + 1), 1000);
     return () => {
@@ -83,21 +119,35 @@ export function IssuesPage() {
     };
   }, []);
 
+  const header = (
+    <PageHeader title="Issues" description="Each issue is one broken thing across every shopper it hit, ranked by priority and money.">
+      <LiveStatus updatedAt={updatedAt} />
+    </PageHeader>
+  );
+
   if (error && !clusters) {
     return (
-      <Alert variant="destructive">
-        <AlertTitle>Could not load issues</AlertTitle>
-        <AlertDescription>
-          {error}. Is the API running? Try <code>pnpm dev</code>.
-        </AlertDescription>
-      </Alert>
+      <>
+        {header}
+        <Alert variant="destructive">
+          <AlertTitle>Could not load issues</AlertTitle>
+          <AlertDescription>
+            {error}. Is the API running? Try <code>pnpm dev</code>.
+          </AlertDescription>
+        </Alert>
+      </>
     );
   }
   if (!clusters) {
     return (
       <>
-        <PageHeader title="Issues" description="Ranked by revenue at risk. Each issue is one broken thing across every shopper it hit." />
-        <FeedSkeleton />
+        {header}
+        <div className="flex flex-col gap-3" aria-busy="true" aria-label="Loading issues">
+          <Skeleton className="h-44 rounded-2xl" />
+          {[0, 1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-16 rounded-xl" />
+          ))}
+        </div>
       </>
     );
   }
@@ -105,47 +155,16 @@ export function IssuesPage() {
   const all = rankIssues(clusters, findings);
   const ranked = all.filter((r) => !isResolved(r.finding));
   const resolved = all.filter((r) => isResolved(r.finding));
-  const open = ranked.map((r) => r.cluster);
-  const sessions = open.reduce((n, c) => n + c.session_count, 0);
-  const signals = open.reduce((n, c) => n + c.signal_count, 0);
-  const estimated = ranked.flatMap((r) => (r.finding && r.finding.revenue.status === 'ok' && r.finding.revenue.currency ? [r.finding] : []));
-  // The one to fix first: the best-ranked open issue the agent has scored and found worth acting on.
   const first = ranked.find((r) => r.finding && r.finding.status === 'open');
-  const currency = estimated[0]?.revenue.currency ?? null;
-  const atRisk = estimated.filter((f) => f.revenue.currency === currency).reduce((n, f) => n + f.revenue.revenue_at_risk_minor, 0);
+  const routes = [...new Set(ranked.map((r) => r.cluster.route))].sort();
+  const shown = ranked.filter((r) => (tier === ALL || r.finding?.tier === tier) && (page === ALL || r.cluster.route === page));
+  const count = (t: string) => ranked.filter((r) => r.finding?.tier === t).length;
 
   return (
     <>
-      <PageHeader title="Issues" description="Ranked by revenue at risk. Each issue is one broken thing across every shopper it hit.">
-        <LiveStatus updatedAt={updatedAt} />
-      </PageHeader>
+      {header}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Stat value={<AnimatedNumber value={open.length} />} label="open issues" />
-        <Stat value={<AnimatedNumber value={sessions} />} label="affected sessions" />
-        <Stat value={<AnimatedNumber value={signals} />} label="signals grouped" />
-        <Stat value={estimated.length ? <AnimatedNumber value={atRisk} format={(n) => money(Math.round(n), currency)} ms={900} /> : '-'} tone="money" label="revenue at risk" />
-      </div>
-
-      {first?.finding && (
-        <a
-          href={`#/issues/${first.cluster.cluster_id}`}
-          className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-danger-border bg-danger-muted px-4 py-3 text-foreground no-underline transition-colors hover:border-destructive"
-        >
-          <span className="flex items-center gap-1.5 text-xs font-semibold tracking-wider text-money uppercase">
-            <FlameIcon aria-hidden="true" className="size-4" />
-            Fix this first
-          </span>
-          <span className="font-semibold">{first.finding.title}</span>
-          <span className="text-[13px] text-muted-foreground">
-            {first.finding.revenue.status === 'ok' ? `${money(first.finding.revenue.revenue_at_risk_minor, first.finding.revenue.currency)} lost · ` : ''}
-            {TIER_NAMES[first.finding.tier] ?? first.finding.tier} · {first.cluster.session_count} sessions · {first.cluster.route}
-          </span>
-          <span className="ml-auto flex items-center gap-1 text-sm font-semibold text-money">
-            Open <ArrowRightIcon aria-hidden="true" className="size-4" />
-          </span>
-        </a>
-      )}
+      {first?.finding && <FixFirst cluster={first.cluster} finding={first.finding} />}
 
       {clusters.length === 0 ? (
         <Empty className="mt-4 border bg-card">
@@ -155,83 +174,100 @@ export function IssuesPage() {
             </EmptyMedia>
             <EmptyTitle>No issues yet</EmptyTitle>
             <EmptyDescription>
-              Switch a bug on (top right of the bar above), then shop at <a href="http://localhost:5173/?bugs=dead_button">localhost:5173/?bugs=dead_button</a> and press Apply Coupon 4+ times, or run{' '}
-              <code>pnpm sim -- --sessions 50</code> to seed test shoppers.
+              Shop at the demo store (Demo shop, top right), or run <code>pnpm sim -- --sessions 50</code> to seed test shoppers.
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
       ) : (
-        <div className="mt-4 flex flex-col gap-2.5">
-          {ranked.map(({ cluster: c, finding: f }, i) => (
-            // The list arrives as a list: a short stagger on first load only (keys are stable, so refreshes do not replay it).
-            <div key={c.cluster_id} className="motion-enter" style={{ animationDelay: `${Math.min(i, 8) * 35}ms` }}>
-            <a
-              href={`#/issues/${c.cluster_id}`}
-              className={cn(
-                'issue group/issue grid grid-cols-1 items-center gap-4 rounded-xl border bg-card px-5 py-4 text-card-foreground no-underline shadow-xs transition-[border-color,box-shadow,translate] duration-200 ease-out-expo hover:border-input hover:shadow-md motion-safe:hover:-translate-y-px lg:grid-cols-[1fr_auto] lg:gap-8',
-                bumped.has(c.cluster_id) && 'bump',
-              )}
-            >
-              <div className="flex min-w-0 flex-col gap-2">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {f ? <TierBadge tier={f.tier} /> : <PendingTierBadge />}
-                  <KindBadge kind={c.kind} />
-                  {f?.status === 'suspect' && <NeedsReviewBadge />}
-                  {c.found_later && c.found_later.sessions > 0 && (
-                    <FoundLaterBadge title="A re-scan with a newer rule found shoppers this hurt before the rule existed">
-                      Found later · {c.found_later.sessions} session{c.found_later.sessions === 1 ? '' : 's'}
-                    </FoundLaterBadge>
+        <>
+          <div className="mt-6 mb-3 flex flex-wrap items-center gap-3">
+            <h2 className="m-0 mr-auto text-lg font-semibold tracking-tight">
+              All open issues <span className="font-normal text-muted-foreground tabular-nums">{ranked.length}</span>
+            </h2>
+            <ToggleGroup type="single" variant="outline" size="sm" value={tier} onValueChange={(v) => setTier(v || ALL)} aria-label="Filter by priority">
+              <ToggleGroupItem value={ALL}>All</ToggleGroupItem>
+              {TIERS.map((t) => (
+                <ToggleGroupItem key={t} value={t} aria-label={`${TIER_NAMES[t]} (${count(t)})`}>
+                  {t} <span className="text-muted-foreground tabular-nums">{count(t)}</span>
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+            <Select value={page} onValueChange={setPage}>
+              <SelectTrigger size="sm" className="w-40" aria-label="Filter by page">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value={ALL}>All pages</SelectItem>
+                  {routes.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {r}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="overflow-hidden rounded-xl border bg-card shadow-xs">
+            <div className="hidden grid-cols-[88px_minmax(0,1fr)_200px_84px_120px_120px_20px] gap-4 border-b bg-muted/50 px-4 py-2 text-xs font-medium text-muted-foreground lg:grid">
+              <span>Priority</span>
+              <span>Problem</span>
+              <span>Symptoms</span>
+              <span className="text-right">Shoppers</span>
+              <span className="text-right">At risk</span>
+              <span className="text-right">Last seen</span>
+              <span />
+            </div>
+            {shown.length === 0 && <p className="m-0 px-4 py-6 text-sm text-muted-foreground">No open issues match these filters.</p>}
+            {shown.map(({ cluster: c, finding: f }, i) => (
+              // The list arrives as a list: a short stagger on first load only (keys are stable, so refreshes do not replay it).
+              <div key={c.cluster_id} className="motion-enter border-b last:border-b-0" style={{ animationDelay: `${Math.min(i, 8) * 30}ms` }}>
+                <a
+                  href={`#/issues/${c.cluster_id}`}
+                  className={cn(
+                    'issue group/issue grid grid-cols-1 items-center gap-2 bg-card px-4 py-3 text-card-foreground no-underline transition-colors duration-200 hover:bg-muted/50 lg:grid-cols-[88px_minmax(0,1fr)_200px_84px_120px_120px_20px] lg:gap-4',
+                    bumped.has(c.cluster_id) && 'bump',
                   )}
-                </div>
-                <div className="flex flex-col gap-0.5">
-                  <h3 className="m-0 text-base leading-snug font-semibold">{f?.title ?? c.title}</h3>
-                  {f && f.title !== c.title && <p className="m-0 truncate text-xs text-muted-foreground">{c.title}</p>}
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {Object.entries(c.detectors)
-                    .sort((a, b) => b[1] - a[1])
-                    .map(([d, n]) => (
-                      <SymptomChip key={d} detector={d} count={n} />
-                    ))}
-                </div>
-                {Object.keys(c.error_signatures).length > 0 && (
-                  <p className="m-0 truncate font-mono text-xs text-muted-foreground">
-                    {Object.entries(c.error_signatures)
+                >
+                  <span>{f ? <TierBadge tier={f.tier} short /> : <PendingTierBadge />}</span>
+                  <span className="flex min-w-0 flex-col gap-0.5">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="truncate font-semibold">{f?.title ?? c.title}</span>
+                      {f?.status === 'suspect' && <NeedsReviewBadge />}
+                      {c.found_later && c.found_later.sessions > 0 && <FoundLaterBadge>Found later</FoundLaterBadge>}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {c.route}
+                      {c.kind === 'invariant' && (
+                        <Badge variant="outline" className="ml-2 h-4 border-0 bg-agent-muted px-1.5 text-[10px] text-agent">
+                          Data rule
+                        </Badge>
+                      )}
+                    </span>
+                  </span>
+                  <span className="flex flex-wrap gap-1">
+                    {Object.entries(c.detectors)
                       .sort((a, b) => b[1] - a[1])
                       .slice(0, 2)
-                      .map(([sig]) => sig)
-                      .join(' · ')}
-                  </p>
-                )}
+                      .map(([d, n]) => (
+                        <SymptomChip key={d} detector={d} count={n} />
+                      ))}
+                  </span>
+                  <span className="font-semibold tabular-nums lg:text-right">
+                    <AnimatedNumber value={c.session_count} />
+                  </span>
+                  <span className="font-semibold text-money tabular-nums lg:text-right">
+                    {f ? f.revenue.status === 'ok' ? <AnimatedNumber value={f.revenue.revenue_at_risk_minor} format={(n) => money(Math.round(n), f.revenue.currency)} /> : '…' : '-'}
+                  </span>
+                  <span className="text-xs text-muted-foreground lg:text-right">{ago(c.last_seen)}</span>
+                  <ChevronRightIcon aria-hidden="true" className="hidden size-4 text-muted-foreground transition-transform duration-200 ease-out-expo group-hover/issue:translate-x-0.5 group-hover/issue:text-foreground lg:block" />
+                </a>
               </div>
-              <dl className="m-0 grid grid-cols-[minmax(96px,auto)_auto_auto_minmax(150px,auto)] items-center gap-x-6 text-right">
-                <div className="flex flex-col">
-                  <dd className="m-0 text-lg font-semibold text-money tabular-nums">{f ? (f.revenue.status === 'ok' ? <AnimatedNumber value={f.revenue.revenue_at_risk_minor} format={(n) => money(Math.round(n), f.revenue.currency)} /> : '…') : '-'}</dd>
-                  <dt className="text-xs text-muted-foreground">at risk</dt>
-                </div>
-                <div className="flex flex-col">
-                  <dd className="m-0 text-lg font-semibold tabular-nums"><AnimatedNumber value={c.session_count} /></dd>
-                  <dt className="text-xs text-muted-foreground">sessions</dt>
-                </div>
-                <div className="flex flex-col">
-                  <dd className="m-0 text-lg font-semibold tabular-nums"><AnimatedNumber value={c.signal_count} /></dd>
-                  <dt className="text-xs text-muted-foreground">signals</dt>
-                </div>
-                <div className="flex items-center justify-end gap-2">
-                  <div className="flex flex-col text-xs text-muted-foreground">
-                    <span>last seen {ago(c.last_seen)}</span>
-                    <span className="font-mono">{c.route}</span>
-                  </div>
-                  <ChevronRightIcon aria-hidden="true" className="size-4 text-muted-foreground transition-transform duration-200 ease-out-expo group-hover/issue:translate-x-0.5 group-hover/issue:text-foreground" />
-                </div>
-              </dl>
-            </a>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </>
       )}
-
-      <QualityCard q={quality} />
 
       {resolved.length > 0 && (
         <details className="group mt-4 rounded-xl border bg-card px-4 py-3">
@@ -240,7 +276,7 @@ export function IssuesPage() {
             Resolved · {resolved.length}
             <span className="text-xs font-normal text-muted-foreground">marked fixed and not seen since; one reopens by itself if it comes back</span>
           </summary>
-          <div className="mt-2 flex flex-col">
+          <div className="motion-reveal mt-2 flex flex-col">
             {resolved.map(({ cluster: c, finding: f }) => (
               <a key={c.cluster_id} href={`#/issues/${c.cluster_id}`} className="flex items-center gap-2 border-b py-2 text-sm text-muted-foreground no-underline last:border-b-0 hover:text-foreground">
                 <Badge className="bg-success-muted text-success">Fixed {f?.resolution ? ago(f.resolution.resolved_at) : ''}</Badge>
@@ -252,48 +288,5 @@ export function IssuesPage() {
         </details>
       )}
     </>
-  );
-}
-
-/** How well the system did on a test with known answers. Synthetic shoppers, so we know which ones hit which bug. */
-function QualityCard({ q }: { q: QualityReport | null }) {
-  if (!q) {
-    return (
-      <Card size="sm" className="mt-4 px-4">
-        <Eyebrow>Quality: how accurate is this?</Eyebrow>
-        <p className="m-0 text-sm text-muted-foreground">
-          Not measured yet. Run <code>pnpm sim -- --sessions 240</code>, then <code>pnpm sim:check</code>: it plays test shoppers who hit known bugs and checks what the system found.
-        </p>
-      </Card>
-    );
-  }
-  const p = (x: number) => `${Math.round(x * 100)}%`;
-  const cells: [string, string][] = [
-    [`${q.bugs_found}/${q.bugs_expected}`, 'bugs found, each as one issue'],
-    [p(q.lowest_recall), 'of shoppers caught (worst bug)'],
-    [String(q.clean_sessions_flagged), 'healthy shoppers wrongly flagged'],
-    [`${q.jury.approved}/${q.jury.reviewed}`, 'AI reports the jury approved'],
-  ];
-  return (
-    <Card size="sm" className="mt-4 gap-3 px-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <Eyebrow>Quality</Eyebrow>
-        <span className="font-medium">
-          Found {q.bugs_found} of {q.bugs_expected} planted bugs, {q.false_alarms} false alarm{q.false_alarms === 1 ? '' : 's'}
-        </span>
-        <Badge className={q.pass ? 'bg-success-muted text-success' : 'bg-danger-muted text-money'}>{q.pass ? 'Test passed' : 'Test failed'}</Badge>
-      </div>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        {cells.map(([v, l]) => (
-          <div key={l} className="flex flex-col">
-            <span className="text-xl font-semibold tabular-nums">{v}</span>
-            <span className="text-xs text-muted-foreground">{l}</span>
-          </div>
-        ))}
-      </div>
-      <p className="m-0 text-xs text-muted-foreground">
-        Measured {ago(q.checked_at)} on {q.sessions} test shoppers with planted bugs (seed {q.seed}). We know which shopper hit which bug, so this is a real score.
-      </p>
-    </Card>
   );
 }
