@@ -351,6 +351,8 @@ export interface ActiveRule {
   author: RuleAuthorMeta | null;
   approved_at: number;
   approved_by: string;
+  /** Who proposed the approved draft: the agent, or a person. Absent on rules approved before 18 Oct. */
+  origin?: RuleOrigin;
 }
 
 /**

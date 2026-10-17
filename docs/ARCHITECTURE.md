@@ -118,6 +118,7 @@ Phase 4 additions (15 Oct):
 - `signals.rescan_id` (nullable STRING) is set on signals a retroactive re-scan wrote and is absent on live ones. `pnpm infra:up` adds it to an existing table in place.
 - `rules` rows for tenant rules are written on approval only: kind `generated`, with the compiled rule, the sentence, the author's model id and prompt hash, and the approver in `definition`. A draft never ran, so it is not part of the record.
 - Firestore `rules/{tenant}__{rule_id}` is the hot copy of one tenant rule: the approved version the processor runs, a pending draft with its dry run, and the latest re-scan's progress. The agent service is its only writer.
+- (18 Oct) The approved version keeps `origin` (`agent` or `human`, copied from the draft at approval), so the dashboard can show the agent's rules apart from the merchant's. Rules approved earlier have none; the dashboard falls back to the approval feedback (a churn-watcher feature key means the agent).
 - `Cluster.found_later` and `Finding.discovery` mark sessions a re-scan surfaced. A finding row's `details` now also carries `kind`, `route`, `anchor`, `cluster_title`, `last_seen` and `discovery`, so an as-of view needs no hot copy.
 
 Planned, not yet implemented: `RuleDraft` (below, section 6) gains `origin: 'human' | 'agent'` and, when agent-originated, the `cluster_id` that triggered it, so a proposal nobody typed a sentence for can still be traced to the issue that produced it.
