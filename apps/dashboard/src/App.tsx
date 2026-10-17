@@ -43,11 +43,11 @@ export function App() {
       >
         Skip to content
       </a>
-      <header className="sticky top-0 z-40 border-b bg-card">
+      <header className="sticky top-0 z-40 bg-topbar text-topbar-foreground shadow-[0_1px_0_0_rgb(0_0_0/0.08),0_6px_16px_-10px_rgb(0_0_0/0.35)]">
         <div className="mx-auto flex h-14 max-w-[1320px] items-center gap-6 px-6">
-          <a href="#/" className="flex items-center gap-2 text-[15px] font-semibold text-foreground no-underline">
-            <span aria-hidden="true" className="grid size-7 place-items-center rounded-md bg-foreground">
-              <span className="size-3 rounded-full border-[2.5px] border-money" />
+          <a href="#/" className="group/brand flex items-center gap-2 text-[17px] font-bold text-topbar-foreground no-underline">
+            <span aria-hidden="true" className="grid size-7 place-items-center rounded-md bg-topbar-active ring-1 ring-white/10">
+              <span className="size-3 rounded-full border-[2.5px] border-destructive transition-transform duration-300 ease-out-expo group-hover/brand:scale-125" />
             </span>
             Churn Preventer
           </a>
@@ -57,37 +57,41 @@ export function App() {
                 key={t.id}
                 href={t.href}
                 aria-current={tab === t.id ? 'page' : undefined}
-                className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground no-underline transition-colors hover:bg-muted hover:text-foreground aria-[current=page]:bg-secondary aria-[current=page]:text-foreground"
+                className="relative flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-topbar-muted no-underline transition-colors duration-200 hover:bg-topbar-active hover:text-topbar-foreground aria-[current=page]:bg-topbar-active aria-[current=page]:text-topbar-foreground"
               >
                 <t.icon aria-hidden="true" className="size-4" />
                 {t.label}
+                {tab === t.id && <span aria-hidden="true" className="motion-pop absolute inset-x-3 -bottom-[9px] h-0.5 rounded-full bg-primary" />}
               </a>
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-2">
-            <Badge variant="outline" className="synthetic h-6 border-synthetic-border bg-synthetic-muted px-2.5 text-synthetic">
-              Synthetic data: demo sessions only
-            </Badge>
-            <ThemeToggle />
-            <AgentInbox />
+            <Badge className="synthetic h-6 border-0 bg-synthetic-border px-2.5 text-synthetic">Synthetic data: demo sessions only</Badge>
+            <div className="flex items-center gap-1">
+              <ThemeToggle />
+              <AgentInbox />
+            </div>
           </div>
         </div>
       </header>
       <BugsBar />
       <main id="main" tabIndex={-1} className="mx-auto max-w-[1320px] px-6 py-6 outline-none">
-        {route.page === 'replay' ? (
-          <ReplayPage key={route.sessionId} sessionId={route.sessionId} signalId={route.signalId} />
-        ) : route.page === 'issue' ? (
-          <IssuePage key={route.clusterId} clusterId={route.clusterId} />
-        ) : route.page === 'signals' ? (
-          <SignalsPage />
-        ) : route.page === 'rules' ? (
-          <RulesPage />
-        ) : route.page === 'history' ? (
-          <HistoryPage />
-        ) : (
-          <IssuesPage />
-        )}
+        {/* Keyed by route: each page arrives with a short fade and rise; live refreshes inside a page do not replay it. */}
+        <div key={route.page === 'issue' ? route.clusterId : route.page === 'replay' ? route.sessionId : route.page} className="motion-enter">
+          {route.page === 'replay' ? (
+            <ReplayPage key={route.sessionId} sessionId={route.sessionId} signalId={route.signalId} />
+          ) : route.page === 'issue' ? (
+            <IssuePage key={route.clusterId} clusterId={route.clusterId} />
+          ) : route.page === 'signals' ? (
+            <SignalsPage />
+          ) : route.page === 'rules' ? (
+            <RulesPage />
+          ) : route.page === 'history' ? (
+            <HistoryPage />
+          ) : (
+            <IssuesPage />
+          )}
+        </div>
       </main>
       <Toaster position="bottom-right" />
     </>

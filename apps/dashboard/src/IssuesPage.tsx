@@ -8,7 +8,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { fetchClusters, fetchFindings, fetchQuality, type ClusterSummary, type QualityReport } from './api';
-import { Eyebrow, FoundLaterBadge, KindBadge, NeedsReviewBadge, PageHeader, PendingTierBadge, Stat, SymptomChip, SyntheticNote, TierBadge } from './components/common';
+import { AnimatedNumber, Eyebrow, FoundLaterBadge, KindBadge, NeedsReviewBadge, PageHeader, PendingTierBadge, Stat, SymptomChip, SyntheticNote, TierBadge } from './components/common';
 import { ago, isResolved, money, TIER_NAMES } from './format';
 import { rankIssues } from './lib/issues';
 
@@ -121,10 +121,10 @@ export function IssuesPage() {
       </PageHeader>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Stat value={open.length} label="open issues" />
-        <Stat value={sessions} label="affected sessions" />
-        <Stat value={signals} label="signals grouped" />
-        <Stat value={estimated.length ? money(atRisk, currency) : '-'} tone="money" label={<>revenue at risk <span className="text-synthetic">(synthetic)</span></>} />
+        <Stat value={<AnimatedNumber value={open.length} />} label="open issues" />
+        <Stat value={<AnimatedNumber value={sessions} />} label="affected sessions" />
+        <Stat value={<AnimatedNumber value={signals} />} label="signals grouped" />
+        <Stat value={estimated.length ? <AnimatedNumber value={atRisk} format={(n) => money(Math.round(n), currency)} ms={900} /> : '-'} tone="money" label={<>revenue at risk <span className="text-synthetic">(synthetic)</span></>} />
       </div>
 
       {first?.finding && (
@@ -162,12 +162,13 @@ export function IssuesPage() {
         </Empty>
       ) : (
         <div className="mt-4 flex flex-col gap-2.5">
-          {ranked.map(({ cluster: c, finding: f }) => (
+          {ranked.map(({ cluster: c, finding: f }, i) => (
+            // The list arrives as a list: a short stagger on first load only (keys are stable, so refreshes do not replay it).
+            <div key={c.cluster_id} className="motion-enter" style={{ animationDelay: `${Math.min(i, 8) * 35}ms` }}>
             <a
-              key={c.cluster_id}
               href={`#/issues/${c.cluster_id}`}
               className={cn(
-                'issue grid grid-cols-1 items-center gap-4 rounded-xl border bg-card px-5 py-4 text-card-foreground no-underline shadow-xs transition-colors hover:border-input lg:grid-cols-[1fr_auto] lg:gap-8',
+                'issue group/issue grid grid-cols-1 items-center gap-4 rounded-xl border bg-card px-5 py-4 text-card-foreground no-underline shadow-xs transition-[border-color,box-shadow,translate] duration-200 ease-out-expo hover:border-input hover:shadow-md motion-safe:hover:-translate-y-px lg:grid-cols-[1fr_auto] lg:gap-8',
                 bumped.has(c.cluster_id) && 'bump',
               )}
             >
@@ -205,15 +206,15 @@ export function IssuesPage() {
               </div>
               <dl className="m-0 grid grid-cols-[minmax(96px,auto)_auto_auto_minmax(150px,auto)] items-center gap-x-6 text-right">
                 <div className="flex flex-col">
-                  <dd className="m-0 text-lg font-semibold text-money tabular-nums">{f ? (f.revenue.status === 'ok' ? money(f.revenue.revenue_at_risk_minor, f.revenue.currency) : '…') : '-'}</dd>
+                  <dd className="m-0 text-lg font-semibold text-money tabular-nums">{f ? (f.revenue.status === 'ok' ? <AnimatedNumber value={f.revenue.revenue_at_risk_minor} format={(n) => money(Math.round(n), f.revenue.currency)} /> : '…') : '-'}</dd>
                   <dt className="text-xs text-muted-foreground">at risk</dt>
                 </div>
                 <div className="flex flex-col">
-                  <dd className="m-0 text-lg font-semibold tabular-nums">{c.session_count}</dd>
+                  <dd className="m-0 text-lg font-semibold tabular-nums"><AnimatedNumber value={c.session_count} /></dd>
                   <dt className="text-xs text-muted-foreground">sessions</dt>
                 </div>
                 <div className="flex flex-col">
-                  <dd className="m-0 text-lg font-semibold tabular-nums">{c.signal_count}</dd>
+                  <dd className="m-0 text-lg font-semibold tabular-nums"><AnimatedNumber value={c.signal_count} /></dd>
                   <dt className="text-xs text-muted-foreground">signals</dt>
                 </div>
                 <div className="flex items-center justify-end gap-2">
@@ -221,10 +222,11 @@ export function IssuesPage() {
                     <span>last seen {ago(c.last_seen)}</span>
                     <span className="font-mono">{c.route}</span>
                   </div>
-                  <ChevronRightIcon aria-hidden="true" className="size-4 text-muted-foreground" />
+                  <ChevronRightIcon aria-hidden="true" className="size-4 text-muted-foreground transition-transform duration-200 ease-out-expo group-hover/issue:translate-x-0.5 group-hover/issue:text-foreground" />
                 </div>
               </dl>
             </a>
+            </div>
           ))}
         </div>
       )}

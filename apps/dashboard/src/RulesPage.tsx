@@ -322,7 +322,7 @@ function HypothesisCard({
   const suggester = d.suggester;
   const closeDialog = (o: boolean) => !o && setDialog('none');
   return (
-    <Card className="gap-3 border border-dashed border-agent-border px-5 ring-0">
+    <Card className="gap-3 border border-dashed border-agent-border px-5 ring-0 transition-shadow duration-200 hover:shadow-md">
       <div className="flex flex-wrap items-center gap-1.5">
         <Badge className="bg-agent-muted text-agent">
           <SparklesIcon data-icon="inline-start" aria-hidden="true" />
@@ -361,7 +361,7 @@ function HypothesisCard({
       {d.dry_run && <p className="m-0 text-[13px] text-muted-foreground">{dryRunLine(d.dry_run)}</p>}
 
       {open && (
-        <div className="flex flex-col gap-3 border-t pt-3">
+        <div className="motion-reveal flex flex-col gap-3 border-t pt-3">
           <p className="m-0 text-sm">
             <b className="font-semibold">Why I think so:</b> {w.hypothesis}
           </p>

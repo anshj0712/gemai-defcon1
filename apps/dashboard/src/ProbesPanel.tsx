@@ -160,7 +160,7 @@ export function ProbesPanel({ onChanged }: { onChanged?: () => void }) {
               const list = view.catalog.probes.filter((p) => p.source === g);
               const recordedOff = g === 'recorded' ? view.registry.filter((d) => !list.some((p) => p.name === d.name)) : [];
               return (
-                <TabsContent key={g} value={g} className="flex flex-col gap-2 pt-2">
+                <TabsContent key={g} value={g} className="motion-reveal flex flex-col gap-2 pt-2">
                   <p className="m-0 text-[13px] text-muted-foreground">{SOURCE_HINT[g]}</p>
                   {list.length === 0 && recordedOff.length === 0 ? (
                     <p className="m-0 text-[13px] text-muted-foreground">{g === 'recorded' ? 'None yet. Add one below, or approve one the agent proposes.' : 'None seen in recent sessions.'}</p>
@@ -235,7 +235,7 @@ export function ProbesPanel({ onChanged }: { onChanged?: () => void }) {
           <span className="text-[13px] text-muted-foreground">Point at a number the page shows, and rules can use it at once.</span>
         </div>
         {open && (
-          <>
+          <div className="motion-reveal flex flex-col gap-3">
             <p className="m-0 text-[13px] text-muted-foreground">
               It is read from the sessions already recorded (text was masked in the browser), so it works on past sessions too, and nothing new is collected from shoppers.
             </p>
@@ -329,7 +329,7 @@ export function ProbesPanel({ onChanged }: { onChanged?: () => void }) {
                 </AlertDescription>
               </Alert>
             )}
-          </>
+          </div>
         )}
       </Card>
     </section>

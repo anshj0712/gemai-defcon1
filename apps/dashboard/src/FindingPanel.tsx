@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import { screenshotUrl, type FindingVersionView } from './api';
-import { Eyebrow, Fold, FoundLaterBadge, NeedsReviewBadge, SyntheticNote, TierBadge } from './components/common';
+import { AnimatedNumber, Eyebrow, Fold, FoundLaterBadge, NeedsReviewBadge, SyntheticNote, TierBadge } from './components/common';
 import { CATEGORY_NAMES, formulaLine, money, pct, plain, time } from './format';
 
 
@@ -16,10 +16,10 @@ const OFFLINE_MODEL = 'offline-stand-in';
 
 /** The visual check's result, in words and a status tone (never color alone). */
 const VERDICTS: Record<string, { label: string; className: string }> = {
-  confirmed: { label: 'Visually confirmed', className: 'bg-success-muted text-success' },
-  not_confirmed: { label: 'Not visible on screen', className: 'bg-danger-muted text-money' },
-  unclear: { label: 'Unclear on screen', className: 'bg-warn-muted text-warn' },
-  not_checked: { label: 'Not visually checked', className: 'bg-muted text-muted-foreground' },
+  confirmed: { label: 'Visually confirmed', className: 'bg-success-solid text-tier-foreground' },
+  not_confirmed: { label: 'Not visible on screen', className: 'bg-tier-p0 text-tier-foreground' },
+  unclear: { label: 'Unclear on screen', className: 'bg-tier-p2 text-tier-foreground' },
+  not_checked: { label: 'Not visually checked', className: 'bg-tier-p3 text-tier-foreground' },
 };
 
 /** Where an evidence item leads: signals and the screenshot open the replay at their moment. */
@@ -79,7 +79,7 @@ function SummaryCard({ title, badge, open, onToggle, summary, detail }: { title:
           {open ? <ChevronUpIcon data-icon="inline-end" aria-hidden="true" /> : <ChevronDownIcon data-icon="inline-end" aria-hidden="true" />}
         </Button>
       </div>
-      <div className="flex flex-col gap-2 text-sm">{open ? detail : summary}</div>
+      <div key={open ? 'detail' : 'summary'} className="motion-reveal flex flex-col gap-2 text-sm">{open ? detail : summary}</div>
     </Card>
   );
 }
@@ -120,7 +120,7 @@ function VerdictCard({ v, byId }: { v: NonNullable<Finding['verdict']>; byId: Ma
       <div className="text-sm">{v.ruling ? <ClaimText claim={v.ruling} byId={byId} /> : <p className="m-0">{v.summary}</p>}</div>
       {v.ruling && <p className="m-0 text-xs text-muted-foreground">{v.summary}</p>}
       {open && (
-        <div className="mt-1 grid gap-3 md:grid-cols-2">
+        <div className="motion-reveal mt-1 grid gap-3 md:grid-cols-2">
           {v.jurors.map((j) => {
             const n = JUROR_NAMES[j.role] ?? { name: j.role, asks: '' };
             const pctScore = j.score === null ? 0 : Math.round(j.score * 100);
@@ -133,7 +133,7 @@ function VerdictCard({ v, byId }: { v: NonNullable<Finding['verdict']>; byId: Ma
                 </div>
                 <span className="text-xs text-muted-foreground">{n.asks}</span>
                 <div className="relative h-2 rounded-full bg-muted" title={`The bar is ${bar}%`}>
-                  <span className={cn('block h-full rounded-full', pass ? 'bg-success-strong' : 'bg-warn-strong')} style={{ width: `${pctScore}%` }} />
+                  <span className={cn('motion-grow block h-full rounded-full', pass ? 'bg-success-strong' : 'bg-warn-strong')} style={{ width: `${pctScore}%` }} />
                   <i aria-hidden="true" className="absolute -top-1 -bottom-1 w-0.5 bg-foreground" style={{ left: `${bar}%` }} />
                 </div>
                 {j.rationale && <ClaimText claim={j.rationale} byId={byId} className="text-[13px]" />}
@@ -174,7 +174,9 @@ export function FindingSummary({ finding: f, cluster }: { finding: Finding; clus
           <Eyebrow className={r.status === 'ok' ? 'text-money' : undefined}>Estimated revenue lost</Eyebrow>
           {r.status === 'ok' ? (
             <>
-              <div className="text-4xl leading-tight font-bold text-money tabular-nums">{money(r.revenue_at_risk_minor, r.currency)}</div>
+              <div className="text-4xl leading-tight font-bold text-money tabular-nums">
+                <AnimatedNumber value={r.revenue_at_risk_minor} format={(n) => money(Math.round(n), r.currency)} ms={900} />
+              </div>
               <p className="m-0 text-[13px] text-foreground/80">
                 {Number.isInteger(r.affected_with_cart) ? r.affected_with_cart : r.affected_with_cart.toFixed(1)} shoppers with a cart hit this. {pct(r.abandonment_affected)} left, against {pct(r.abandonment_baseline)} normally.
               </p>

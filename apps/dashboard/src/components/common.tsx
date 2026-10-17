@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ChevronRightIcon } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -11,7 +11,39 @@ const TIER_CLASS: Record<string, string> = { P0: 'bg-tier-p0', P1: 'bg-tier-p1',
 
 /** "P0 · blocker" on the tier's fill; `short` shows just "P0". */
 export function TierBadge({ tier, short, className }: { tier: string; short?: boolean; className?: string }) {
-  return <Badge className={cn('font-semibold text-tier-foreground', TIER_CLASS[tier] ?? 'bg-tier-p3', className)}>{short ? tier : (TIER_NAMES[tier] ?? tier)}</Badge>;
+  return <Badge className={cn('font-bold tracking-[0.02em] text-tier-foreground', TIER_CLASS[tier] ?? 'bg-tier-p3', className)}>{short ? tier : (TIER_NAMES[tier] ?? tier)}</Badge>;
+}
+
+const reducedMotion = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+/**
+ * A number that rolls to its new value when it changes (and up from zero when it first appears), so a live
+ * total visibly moves when new sessions arrive. Exponential ease-out over `ms`; instant under reduced motion.
+ */
+export function AnimatedNumber({ value, format = (n) => Math.round(n).toLocaleString('en-IN'), ms = 700 }: { value: number; format?: (n: number) => string; ms?: number }) {
+  const [shown, setShown] = useState(() => (reducedMotion() ? value : 0));
+  const from = useRef(shown);
+  useEffect(() => {
+    if (reducedMotion() || from.current === value) {
+      from.current = value;
+      setShown(value);
+      return;
+    }
+    const start = performance.now();
+    const a = from.current;
+    let frame = 0;
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / ms);
+      const eased = t === 1 ? 1 : 1 - 2 ** (-10 * t);
+      const v = a + (value - a) * eased;
+      from.current = v;
+      setShown(v);
+      if (t < 1) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [value, ms]);
+  return <span className="tabular-nums">{format(shown)}</span>;
 }
 
 export function PendingTierBadge() {
@@ -22,26 +54,22 @@ export function PendingTierBadge() {
   );
 }
 
-/** Element issues (a control on a page) or data-rule issues (a number that broke a rule). */
+/** Element issues (a control on a page, indigo) or data-rule issues (a number that broke a rule, purple). */
 export function KindBadge({ kind }: { kind: string }) {
-  return kind === 'invariant' ? (
-    <Badge variant="outline" className="border-info-border bg-info-muted text-info">
-      Data rule
-    </Badge>
-  ) : (
-    <Badge variant="outline" className="text-muted-foreground">
-      Element
+  return (
+    <Badge className={cn('text-[11px] font-semibold tracking-[0.04em] uppercase', kind === 'invariant' ? 'bg-agent-muted text-agent' : 'bg-kind-muted text-kind')}>
+      {kind === 'invariant' ? 'Data rule' : 'Element'}
     </Badge>
   );
 }
 
-/** A symptom with its count. The dot uses the same color as the replay timeline's flag for that detector. */
+/** A symptom with its count, outlined in the same color as the replay timeline's flag for that detector. */
 export function SymptomChip({ detector, count }: { detector: string; count?: number }) {
+  const color = symptomColor(detector);
   return (
-    <Badge variant="outline" className="gap-1.5 font-medium text-foreground">
-      <span aria-hidden="true" className="size-2 rounded-full" style={{ background: symptomColor(detector) }} />
+    <Badge variant="outline" className="border-[1.5px] bg-card font-semibold" style={{ borderColor: color, color }}>
       {symptomName(detector)}
-      {count !== undefined && <span className="text-muted-foreground tabular-nums">{count}</span>}
+      {count !== undefined && <span className="tabular-nums">· {count}</span>}
     </Badge>
   );
 }
@@ -96,13 +124,13 @@ export function Eyebrow({ children, className }: { children: ReactNode; classNam
 /** A section that stays closed until asked for, with a hint so the reader knows what is inside. */
 export function Fold({ title, hint, children, defaultOpen }: { title: ReactNode; hint?: ReactNode; children: ReactNode; defaultOpen?: boolean }) {
   return (
-    <details className="group rounded-xl border bg-card text-card-foreground shadow-xs" open={defaultOpen}>
+    <details className="group rounded-xl border bg-card text-card-foreground shadow-xs transition-shadow duration-200 open:shadow-sm" open={defaultOpen}>
       <summary className="flex cursor-pointer list-none items-baseline gap-3 rounded-xl px-4 py-3 font-medium transition-colors hover:bg-muted/50 [&::-webkit-details-marker]:hidden">
         <ChevronRightIcon aria-hidden="true" className="size-4 shrink-0 translate-y-0.5 text-muted-foreground transition-transform group-open:rotate-90" />
         <span>{title}</span>
         {hint && <span className="min-w-0 truncate text-xs font-normal text-muted-foreground">{hint}</span>}
       </summary>
-      <div className="flex flex-col gap-3 px-4 pt-1 pb-4">{children}</div>
+      <div className="motion-reveal flex flex-col gap-3 px-4 pt-1 pb-4">{children}</div>
     </details>
   );
 }

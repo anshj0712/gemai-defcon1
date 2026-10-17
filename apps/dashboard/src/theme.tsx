@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 /**
- * Light, dark, or follow the system (the default). The choice is a per-viewer convenience kept in
+ * Light (the default, the dashboard's original look), dark, or follow the system. The choice is a per-viewer convenience kept in
  * localStorage; index.html applies it before first paint so there is no flash.
  */
 export type ThemePref = 'system' | 'light' | 'dark';
@@ -13,15 +13,15 @@ const DARK_QUERY = '(prefers-color-scheme: dark)';
 export function readPref(): ThemePref {
   try {
     const v = localStorage.getItem(THEME_KEY);
-    return v === 'light' || v === 'dark' ? v : 'system';
+    return v === 'dark' || v === 'system' ? v : 'light';
   } catch {
-    return 'system';
+    return 'light';
   }
 }
 
 function writePref(pref: ThemePref): void {
   try {
-    if (pref === 'system') localStorage.removeItem(THEME_KEY);
+    if (pref === 'light') localStorage.removeItem(THEME_KEY);
     else localStorage.setItem(THEME_KEY, pref);
   } catch {
     // Storage blocked: the choice lasts for this page only.
@@ -42,7 +42,7 @@ interface ThemeState {
   setPref: (pref: ThemePref) => void;
 }
 
-const ThemeContext = createContext<ThemeState>({ pref: 'system', theme: 'light', setPref: () => undefined });
+const ThemeContext = createContext<ThemeState>({ pref: 'light', theme: 'light', setPref: () => undefined });
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [pref, setPrefState] = useState<ThemePref>(readPref);

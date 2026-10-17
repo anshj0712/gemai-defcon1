@@ -17,8 +17,9 @@
 The dashboard is an ops console for a merchant: issues ranked by revenue at risk, the replay at the flagged moment, agent hypotheses to approve or reject.
 
 It should be dense and easy to scan. It should also be calm: the numbers and the merchant's decision carry the page, not decoration.
-- Light and dark themes, following the system setting by default, with a toggle.
-- Neutral slate surfaces and one blue for actions.
+- **The original palette stays (product owner's call, 18 Oct).** A navy top bar, a light gray-blue page, white cards, and blue for actions. Tier, kind and symptom colors are unchanged, because merchants already read them.
+- **The redesign changes components and motion, not colors.**
+- **Light is the default.** Dark is opt-in from the top bar (Light, Dark, System).
 - Color carries meaning only: tier, agent, money, synthetic, success. Every color sits next to a text label.
 
 ### Deviations from the generator
@@ -29,29 +30,39 @@ It should be dense and easy to scan. It should also be calm: the numbers and the
 | Fira Code headings, Fira Sans body (Google Fonts link) | IBM Plex Sans Variable for the UI, IBM Plex Mono only for selectors, probe names and ids; self-hosted with @fontsource | Monospace headings slow scanning. Plex reads as financial and trustworthy, and it differs from the demo shop's Inter and Oswald, so the two apps never look alike in the video. |
 | Foreground `#1E3A8A` (blue-900), border `#DBEAFE` | Slate foreground and borders | Blue body text and blue borders read as links. |
 | Amber primary button | Blue primary; amber only for the "synthetic" marker and P2 | Amber CTAs compete with the warning tiers. |
-| GSAP scroll reveal | No entrance animation; 150–200 ms state transitions, the card flash on new signals and the live dot only | Motion on data that is being read hurts scanning, and it would add a dependency. |
-| Card hover lift (`translateY`) and `cursor: pointer` on every card | Border-color change on hover for linked cards only | Calm; keeps hover from implying that static cards can be clicked. |
+| GSAP scroll reveal | CSS motion that explains change (see Motion), no scroll reveals | Motion on data that is being read hurts scanning, and it would add a dependency. |
+| Card hover lift on every card | A 1 px lift and shadow on linked cards only (issue cards, hypotheses); static cards do not move | Feedback says "this opens"; static cards stay still. |
+| The generator's blue-900 and amber palette | The dashboard's original colors | Product owner's call: the existing colors are what merchants already understand. |
 
 ## Color tokens
 
-shadcn semantic variables (OKLCH, values from the Tailwind v4 palette) in `:root` and `.dark`. Components use tokens only: no raw colors and no `dark:` overrides.
+The dashboard's original colors, exposed as shadcn semantic variables (`:root` for light, `.dark` opt-in) in `apps/dashboard/src/index.css`. Components use tokens only.
 
-| Token | Light | Dark | Use |
-| --- | --- | --- | --- |
-| `--background` | slate-50 | slate-950 | Page |
-| `--foreground` | slate-900 | slate-50 | Body text (17.6:1 / 19:1) |
-| `--card` | white | slate-900 | Cards, tables |
-| `--muted` | slate-100 | slate-800 | Quiet fills, table header |
-| `--muted-foreground` | slate-600 | slate-400 | Secondary text (7.6:1 on white / 7.0:1 on slate-900) |
-| `--border`, `--input` | slate-200, slate-300 | white 10%, white 15% | Dividers, fields |
-| `--primary` | blue-700 | blue-400 | Primary action (white text 6.7:1 / slate-950 text 7.9:1) |
-| `--ring` | blue-600 | blue-400 | Focus ring, 2 px plus offset |
-| `--destructive` | red-700 | red-400 | Errors, destructive actions |
-| `--money` | red-700 | red-400 | Revenue at risk (6.5:1 / 6.2:1) |
-| `--tier-p0` / `p1` / `p2` / `p3` | red-700 / orange-700 / amber-700 / slate-600 | same | Tier pill fill, white text (≥5.0:1) |
-| `--agent`, `--agent-muted` | violet-700, violet-50 | violet-300, violet-950 | Agent hypotheses, agent drafts, found later (dashed border = not a finding yet) |
-| `--synthetic`, `--synthetic-muted` | amber-900, amber-100 | amber-200, amber-950 | "Synthetic data" markers (AGENTS rule 10) |
-| `--success`, `--success-muted` | green-800, green-50 | green-300, green-950 | Done, approved, fixed |
+| Token | Light (original) | Use |
+| --- | --- | --- |
+| `--topbar`, `--topbar-muted`, `--topbar-active` | #111827, #cbd5e1, #1f2937 | The navy top bar, its links, the active tab |
+| `--background` / `--card` | #f6f7fb / #ffffff | Page / cards, tables |
+| `--foreground` / `--muted-foreground` | #111827 / #6b7280 | Text / secondary text |
+| `--border` / `--input` | #e5e7eb / #d1d5db | Dividers / fields |
+| `--primary` / `--ring` | #2563eb | Actions, links, focus ring, the active-tab underline |
+| `--money`, `--danger-muted`, `--danger-border` | #b91c1c, #fef2f2, #fecaca | Revenue at risk, the revenue card, captions, Fix this first |
+| `--tier-p0` … `--tier-p3` | #dc2626, #ea580c, #ca8a04, #64748b (white text) | Tier pills; also the visual-check badges |
+| `--kind`, `--kind-muted` | #3730a3, #eef2ff | ELEMENT badge |
+| `--agent`, `--agent-muted`, `--agent-border`, `--agent-strong` | #5b21b6, #ede9fe, #a78bfa, #7c3aed | DATA RULE badge, hypotheses (dashed), found later, the bell count, the time-travel slider |
+| `--synthetic`, `--synthetic-muted`, `--synthetic-border` | #78350f, #fef3c7, #fde68a | Synthetic data markers (AGENTS rule 10) |
+| `--warn`, `--warn-muted`, `--warn-border` | #9a3412, #fff7ed, #fed7aa | Churn reason chip |
+| `--success`, `--success-muted`, `--success-strong`, `--success-solid` | #166534, #dcfce7, #22c55e, #16a34a | Approved, live, fixed; the live dot; Visually confirmed |
+| `--info`, `--info-muted`, `--info-border` | #1e40af, #dbeafe, #bfdbfe | Drafts, evidence chips |
+
+Symptom chips keep the replay timeline's flag colors (`FLAG_COLORS` in markers.ts) as their outline and text.
+
+Contrast note: the original palette is kept as is. Four pairs sit below 4.5:1, all of them already in the dashboard before the redesign:
+- white on the P1 orange pill, about 3.6:1;
+- white on the P2 amber pill, about 2.9:1;
+- white on the green "Visually confirmed" badge, about 3.3:1;
+- gray-500 secondary text on the gray-100 fill, about 4.4:1.
+
+Darkening those three fills one step (orange-700, amber-700, green-700) would pass. Change them only if the product owner agrees.
 
 ## Typography
 
@@ -65,7 +76,7 @@ shadcn semantic variables (OKLCH, values from the Tailwind v4 palette) in `:root
 ## Spacing, shape, depth
 
 - **Spacing:** 2, 4, 8, 12, 16, 24, 32 px (density 8). Card padding 12–16 px; table rows 36 px; grid gap 8–12 px.
-- **Radius:** `--radius` 0.5rem. Pills are fully rounded.
+- **Radius:** `--radius` 0.625rem (cards 14 px). Pills are fully rounded.
 - **Depth:** a 1 px border plus `shadow-xs` on cards; overlays (Dialog, Sheet, Sonner) use shadcn defaults. No glass, blur or gradients.
 - **Layout:** max content width 1320 px with 24 px gutters. Sticky top bar; tables have sticky headers and scroll horizontally inside their card on narrow screens.
 
@@ -84,13 +95,25 @@ shadcn semantic variables (OKLCH, values from the Tailwind v4 palette) in `:root
 
 ## Motion
 
-- **Duration:** 150–200 ms for color, border and opacity transitions, with ease-out.
-- **Allowed animations:** only the issue-card flash when it gains signals and the live dot.
-- **Reduced motion:** under `prefers-reduced-motion: reduce`, all animation and transition durations go to 0.
+Thesis (from Impeccable's animate guide, Operate mode): motion explains change in a working tool and never makes the reader wait. One easing, `--ease-out-expo` (cubic-bezier(0.16, 1, 0.3, 1)); exits are shorter than entrances.
+
+| Moment | Motion | Duration |
+| --- | --- | --- |
+| A page arrives (route change) | Fade and 6 px rise (`motion-enter`) | 260 ms |
+| The issue list first appears | The same, staggered 35 ms per card, capped at 8 | ≤ 540 ms in total |
+| A live number changes (KPI tiles, card counts, revenue) | Rolls from the old value to the new (`AnimatedNumber`, exponential ease-out) | 700–900 ms |
+| A card gains signals | The existing background flash | 1.6 s |
+| A section opens (Details, Show evidence, folds, tabs, Add a probe) | Fade and clip from the top (`motion-reveal`) | 220 ms |
+| Juror scores appear | Bars grow from the left (`motion-grow`) | 700 ms |
+| A new agent proposal arrives | The bell nudges once and the count pops; the toast slides in | 700 ms / 420 ms |
+| Hover on a linked card | 1 px lift and shadow; the chevron moves 2 px | 200 ms |
+| Theme switch | The icon pops in | 420 ms |
+
+Reduced motion means fewer and gentler, not none. Rises, pops, nudges and the pulsing dot go; fades, color changes and the flash that carries state stay.
 
 ## Accessibility (must)
 
-- **Contrast:** text at least 4.5:1 in both themes, checked separately for light and dark.
+- **Contrast:** text at least 4.5:1 in both themes, checked separately for light and dark, except the four original-palette pairs under Color tokens.
 - **Focus:** a visible focus ring on every interactive element, never removed.
 - **Keyboard:**
   - full keyboard use;
@@ -105,9 +128,9 @@ shadcn semantic variables (OKLCH, values from the Tailwind v4 palette) in `:root
 
 - Emoji as icons
 - Raw hex or `bg-blue-500`-style palette classes in components
-- `dark:` overrides
+- `dark:` overrides (the only ones are where a shadcn variant's own `dark:` hover has to be matched in the navy top bar)
 - Layout-shifting hovers
-- Entrance or scroll animations on data
+- Scroll reveals, and entrance animations that replay on every refresh
 - Glassmorphism
 - Monospace headings
 - Low-contrast gray-on-gray text
@@ -117,9 +140,9 @@ shadcn semantic variables (OKLCH, values from the Tailwind v4 palette) in `:root
 
 - [ ] No emoji icons; one icon family (lucide)
 - [ ] Semantic tokens only; no raw colors in components
-- [ ] Text contrast ≥ 4.5:1 in light and in dark
+- [ ] Text contrast ≥ 4.5:1, except the four original-palette pairs noted under Color tokens
 - [ ] Focus ring visible; full keyboard path through the top bar, issues, Rules actions, Dialog and Sheet
-- [ ] `prefers-reduced-motion` stops the flash, live dot and transitions
+- [ ] `prefers-reduced-motion` removes movement and keeps fades and color feedback
 - [ ] Hover states 150–200 ms; disabled states clear
 - [ ] Tables scroll inside their card; no horizontal page scroll at 1280 and 1440
 - [ ] Synthetic markers and the templated label visible

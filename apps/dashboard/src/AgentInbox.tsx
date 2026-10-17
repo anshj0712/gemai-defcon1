@@ -71,6 +71,8 @@ function showProposal(r: RuleView): void {
 export function AgentInbox() {
   const [open, setOpen] = useState<RuleView[]>([]);
   const seen = useRef<Set<string> | null>(null);
+  // Bumped when a new proposal arrives: the bell nudges once and its count pops.
+  const [arrivals, setArrivals] = useState(0);
 
   useEffect(() => {
     let stop = false;
@@ -86,6 +88,7 @@ export function AgentInbox() {
             for (const r of fresh) seen.current.add(keyOf(r));
             writeSeen(seen.current);
             showProposal(fresh[0]!);
+            setArrivals((n) => n + 1);
           }
         },
         () => undefined,
@@ -103,10 +106,10 @@ export function AgentInbox() {
     <>
       <Tooltip>
         <TooltipTrigger asChild>
-          <a href="#/rules" aria-label={label} className={cn(buttonVariants({ variant: 'ghost', size: 'icon' }), 'relative', open.length > 0 && 'text-agent')} onClick={review}>
-            <BellIcon aria-hidden="true" />
+          <a href="#/rules" aria-label={label} className={cn(buttonVariants({ variant: 'ghost', size: 'icon' }), 'relative text-topbar-muted hover:bg-topbar-active hover:text-topbar-foreground dark:hover:bg-topbar-active', open.length > 0 && 'text-agent-border')} onClick={review}>
+            <BellIcon key={arrivals} aria-hidden="true" className={arrivals > 0 ? 'motion-nudge' : undefined} />
             {open.length > 0 && (
-              <span aria-hidden="true" className="absolute -top-0.5 -right-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-agent-strong px-1 text-[10px] leading-none font-semibold text-tier-foreground">
+              <span key={`${open.length}-${arrivals}`} aria-hidden="true" className="motion-pop absolute -top-0.5 -right-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-agent-strong px-1 text-[10px] leading-none font-semibold text-tier-foreground">
                 {open.length}
               </span>
             )}
