@@ -9,7 +9,7 @@ import { COMMON, INPUT_MARKER } from './prompts.js';
  * juror and no judge can approve a report that the numbers do not. Bump JURY_PROMPT_VERSION on any change
  * here: it is part of the verdict's cache key.
  */
-export const JURY_PROMPT_VERSION = 'j1.0';
+export const JURY_PROMPT_VERSION = 'j1.1';
 
 const JUROR_COMMON = [
   COMMON,
@@ -43,6 +43,7 @@ export const JUDGE: AgentSpec<typeof JudgeOutput> = {
     '',
     'You are the judge. Four independent jurors scored a report; code has already applied the rule and made the decision, which is in the input as "decision". You cannot change it.',
     '- ruling: one or two plain sentences telling a merchant what was decided and why, using the jurors\' strongest points and any doubts. If the decision is "rejected", say what a person should check first. Never contradict the decision.',
+    `- "checks" are code checks: agents_ok false means one of the AI steps that wrote the report failed its own validation, so the report is unreliable and should be regenerated (the evidence itself may be fine); visual_ok false means the screenshot contradicted the report. When the jurors' scores are high but a check failed, say exactly that, in those words, and do not blame the evidence.`,
     'Cite the evidence ids the jurors cited (only ids that appear in the input).',
   ].join('\n'),
 };

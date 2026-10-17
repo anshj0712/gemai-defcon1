@@ -62,3 +62,13 @@ describe('convening the jury', () => {
     expect(v.jurors.map((j) => j.role)).toEqual(['evidence_auditor', 'skeptic']);
   });
 });
+
+describe('the verdict cache key', () => {
+  const m = new OfflineLlm();
+  const deps = { models: { bulk: m, reasoning: m, offline: true } as ModelSet, params };
+  it('changes when the reviewed report changes, so a verdict from a failed pass is not kept', async () => {
+    const { juryKey } = await import('../src/jury.js');
+    expect(juryKey('k', deps, 'report-a')).toBe(juryKey('k', deps, 'report-a'));
+    expect(juryKey('k', deps, 'report-a')).not.toBe(juryKey('k', deps, 'report-b'));
+  });
+});
