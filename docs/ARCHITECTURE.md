@@ -40,6 +40,16 @@ flowchart LR
   C -.->|"replay"| K
 ```
 
+The chart above is the plan from 23 Sep. The two diagrams below were drawn on 17 Oct, after PR #5, and show what is built.
+
+High level: the path every session takes, how the system learns, and the three stores.
+
+![High-level architecture](diagrams/architecture-high-level.svg)
+
+Low level: every service, store and port, and the loop an approved rule closes (live within 15 s, plus a 30-day re-scan).
+
+![Low-level architecture](diagrams/architecture-low-level.svg)
+
 | Component | Responsibility | Scales by |
 | --- | --- | --- |
 | Browser SDK | Wrap rrweb, mask inputs, detect cheap local triggers, batch and compress, flush with sendBeacon on unload | Client-side sampling |
