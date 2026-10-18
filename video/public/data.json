@@ -1,97 +1,97 @@
 {
- "total_minor": 124512957,
+ "total_minor": 124430313,
  "issues": 11,
  "top": [
   {
    "title": "HTTP 500 error on place order button",
-   "minor": 24063086,
+   "minor": 26167973,
    "tier": "P0",
-   "shoppers": 19
+   "shoppers": 22
   },
   {
    "title": "Unresponsive button retry-card",
-   "minor": 18927722,
+   "minor": 18388552,
    "tier": "P1",
-   "shoppers": 12
-  },
-  {
-   "title": "Broken chat-help button",
-   "minor": 14602623,
-   "tier": "P0",
    "shoppers": 12
   },
   {
    "title": "Delivery ETA exceeds 5",
-   "minor": 14102485,
+   "minor": 14782445,
    "tier": "P1",
-   "shoppers": 12
+   "shoppers": 13
+  },
+  {
+   "title": "Broken button chat-help",
+   "minor": 14141552,
+   "tier": "P0",
+   "shoppers": 13
   },
   {
    "title": "Delivery fee exceeds ₹0",
-   "minor": 11793068,
+   "minor": 12159698,
    "tier": "P1",
-   "shoppers": 12
+   "shoppers": 16
   },
   {
    "title": "Payment authorization took longer than 3400 ms",
-   "minor": 10858611,
+   "minor": 11267038,
    "tier": "P0",
-   "shoppers": 12
+   "shoppers": 14
   }
  ],
  "lanes": [
   {
    "title": "HTTP 500 error on place order button",
-   "minor": 24063086,
+   "minor": 26167973,
    "hit": 1792267556228,
    "known": 1792267633804,
    "tier": "P0"
   },
   {
    "title": "Unresponsive button retry-card",
-   "minor": 18927722,
+   "minor": 18388552,
    "hit": 1792267580614,
    "known": 1792267588302,
    "tier": "P1"
   },
   {
-   "title": "Broken chat-help button",
-   "minor": 14602623,
-   "hit": 1792267592376,
-   "known": 1792267654022,
-   "tier": "P0"
-  },
-  {
    "title": "Delivery ETA exceeds 5",
-   "minor": 14102485,
+   "minor": 14782445,
    "hit": 1792267620731,
    "known": 1792313948893,
    "tier": "P1"
   },
   {
+   "title": "Broken button chat-help",
+   "minor": 14141552,
+   "hit": 1792267592376,
+   "known": 1792267654022,
+   "tier": "P0"
+  },
+  {
    "title": "Delivery fee exceeds ₹0",
-   "minor": 11793068,
+   "minor": 12159698,
    "hit": 1792267549111,
    "known": 1792316944489,
    "tier": "P1"
   },
   {
    "title": "Payment authorization took longer than 3400 ms",
-   "minor": 10858611,
+   "minor": 11267038,
    "hit": 1792267562217,
    "known": 1792317516046,
    "tier": "P0"
   },
   {
    "title": "Unresponsive quantity decrease button",
-   "minor": 9671674,
+   "minor": 8565151,
    "hit": 1792267572643,
    "known": 1792267621073,
    "tier": "P2"
   },
   {
    "title": "Unresponsive Apply Coupon Button",
-   "minor": 9053367,
+   "minor": 7799392,
    "hit": 1792266671493,
    "known": 1792266718758,
    "tier": "P2"

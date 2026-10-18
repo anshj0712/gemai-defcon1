@@ -75,7 +75,7 @@ export const AgentRun: React.FC = () => {
   return (
     <Bg variant="dark">
       <div style={{ position: 'absolute', left: 230, top: 120 }}>
-        <Eyebrow text="Detect" index="02 / 06" at={0.1} />
+        <Eyebrow text="The merchant" index="02 / 03" at={0.1} />
         <div style={{ marginTop: 16 }}>
           <Words text="It catches the failure *on its own.*" at={0.3} size={60} />
         </div>

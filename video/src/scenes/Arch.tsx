@@ -119,7 +119,7 @@ export const Arch: React.FC = () => {
   return (
     <Bg variant="dark">
       <div style={{ position: 'absolute', left: X0, top: 70, opacity: title }}>
-        <Eyebrow text="Under the hood" index="06 / 06" />
+        <Eyebrow text="Under the hood" index="How it works" />
         <div style={{ marginTop: 12 }}>
           <Words text="Only issues reach *Gemini.*" at={0.3} size={56} />
         </div>
