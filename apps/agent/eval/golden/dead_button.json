@@ -1,0 +1,168 @@
+{
+ "v": 1,
+ "id": "dead_button",
+ "bug": "dead_button",
+ "evidence": [
+  {
+   "id": "E1",
+   "kind": "issue",
+   "text": "Element issue \"Unresponsive button#apply-coupon on /cart\" on /cart (anchor button#apply-coupon): 92 signals across 20 sessions; symptoms dead_click x68, response_decay x19, rage_click x5; first seen 2026-10-17T19:51:11.493Z, last seen 2026-10-17T20:14:29.917Z.",
+   "data": {
+    "kind": "element",
+    "route": "/cart",
+    "anchor": "button#apply-coupon",
+    "signals": 92,
+    "sessions": 20,
+    "symptom_dead_click": 68,
+    "symptom_rage_click": 5,
+    "symptom_response_decay": 19
+   }
+  },
+  {
+   "id": "E2",
+   "kind": "signal",
+   "text": "Dead click on button#apply-coupon: no response within 800 ms (route /cart, release demo-shop@local).",
+   "signal_id": "0d0478a211b457b24f3ac1a5fa030fe8",
+   "session_id": "s_g3naywzqbfggwddhb3ma",
+   "detector": "dead_click",
+   "at": 1792268069917,
+   "data": {
+    "detector": "dead_click",
+    "selector": "button#apply-coupon",
+    "route": "/cart",
+    "detector_version": "1.3.0",
+    "release": "demo-shop@local",
+    "window_ms": 800
+   }
+  },
+  {
+   "id": "E3",
+   "kind": "signal",
+   "text": "Dead click on button#apply-coupon: no response within 800 ms (route /cart, release demo-shop@local).",
+   "signal_id": "7129c6d785f81e3d9d150b34a2ea4be4",
+   "session_id": "s_qrja0l3628bod0i1vl7p",
+   "detector": "dead_click",
+   "at": 1792268064007,
+   "data": {
+    "detector": "dead_click",
+    "selector": "button#apply-coupon",
+    "route": "/cart",
+    "detector_version": "1.3.0",
+    "release": "demo-shop@local",
+    "window_ms": 800
+   }
+  },
+  {
+   "id": "E4",
+   "kind": "signal",
+   "text": "Dead click on button#apply-coupon: no response within 800 ms (route /cart, release demo-shop@local).",
+   "signal_id": "4bad52159d33b8150d77632c7388e923",
+   "session_id": "s_hwf5myb8i0gldnrxjraz",
+   "detector": "dead_click",
+   "at": 1792268056834,
+   "data": {
+    "detector": "dead_click",
+    "selector": "button#apply-coupon",
+    "route": "/cart",
+    "detector_version": "1.3.0",
+    "release": "demo-shop@local",
+    "window_ms": 800
+   }
+  },
+  {
+   "id": "E5",
+   "kind": "signal",
+   "text": "Dead click on button#apply-coupon: no response within 800 ms (route /cart, release demo-shop@local).",
+   "signal_id": "4724e598b795edf0acfba37384e3f808",
+   "session_id": "s_6agm79bv5vxsnez1labh",
+   "detector": "dead_click",
+   "at": 1792268056600,
+   "data": {
+    "detector": "dead_click",
+    "selector": "button#apply-coupon",
+    "route": "/cart",
+    "detector_version": "1.3.0",
+    "release": "demo-shop@local",
+    "window_ms": 800
+   }
+  },
+  {
+   "id": "E6",
+   "kind": "signal",
+   "text": "Dead click on button#apply-coupon: no response within 800 ms (route /cart, release demo-shop@local).",
+   "signal_id": "64ea4d7db98e6131e47979fb7cb078b3",
+   "session_id": "s_3ok8ug2opdkzeepq3n6z",
+   "detector": "dead_click",
+   "at": 1792268048321,
+   "data": {
+    "detector": "dead_click",
+    "selector": "button#apply-coupon",
+    "route": "/cart",
+    "detector_version": "1.3.0",
+    "release": "demo-shop@local",
+    "window_ms": 800
+   }
+  },
+  {
+   "id": "E7",
+   "kind": "release",
+   "text": "Signals by release: demo-shop@local (89), git:smoke (3).",
+   "data": {
+    "releases": 2,
+    "regression": false,
+    "release_1": "demo-shop@local:89",
+    "release_2": "git:smoke:3"
+   }
+  },
+  {
+   "id": "E8",
+   "kind": "impact",
+   "text": "Synthetic demo data. 8 of 11 affected sessions with a cart abandoned (73%) versus 25% of baseline sessions (route baseline); average cart ₹14,833.20; estimated revenue at risk ₹1,41,589.64.",
+   "data": {
+    "status": "ok",
+    "affected_with_cart": 20,
+    "abandonment_affected": 0.72727,
+    "abandonment_baseline": 0.25,
+    "avg_cart_value_minor": 1483320,
+    "revenue_at_risk_minor": 14158964,
+    "currency": "INR"
+   }
+  }
+ ],
+ "base_tier": "P2",
+ "base_rule_ids": [
+  "checkout_friction",
+  "browse_friction"
+ ],
+ "revenue": {
+  "currency": "INR",
+  "affected_with_cart": 20,
+  "affected_decided": 20,
+  "affected_abandoned": 13,
+  "abandonment_affected": 0.65,
+  "baseline_decided": 26,
+  "baseline_abandoned": 7,
+  "abandonment_baseline": 0.26923,
+  "baseline_scope": "route",
+  "avg_cart_value_minor": 1483320,
+  "pending": 0,
+  "revenue_at_risk_minor": 11296052,
+  "status": "ok",
+  "note": null
+ },
+ "affected_sessions": 20,
+ "expect": {
+  "cause": [
+   [
+    "coupon"
+   ]
+  ],
+  "categories": [
+   "broken_control"
+  ],
+  "where": [
+   "coupon",
+   "apply"
+  ]
+ }
+}

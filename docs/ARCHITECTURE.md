@@ -304,6 +304,16 @@ Tests use hand-written fixtures in Gemini's response shape (`apps/agent/test/fix
 
 **Screenshots.** A click detector's frame is now taken at the click, not 600 ms later: shoppers often move on within a second, and a later frame showed another page. A data rule keeps the 600 ms.
 
+### Implemented (18 Oct): the agent eval engine
+
+Two kinds of eval already ran: `pnpm sim:check` scores detection and grouping against simulator ground truth, and the jury scores each report at run time. Neither tells us whether a prompt or model change made the reports worse. `pnpm eval:agents` does.
+
+- **Golden cases** (`apps/agent/eval/golden/*.json`): for each planted bug, the exact evidence pack the agents saw, the deterministic base tier and revenue, and what a correct report must mention. `pnpm eval:capture -- --api <dashboard url>` writes them from a run's findings; the expectations are written by hand in `src/eval/capture.ts`.
+- **The run** (`src/eval/run.ts`): triage, root cause and the ranker are asked again with the real models, the same prompts and validators as the pipeline, and with `--jury` the jury reviews the report. It writes `.data/eval-agents.json` and exits 1 below the bar (default 85% of cases).
+- **The score** (`src/eval/score.ts`, pure and unit-tested): schema and evidence ids valid; names the broken thing; category allowed; repro steps cite evidence; the fix area points the right way; the ranker answers; the jury approves. Checks are about substance, not wording.
+- **Where it is used:** by hand before changing a prompt or a model id, and as a pre-deploy step. It calls Gemini, so it is not part of `pnpm test`. The scorer and the golden set's shape are tested without a model (`test/eval.test.ts`, including that a wrong answer fails every case).
+- **Result 18 Oct (Gemini 3.5 Flash-Lite and 3.8 Flash on Vertex AI, prompts p3.2, jury on):** 11 of 11 golden cases pass every check, mean 21 s per case. The golden cases come from our own planted bugs, so this is a regression guard, not a measure of accuracy on real stores.
+
 ## 6. Bitemporal search and retroactive re-scan
 
 Retroactive re-scan is the feature to demo: change or add a rule, re-run it over the past 30 days, and see which users were already hurt, without overwriting what the system believed at the time.

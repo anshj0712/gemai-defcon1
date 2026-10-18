@@ -1,0 +1,164 @@
+{
+ "v": 1,
+ "id": "returns_hidden",
+ "bug": "returns_hidden",
+ "evidence": [
+  {
+   "id": "E1",
+   "kind": "issue",
+   "text": "Element issue \"Unresponsive button#returns-info on /product/:id\" on /product/:id (anchor button#returns-info): 21 signals across 8 sessions; symptoms dead_click x21; first seen 2026-10-17T20:07:03.948Z, last seen 2026-10-17T20:11:00.290Z.",
+   "data": {
+    "kind": "element",
+    "route": "/product/:id",
+    "anchor": "button#returns-info",
+    "signals": 21,
+    "sessions": 8,
+    "symptom_dead_click": 21
+   }
+  },
+  {
+   "id": "E2",
+   "kind": "signal",
+   "text": "Dead click on button#returns-info: no response within 800 ms (route /product/:id, release demo-shop@local).",
+   "signal_id": "99c968a95d6beae3a56bd9be0c8801e2",
+   "session_id": "s_quheul5bajmmf6axczy7",
+   "detector": "dead_click",
+   "at": 1792267860290,
+   "data": {
+    "detector": "dead_click",
+    "selector": "button#returns-info",
+    "route": "/product/:id",
+    "detector_version": "1.3.0",
+    "release": "demo-shop@local",
+    "window_ms": 800
+   }
+  },
+  {
+   "id": "E3",
+   "kind": "signal",
+   "text": "Dead click on button#returns-info: no response within 800 ms (route /product/:id, release demo-shop@local).",
+   "signal_id": "5803d69c51d8636d3cf5456fbcf06229",
+   "session_id": "s_utrhejt62mz8q1dpi26f",
+   "detector": "dead_click",
+   "at": 1792267843311,
+   "data": {
+    "detector": "dead_click",
+    "selector": "button#returns-info",
+    "route": "/product/:id",
+    "detector_version": "1.3.0",
+    "release": "demo-shop@local",
+    "window_ms": 800
+   }
+  },
+  {
+   "id": "E4",
+   "kind": "signal",
+   "text": "Dead click on button#returns-info: no response within 800 ms (route /product/:id, release demo-shop@local).",
+   "signal_id": "c0bd8e21fac4098ae56bb1acc919f93f",
+   "session_id": "s_wcudz55k187ko1l172wt",
+   "detector": "dead_click",
+   "at": 1792267749778,
+   "data": {
+    "detector": "dead_click",
+    "selector": "button#returns-info",
+    "route": "/product/:id",
+    "detector_version": "1.3.0",
+    "release": "demo-shop@local",
+    "window_ms": 800
+   }
+  },
+  {
+   "id": "E5",
+   "kind": "signal",
+   "text": "Dead click on button#returns-info: no response within 800 ms (route /product/:id, release demo-shop@local).",
+   "signal_id": "6ec1e2669e240060853221804582fabc",
+   "session_id": "s_oeihsvxgfxpxbnnlwi4t",
+   "detector": "dead_click",
+   "at": 1792267744423,
+   "data": {
+    "detector": "dead_click",
+    "selector": "button#returns-info",
+    "route": "/product/:id",
+    "detector_version": "1.3.0",
+    "release": "demo-shop@local",
+    "window_ms": 800
+   }
+  },
+  {
+   "id": "E6",
+   "kind": "signal",
+   "text": "Dead click on button#returns-info: no response within 800 ms (route /product/:id, release demo-shop@local).",
+   "signal_id": "68b9d895760c61dd00b374789df438ba",
+   "session_id": "s_u76qxp3votsruexx0ggb",
+   "detector": "dead_click",
+   "at": 1792267719476,
+   "data": {
+    "detector": "dead_click",
+    "selector": "button#returns-info",
+    "route": "/product/:id",
+    "detector_version": "1.3.0",
+    "release": "demo-shop@local",
+    "window_ms": 800
+   }
+  },
+  {
+   "id": "E7",
+   "kind": "release",
+   "text": "Signals by release: demo-shop@local (21). The issue first appeared right after this release went out.",
+   "data": {
+    "releases": 1,
+    "regression": true,
+    "release_1": "demo-shop@local:21"
+   }
+  },
+  {
+   "id": "E8",
+   "kind": "impact",
+   "text": "Synthetic demo data. 3 of 6 affected sessions with a cart abandoned (50%) versus 57% of baseline sessions (route baseline); average cart ₹13,056.25; estimated revenue at risk ₹0.00.",
+   "data": {
+    "status": "ok",
+    "affected_with_cart": 8,
+    "abandonment_affected": 0.5,
+    "abandonment_baseline": 0.5652200000000001,
+    "avg_cart_value_minor": 1305625,
+    "revenue_at_risk_minor": 0,
+    "currency": "INR"
+   }
+  }
+ ],
+ "base_tier": "P3",
+ "base_rule_ids": [
+  "browse_friction",
+  "release_regression"
+ ],
+ "revenue": {
+  "currency": "INR",
+  "affected_with_cart": 12,
+  "affected_decided": 12,
+  "affected_abandoned": 8,
+  "abandonment_affected": 0.66667,
+  "baseline_decided": 25,
+  "baseline_abandoned": 7,
+  "abandonment_baseline": 0.28,
+  "baseline_scope": "route",
+  "avg_cart_value_minor": 1422708,
+  "pending": 0,
+  "revenue_at_risk_minor": 6601365,
+  "status": "ok",
+  "note": null
+ },
+ "affected_sessions": 12,
+ "expect": {
+  "cause": [
+   [
+    "returns"
+   ]
+  ],
+  "categories": [
+   "broken_control"
+  ],
+  "where": [
+   "returns"
+  ]
+ }
+}

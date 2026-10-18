@@ -1,0 +1,201 @@
+{
+ "v": 1,
+ "id": "checkout_error",
+ "bug": "checkout_error",
+ "evidence": [
+  {
+   "id": "E1",
+   "kind": "issue",
+   "text": "Element issue \"Failing button#place-order on /checkout\" on /checkout (anchor button#place-order): 75 signals across 17 sessions; symptoms error_correlation x75; first seen 2026-10-17T20:05:56.228Z, last seen 2026-10-17T20:15:06.248Z.",
+   "data": {
+    "kind": "element",
+    "route": "/checkout",
+    "anchor": "button#place-order",
+    "signals": 75,
+    "sessions": 17,
+    "symptom_error_correlation": 75
+   }
+  },
+  {
+   "id": "E2",
+   "kind": "signal",
+   "text": "HTTP 500 POST /api/checkout right after pressing button#place-order (route /checkout, release demo-shop@local).",
+   "signal_id": "d4873968c908efe44dd45c0da0bf6adb",
+   "session_id": "s_z4vscci4bwi5nxbho5sh",
+   "detector": "error_correlation",
+   "at": 1792268106248,
+   "data": {
+    "detector": "error_correlation",
+    "selector": "button#place-order",
+    "route": "/checkout",
+    "detector_version": "1.1.0",
+    "release": "demo-shop@local",
+    "error_kind": "http",
+    "error_signature": "HTTP 500 POST /api/checkout",
+    "lead_ms": 625,
+    "standalone": true,
+    "status": 500
+   }
+  },
+  {
+   "id": "E3",
+   "kind": "signal",
+   "text": "HTTP 500 POST /api/checkout right after pressing button#place-order (route /checkout, release demo-shop@local).",
+   "signal_id": "997546824ce8192f415560dde8ebe739",
+   "session_id": "s_zfd1l8246d1dyjqz7p84",
+   "detector": "error_correlation",
+   "at": 1792268079515,
+   "data": {
+    "detector": "error_correlation",
+    "selector": "button#place-order",
+    "route": "/checkout",
+    "detector_version": "1.1.0",
+    "release": "demo-shop@local",
+    "error_kind": "http",
+    "error_signature": "HTTP 500 POST /api/checkout",
+    "lead_ms": 623,
+    "standalone": true,
+    "status": 500
+   }
+  },
+  {
+   "id": "E4",
+   "kind": "signal",
+   "text": "HTTP 500 POST /api/checkout right after pressing button#place-order (route /checkout, release demo-shop@local).",
+   "signal_id": "98be02c22817c51f73af3c7fdd37f080",
+   "session_id": "s_qzkgyvzn3yh6z046ep0n",
+   "detector": "error_correlation",
+   "at": 1792268049872,
+   "data": {
+    "detector": "error_correlation",
+    "selector": "button#place-order",
+    "route": "/checkout",
+    "detector_version": "1.1.0",
+    "release": "demo-shop@local",
+    "error_kind": "http",
+    "error_signature": "HTTP 500 POST /api/checkout",
+    "lead_ms": 637,
+    "standalone": true,
+    "status": 500
+   }
+  },
+  {
+   "id": "E5",
+   "kind": "signal",
+   "text": "HTTP 500 POST /api/checkout right after pressing button#place-order (route /checkout, release demo-shop@local).",
+   "signal_id": "58a184a51e426b24fa52ab4ab4951815",
+   "session_id": "s_nrmht3gp1wne9d4ln4ph",
+   "detector": "error_correlation",
+   "at": 1792268038666,
+   "data": {
+    "detector": "error_correlation",
+    "selector": "button#place-order",
+    "route": "/checkout",
+    "detector_version": "1.1.0",
+    "release": "demo-shop@local",
+    "error_kind": "http",
+    "error_signature": "HTTP 500 POST /api/checkout",
+    "lead_ms": 634,
+    "standalone": true,
+    "status": 500
+   }
+  },
+  {
+   "id": "E6",
+   "kind": "signal",
+   "text": "HTTP 500 POST /api/checkout right after pressing button#place-order (route /checkout, release demo-shop@local).",
+   "signal_id": "dd08c98f2ae3397e2bef1795bade3ef9",
+   "session_id": "s_z0cy2zzu1rbbma9nf8hx",
+   "detector": "error_correlation",
+   "at": 1792268013713,
+   "data": {
+    "detector": "error_correlation",
+    "selector": "button#place-order",
+    "route": "/checkout",
+    "detector_version": "1.1.0",
+    "release": "demo-shop@local",
+    "error_kind": "http",
+    "error_signature": "HTTP 500 POST /api/checkout",
+    "lead_ms": 630,
+    "standalone": true,
+    "status": 500
+   }
+  },
+  {
+   "id": "E7",
+   "kind": "error",
+   "text": "Error \"HTTP 500 POST /api/checkout\" was seen within 2 s before a symptom, 75 times.",
+   "data": {
+    "signature": "HTTP 500 POST /api/checkout",
+    "count": 75
+   }
+  },
+  {
+   "id": "E8",
+   "kind": "release",
+   "text": "Signals by release: demo-shop@local (75). The issue first appeared right after this release went out.",
+   "data": {
+    "releases": 1,
+    "regression": true,
+    "release_1": "demo-shop@local:75"
+   }
+  },
+  {
+   "id": "E9",
+   "kind": "impact",
+   "text": "Synthetic demo data. 13 of 13 affected sessions with a cart abandoned (100%) versus 19% of baseline sessions (route baseline); average cart ₹16,505.74; estimated revenue at risk ₹2,27,985.53.",
+   "data": {
+    "status": "ok",
+    "affected_with_cart": 17,
+    "abandonment_affected": 1,
+    "abandonment_baseline": 0.1875,
+    "avg_cart_value_minor": 1650574,
+    "revenue_at_risk_minor": 22798553,
+    "currency": "INR"
+   }
+  }
+ ],
+ "base_tier": "P0",
+ "base_rule_ids": [
+  "checkout_blocker",
+  "checkout_friction",
+  "browse_friction",
+  "release_regression"
+ ],
+ "revenue": {
+  "currency": "INR",
+  "affected_with_cart": 17,
+  "affected_decided": 17,
+  "affected_abandoned": 16,
+  "abandonment_affected": 0.9411799999999999,
+  "baseline_decided": 54,
+  "baseline_abandoned": 8,
+  "abandonment_baseline": 0.14815,
+  "baseline_scope": "route",
+  "avg_cart_value_minor": 1650574,
+  "pending": 0,
+  "revenue_at_risk_minor": 22252183,
+  "status": "ok",
+  "note": null
+ },
+ "affected_sessions": 17,
+ "expect": {
+  "cause": [
+   [
+    "500",
+    "server error",
+    "failed",
+    "error"
+   ]
+  ],
+  "categories": [
+   "checkout_blocker",
+   "error_spike"
+  ],
+  "where": [
+   "checkout",
+   "payment",
+   "order"
+  ]
+ }
+}
