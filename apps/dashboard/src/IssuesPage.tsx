@@ -13,6 +13,7 @@ import { fetchClusters, fetchFindings, type ClusterSummary } from './api';
 import { AnimatedNumber, FoundLaterBadge, NeedsReviewBadge, PageHeader, PendingTierBadge, SymptomChip, TierBadge } from './components/common';
 import { ago, isResolved, money, pct, plain, TIER_NAMES } from './format';
 import { rankIssues } from './lib/issues';
+import { keep, peek } from './lib/swr';
 
 const REFRESH_MS = 3000;
 const ALL = 'all';
@@ -79,8 +80,8 @@ function FixFirst({ cluster: c, finding: f }: { cluster: ClusterSummary; finding
  * gains signals. Detail (selectors, errors, evidence) lives on each issue's page.
  */
 export function IssuesPage() {
-  const [clusters, setClusters] = useState<ClusterSummary[] | null>(null);
-  const [findings, setFindings] = useState<FindingSummary[]>([]);
+  const [clusters, setClusters] = useState<ClusterSummary[] | null>(() => peek<ClusterSummary[]>('dash:clusters') ?? null);
+  const [findings, setFindings] = useState<FindingSummary[]>(() => peek<FindingSummary[]>('dash:findings') ?? []);
   const [error, setError] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const [bumped, setBumped] = useState<Set<string>>(new Set());
@@ -101,8 +102,8 @@ export function IssuesPage() {
             if (prev !== undefined && prev !== c.signal_count) changed.add(c.cluster_id);
             lastCounts.current.set(c.cluster_id, c.signal_count);
           }
-          setClusters(r.clusters);
-          setFindings(f.findings);
+          setClusters(keep('dash:clusters', r.clusters));
+          setFindings(keep('dash:findings', f.findings));
           setBumped(changed);
           setUpdatedAt(Date.now());
           setError(null);
@@ -241,7 +242,7 @@ export function IssuesPage() {
                       {c.route}
                       {c.kind === 'invariant' && (
                         <Badge variant="outline" className="ml-2 h-4 border-0 bg-agent-muted px-1.5 text-[10px] text-agent">
-                          Data rule
+                          Wrong number
                         </Badge>
                       )}
                     </span>

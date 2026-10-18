@@ -1,113 +1,12 @@
 import { useEffect, useState } from 'react';
 import { DetectiveIcon, UserIcon } from '@phosphor-icons/react';
-import { Area, AreaChart, CartesianGrid, ReferenceLine, XAxis, YAxis } from 'recharts';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
-import { ChartContainer, ChartLegend, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { fetchClusters, fetchRules, type ClusterSummary, type RuleView } from './api';
-import { ago, money, moneyCompact } from './format';
+import { ago, money } from './format';
 import { useRevenueSeries } from './lib/useRevenueSeries';
 import { liveOrigin } from './lib/rules';
-
-/**
- * The categorical order for stacked issues (dataviz reference palette, slots 1-6, validated for this chart's surfaces:
- * light on #ffffff, dark on slate-900; adjacent CVD and normal-vision gates pass). The sixth slot is "Other".
- */
-const SERIES_LIGHT = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300'];
-const SERIES_DARK = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300'];
-
-const clock = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-/**
- * Revenue at risk over time, stacked by issue, from the findings record: it climbs as shoppers hit problems and as
- * re-scans find past ones, and drops when an issue is marked fixed. Violet lines are rule approvals, green lines fixes,
- * the dark line is the moment below; clicking the chart moves that moment.
- */
-export function RevenueTimeline({ asOf, onPick }: { asOf: number | null; onPick: (t: number) => void }) {
-  const { data, error } = useRevenueSeries();
-  if (!data) return <Skeleton className="h-72 rounded-xl" aria-label={error ? `Could not load the history (${error})` : 'Loading the history'} />;
-  const currency = data.findings[0]?.revenue.currency ?? 'INR';
-  const config: ChartConfig = Object.fromEntries(
-    data.keys.map((k, i) => {
-      const slot = k.key === 'other' ? 5 : Math.min(i, 4);
-      return [k.key, { label: k.label, theme: { light: SERIES_LIGHT[slot]!, dark: SERIES_DARK[slot]! } }];
-    }),
-  );
-  const approvals = data.moments.filter((m) => m.kind === 'rule_approved');
-  return (
-    <Card className="gap-2 px-5">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="m-0 text-base font-semibold">Revenue at risk over time</h2>
-        <span className="text-xs text-muted-foreground">Click the chart to see what was known at that moment.</span>
-      </div>
-      {data.keys.length === 0 ? (
-        <p className="m-0 text-sm text-muted-foreground">No revenue estimates on record yet.</p>
-      ) : (
-        <ChartContainer config={config} className="aspect-auto h-72 w-full">
-          <AreaChart
-            data={data.points}
-            margin={{ top: 8, right: 8, left: 4, bottom: 0 }}
-            onClick={(s: { activeLabel?: string | number } | null) => {
-              const t = Number(s?.activeLabel);
-              if (Number.isFinite(t)) onPick(t);
-            }}
-          >
-            <CartesianGrid vertical={false} />
-            <XAxis dataKey="t" type="number" domain={[data.from, data.to]} scale="time" tickFormatter={clock} tickLine={false} axisLine={false} minTickGap={48} />
-            <YAxis tickFormatter={(v: number) => moneyCompact(v, currency)} tickLine={false} axisLine={false} width={56} />
-            <ChartTooltip
-              cursor={{ strokeWidth: 1 }}
-              content={<ChartTooltipContent indicator="line" labelFormatter={(_, p) => clock(Number(p?.[0]?.payload?.t ?? 0))} formatter={(v, name) => (
-                <span className="flex w-full items-center justify-between gap-3">
-                  <span className="max-w-56 truncate text-muted-foreground">{config[String(name)]?.label}</span>
-                  <b className="font-semibold tabular-nums">{money(Number(v), currency)}</b>
-                </span>
-              )} />}
-            />
-            {/* The areas' stroke is the 2px surface gap, so the legend keys each series by its fill instead. */}
-            <ChartLegend
-              content={() => (
-                <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 pt-3 text-xs text-muted-foreground">
-                  {data.keys.map((k) => (
-                    <span key={k.key} className="flex items-center gap-1.5">
-                      <span aria-hidden="true" className="size-2.5 shrink-0 rounded-[2px]" style={{ background: `var(--color-${k.key})` }} />
-                      {k.label}
-                    </span>
-                  ))}
-                </div>
-              )}
-            />
-            {data.keys.map((k) => (
-              <Area key={k.key} dataKey={k.key} stackId="revenue" type="stepAfter" stroke="var(--card)" strokeWidth={2} fill={`var(--color-${k.key})`} fillOpacity={0.85} isAnimationActive />
-            ))}
-            {approvals.map((m) => (
-              <ReferenceLine key={`a-${m.at}`} x={m.at} stroke="var(--agent-strong)" strokeWidth={1.5} ifOverflow="discard" />
-            ))}
-            {data.fixes.map((f) => (
-              <ReferenceLine key={`f-${f.id}`} x={f.at} stroke="var(--success-solid)" strokeWidth={1.5} ifOverflow="discard" />
-            ))}
-            {asOf !== null && <ReferenceLine x={asOf} stroke="var(--foreground)" strokeWidth={1} ifOverflow="discard" />}
-          </AreaChart>
-        </ChartContainer>
-      )}
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1.5">
-          <span aria-hidden="true" className="h-0.5 w-4 rounded-full bg-agent-strong" />A rule was approved ({approvals.length})
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span aria-hidden="true" className="h-0.5 w-4 rounded-full bg-success-solid" />
-          An issue was marked fixed ({data.fixes.length})
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span aria-hidden="true" className="h-0.5 w-4 rounded-full bg-foreground" />
-          The moment below
-        </span>
-      </div>
-    </Card>
-  );
-}
 
 /**
  * What each rule did, rule by rule: who proposed it, when it went live, how many past shoppers its re-scan found, and

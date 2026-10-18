@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { ArrowUpRightIcon } from '@phosphor-icons/react';
+import { buttonVariants } from '@/components/ui/button';
 import { Toaster } from '@/components/ui/sonner';
+import { cn } from '@/lib/utils';
 import { AgentInbox } from './AgentInbox';
 import { DashboardPage } from './DashboardPage';
 import { HistoryPage } from './HistoryPage';
@@ -21,21 +23,10 @@ const TABS: { id: Tab; href: string; label: string }[] = [
   { id: 'issues', href: '#/issues', label: 'Issues' },
   { id: 'rules', href: '#/rules', label: 'Rules' },
   { id: 'history', href: '#/history', label: 'Time travel' },
-  { id: 'signals', href: '#/signals', label: 'Signals' },
+  { id: 'signals', href: '#/signals', label: 'Raw alerts' },
 ];
 
 const tabOf = (route: Route): Tab => (route.page === 'issue' || route.page === 'replay' ? 'issues' : route.page);
-
-/** The mark: a revenue line that dips and recovers, on the top bar's raised navy. */
-function BrandMark() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 28 28" className="size-7 shrink-0">
-      <rect x="0.5" y="0.5" width="27" height="27" rx="6.5" fill="var(--topbar-active)" stroke="rgb(255 255 255 / 0.1)" />
-      <path d="M6.5 10 11 15.5l3-3 7.5 7" fill="none" stroke="var(--topbar-foreground)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="11" cy="15.5" r="2" fill="var(--destructive)" />
-    </svg>
-  );
-}
 
 export function App() {
   const [route, setRoute] = useState(() => parseRoute(window.location.hash));
@@ -58,41 +49,31 @@ export function App() {
       >
         Skip to content
       </a>
-      <header className="sticky top-0 z-40 bg-topbar text-topbar-foreground shadow-[0_1px_0_0_rgb(0_0_0/0.08),0_6px_16px_-10px_rgb(0_0_0/0.35)]">
-        <div className="mx-auto flex h-14 max-w-[1320px] items-center gap-8 px-6">
-          <a href="#/" className="flex items-center gap-2.5 text-topbar-foreground no-underline">
-            <BrandMark />
-            <span className="text-[16px] leading-none font-semibold tracking-[-0.01em]">Churn Preventer</span>
+      <header className="sticky top-0 z-40 bg-topbar text-topbar-foreground">
+        <div className="mx-auto flex max-w-[1320px] flex-wrap items-center gap-x-8 gap-y-1 px-6 py-2.5 md:h-16 md:flex-nowrap md:py-0">
+          <a href="#/" className="text-[17px] font-semibold tracking-[-0.02em] whitespace-nowrap text-topbar-foreground no-underline">
+            Churn Preventer
           </a>
-          <nav aria-label="Main" className="flex h-full items-stretch gap-6">
+          <nav aria-label="Main" className="order-last -mx-2 flex w-[calc(100%+1rem)] gap-1 overflow-x-auto md:order-none md:mx-0 md:w-auto">
             {TABS.map((t) => (
               <a
                 key={t.id}
                 href={t.href}
                 aria-current={tab === t.id ? 'page' : undefined}
-                className="relative flex items-center text-[13.5px] font-medium text-topbar-muted no-underline transition-colors duration-200 hover:text-topbar-foreground aria-[current=page]:text-topbar-foreground"
+                className="rounded-md px-3 py-1.5 text-[14px] font-medium whitespace-nowrap text-topbar-muted no-underline transition-colors duration-200 hover:text-topbar-foreground aria-[current=page]:bg-topbar-active aria-[current=page]:text-topbar-foreground"
               >
                 {t.label}
-                {tab === t.id && <span aria-hidden="true" className="motion-grow absolute inset-x-0 bottom-0 h-[2px] rounded-full bg-primary" />}
               </a>
             ))}
           </nav>
-          <div className="ml-auto flex items-center gap-3">
-            <a
-              href={SHOP_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="group/shop flex items-center gap-1 text-[13.5px] font-medium text-topbar-foreground no-underline"
-            >
-              Demo shop
-              <ArrowUpRightIcon aria-hidden="true" className="size-3.5 text-topbar-muted transition-transform duration-200 ease-out-expo group-hover/shop:translate-x-0.5 group-hover/shop:-translate-y-0.5" />
+          <div className="ml-auto flex items-center gap-1.5">
+            <ThemeToggle />
+            <AgentInbox />
+            <a href={SHOP_URL} target="_blank" rel="noopener noreferrer" className={cn(buttonVariants(), 'ml-1.5 gap-1.5 no-underline')}>
+              Open the shoe store
+              <ArrowUpRightIcon data-icon="inline-end" aria-hidden="true" />
               <span className="sr-only">(opens in a new tab)</span>
             </a>
-            <span aria-hidden="true" className="h-5 w-px bg-white/15" />
-            <div className="flex items-center gap-0.5">
-              <ThemeToggle />
-              <AgentInbox />
-            </div>
           </div>
         </div>
       </header>

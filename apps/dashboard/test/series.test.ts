@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ClusterSummary, SignalRowView } from '../src/api';
-import { revenueAt, revenueSeries, withCurrent, type SeriesItem } from '../src/lib/series';
+import { duration } from '../src/format';
+import { buildLanes, changeMoments, focusWindow, revenueAt, revenueSeries, trendOf, withCurrent, type SeriesItem } from '../src/lib/series';
 import { groupSignals } from '../src/lib/signals';
 
 /** Dashboard charts and grouping. All numbers are synthetic. */
@@ -87,3 +88,61 @@ describe('signals grouped by issue', () => {
     ]);
   });
 });
+
+describe('trend and detection lanes', () => {
+  const issue = (versions: [number, number | null, number][]) => item('t', versions);
+
+  it('calls an issue worse, better or steady against a moment ago', () => {
+    const rising = issue([
+      [0, 500, 1_000],
+      [500, null, 4_000],
+    ]);
+    expect(trendOf(rising, 1_000, 600)).toEqual({ now: 4_000, before: 1_000, direction: 'up' });
+    const fixed = item('f', [[0, null, 5_000]], 800);
+    expect(trendOf(fixed, 1_000, 400).direction).toBe('down');
+    expect(trendOf(issue([[0, null, 2_000]]), 1_000, 400).direction).toBe('flat');
+  });
+
+  it('counts a brand-new issue as getting worse', () => {
+    expect(trendOf(issue([[900, null, 700]]), 1_000, 400).direction).toBe('up');
+  });
+
+  it('measures the time shoppers were hurt before the record knew, never negative, biggest money first', () => {
+    const lanes = buildLanes([
+      { id: 'a', title: 'A', firstHit: 100, firstKnown: 700, fixedAt: null, revenueMinor: 1_000 },
+      { id: 'b', title: 'B', firstHit: 900, firstKnown: 800, fixedAt: 950, revenueMinor: 9_000 },
+    ]);
+    expect(lanes.map((l) => l.id)).toEqual(['b', 'a']);
+    expect(lanes[0]).toMatchObject({ firstHit: 800, blindMs: 0 });
+    expect(lanes[1]).toMatchObject({ firstHit: 100, blindMs: 600 });
+  });
+});
+
+describe('duration in words', () => {
+  it('reads naturally', () => {
+    expect(duration(40_000)).toBe('40 s');
+    expect(duration(12 * 60_000)).toBe('12 min');
+    expect(duration(190 * 60_000)).toBe('3 h 10 min');
+    expect(duration(2 * 86_400_000)).toBe('2 days');
+  });
+});
+
+describe('chart moments', () => {
+  it('keeps one point per change, inside the window, merged within a second', () => {
+    const a = item('a', [
+      [10_000, 50_000, 100],
+      [50_000, null, 300],
+    ]);
+    const b = item('b', [[54_000, null, 50]], 90_000);
+    expect(changeMoments([a, b], [70_000, 54_300], 0, 100_000)).toEqual([0, 10_000, 50_000, 54_000, 70_000, 90_000, 100_000]);
+    expect(changeMoments([], [], 0, 100_000)).toEqual([0, 100_000]);
+  });
+
+  it('zooms on the stretch where things happened, with room after the last event', () => {
+    const w = focusWindow(1_000_000, 1_600_000, 90_000_000);
+    expect(w.from).toBeLessThan(1_000_000);
+    expect(w.to).toBeGreaterThan(1_600_000);
+    expect(w.to).toBeLessThan(2_200_000);
+  });
+});
+

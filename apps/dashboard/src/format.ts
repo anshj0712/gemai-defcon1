@@ -2,10 +2,10 @@ import { FLAG_COLORS } from './markers';
 
 /** Plain-language names for detectors, shown as symptom chips. */
 export const SYMPTOMS: Record<string, string> = {
-  dead_click: 'Dead clicks',
-  rage_click: 'Rage clicks',
-  response_decay: 'Stopped responding',
-  invariant_check: 'Wrong totals',
+  dead_click: 'Clicks that did nothing',
+  rage_click: 'Angry repeat clicks',
+  response_decay: 'Slow or stuck',
+  invariant_check: 'Wrong numbers',
   error_correlation: 'Errors',
 };
 
@@ -37,13 +37,13 @@ export function money(minor: number | null | undefined, currency: string | null 
 export const pct = (x: number | null | undefined) => (typeof x === 'number' ? `${Math.round(x * 100)}%` : '-');
 
 export const TIER_COLORS: Record<string, string> = { P0: '#dc2626', P1: '#ea580c', P2: '#ca8a04', P3: '#64748b' };
-export const TIER_NAMES: Record<string, string> = { P0: 'P0 · blocker', P1: 'P1 · pricing', P2: 'P2 · friction', P3: 'P3 · minor' };
+export const TIER_NAMES: Record<string, string> = { P0: 'P0 · urgent', P1: 'P1 · high', P2: 'P2 · medium', P3: 'P3 · low' };
 export const tierColor = (t: string) => TIER_COLORS[t] ?? '#64748b';
 
 export const CATEGORY_NAMES: Record<string, string> = {
   checkout_blocker: 'Checkout blocker',
   pricing_error: 'Pricing error',
-  broken_control: 'Broken control',
+  broken_control: 'Broken button',
   error_spike: 'Error spike',
   other: 'Other',
 };
@@ -77,4 +77,16 @@ export function moneyCompact(minor: number | null | undefined, currency: string 
   const code = currency && /^[A-Z]{3}$/.test(currency) ? currency : undefined;
   const opts: Intl.NumberFormatOptions = code ? { style: 'currency', currency: code, notation: 'compact', maximumFractionDigits: 1 } : { notation: 'compact', maximumFractionDigits: 1 };
   return new Intl.NumberFormat('en-IN', opts).format(minor / 100);
+}
+
+/** A length of time in words: "40 s", "12 min", "3 h 10 min", "2 days". */
+export function duration(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000));
+  if (s < 60) return `${s} s`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return m % 60 ? `${h} h ${m % 60} min` : `${h} h`;
+  const d = Math.round(h / 24);
+  return `${d} day${d === 1 ? '' : 's'}`;
 }

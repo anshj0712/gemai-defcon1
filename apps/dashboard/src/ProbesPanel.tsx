@@ -189,7 +189,7 @@ export function ProbesPanel({ onChanged }: { onChanged?: () => void }) {
   if (loadError && !view) {
     return (
       <Alert variant="destructive">
-        <AlertDescription>Could not load probes ({loadError}).</AlertDescription>
+        <AlertDescription>Could not load tracked numbers ({loadError}).</AlertDescription>
       </Alert>
     );
   }
@@ -228,11 +228,11 @@ export function ProbesPanel({ onChanged }: { onChanged?: () => void }) {
         icon={UserIcon}
         title="Added by you"
         count={own.rows.length + own.idle.length}
-        description="Numbers you pointed at on a page by a selector."
+        description="Numbers on your pages that you chose to track."
         action={
           <Button size="sm" variant={adding ? 'outline' : 'default'} onClick={() => setAdding(!adding)} aria-expanded={adding}>
             {adding ? <XIcon data-icon="inline-start" aria-hidden="true" /> : <PlusIcon data-icon="inline-start" aria-hidden="true" />}
-            {adding ? 'Close' : 'Add a probe'}
+            {adding ? 'Close' : 'Track a number'}
           </Button>
         }
       >
@@ -251,7 +251,7 @@ export function ProbesPanel({ onChanged }: { onChanged?: () => void }) {
                 <Input id="probe-name" value={spec.name} onChange={(e) => edit({ name: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })} placeholder="delivery_fee" maxLength={64} />
               </Field>
               <Field>
-                <FieldLabel htmlFor="probe-selector">CSS selector</FieldLabel>
+                <FieldLabel htmlFor="probe-selector">Where on the page (CSS selector)</FieldLabel>
                 <Input id="probe-selector" className="font-mono" value={spec.selector} onChange={(e) => edit({ selector: e.target.value })} placeholder="#delivery-fee" maxLength={200} />
               </Field>
               <Field>
@@ -316,7 +316,7 @@ export function ProbesPanel({ onChanged }: { onChanged?: () => void }) {
                   })
                 }
               >
-                {busy === 'save' ? 'Saving…' : 'Save probe'}
+                {busy === 'save' ? 'Saving…' : 'Save'}
               </Button>
             </div>
             {preview && <PreviewBlock p={preview.p} spec={preview.spec} />}

@@ -5,6 +5,7 @@ import { init, type CpClient } from '@cp/sdk';
 import { BRAND, CATEGORIES, PRODUCTS, SIZES, money, productById, shoeSvg, type Product } from './catalog';
 import { isBug, pickSessionBugs, type Bug } from './bugs';
 import { icons } from './icons';
+import { CHECKERS, FIELD_ORDER, formatAsTyped, problems, type CheckoutField } from './validation';
 
 /**
  * STRIDE: a synthetic store for exercising the pipeline (all data is made up). Thirteen bugs, one or more per
@@ -458,7 +459,30 @@ async function applyCoupon(): Promise<void> {
 }
 
 const field = (id: string, label: string, attrs = '') =>
-  `<div class="field"><input id="${id}" name="${id}" placeholder=" " ${attrs} /><label for="${id}">${label}</label></div>`;
+  `<div class="field"><input id="${id}" name="${id}" placeholder=" " ${attrs} aria-describedby="${id}-error" /><label for="${id}">${label}</label><span class="field-error" id="${id}-error" role="alert"></span></div>`;
+
+const isCheckoutField = (id: string): id is CheckoutField => (FIELD_ORDER as readonly string[]).includes(id);
+
+/** Show or clear one field's message under it. */
+function showFieldError(id: CheckoutField, message: string | null): void {
+  const input = document.getElementById(id) as HTMLInputElement | null;
+  const box = document.getElementById(`${id}-error`);
+  if (!input || !box) return;
+  box.textContent = message ?? '';
+  input.toggleAttribute('aria-invalid', message !== null);
+  input.closest('.field')?.classList.toggle('has-error', message !== null);
+}
+
+/** Check the whole form. On a problem, every bad field says why and the first one gets the cursor. */
+function validateCheckout(): boolean {
+  const values = Object.fromEntries(FIELD_ORDER.map((id) => [id, (document.getElementById(id) as HTMLInputElement | null)?.value ?? ''])) as Record<CheckoutField, string>;
+  const found = problems(values);
+  for (const id of FIELD_ORDER) showFieldError(id, found.find((p) => p.field === id)?.message ?? null);
+  if (found.length === 0) return true;
+  (document.getElementById(found[0]!.field) as HTMLInputElement | null)?.focus();
+  document.getElementById('checkout-error')!.textContent = `Please fix ${found.length === 1 ? 'the highlighted field' : `the ${found.length} highlighted fields`} to continue.`;
+  return false;
+}
 
 function renderCheckout(): void {
   if (state.bag.length === 0) return navigate('/cart');
@@ -472,7 +496,7 @@ function renderCheckout(): void {
         <h2 class="section-title">Delivery</h2>
         ${field('name', 'Full name', 'autocomplete="name"')}
         ${field('email', 'Email', 'type="email" autocomplete="email"')}
-        ${field('phone', 'Phone number', 'type="tel" autocomplete="tel"')}
+        ${field('phone', 'Phone number', 'type="tel" autocomplete="tel" inputmode="tel" maxlength="18"')}
         <div class="field">
           <select id="region" name="region"><option>North</option><option>South</option><option>East</option><option>West</option><option>Northeast</option></select>
           <label for="region">Region</label>
@@ -480,9 +504,9 @@ function renderCheckout(): void {
         <div class="full">${field('address', 'Address', 'autocomplete="street-address"')}</div>
         <h2 class="section-title">Payment</h2>
         <div class="payment" data-cp-block>
-          ${field('card', 'Card number', 'name="cardnumber" autocomplete="cc-number" inputmode="numeric"')}
-          ${field('exp', 'MM/YY', 'autocomplete="cc-exp"')}
-          ${field('cvv', 'CVV', 'autocomplete="cc-csc"')}
+          ${field('card', 'Card number', 'name="cardnumber" autocomplete="cc-number" inputmode="numeric" maxlength="23"')}
+          ${field('exp', 'MM/YY', 'autocomplete="cc-exp" inputmode="numeric" maxlength="5"')}
+          ${field('cvv', 'CVV (3 or 4 digits)', 'autocomplete="cc-csc" inputmode="numeric" maxlength="4"')}
         </div>
         <p class="error-box" id="checkout-error"></p>
         <button id="retry-card" type="button" class="pill outline block" hidden>Use another card</button>
@@ -788,7 +812,23 @@ document.addEventListener('submit', (e) => {
   const form = e.target as HTMLFormElement;
   if (form.id !== 'checkout-form') return;
   e.preventDefault();
+  if (!validateCheckout()) return;
   void placeOrder(form);
+});
+
+// Checkout fields: numbers-only where numbers belong (card in groups of four, expiry with its slash), a message when
+// a field is left wrong, and the message goes as soon as it is fixed.
+document.addEventListener('input', (e) => {
+  const el = e.target as HTMLInputElement;
+  if (!el.closest?.('#checkout-form') || !isCheckoutField(el.id)) return;
+  const shaped = formatAsTyped(el.id, el.value);
+  if (shaped !== el.value) el.value = shaped;
+  if (el.hasAttribute('aria-invalid') && CHECKERS[el.id](el.value) === null) showFieldError(el.id, null);
+});
+document.addEventListener('focusout', (e) => {
+  const el = e.target as HTMLInputElement;
+  if (!el.closest?.('#checkout-form') || !isCheckoutField(el.id) || el.value === '') return;
+  showFieldError(el.id, CHECKERS[el.id](el.value));
 });
 
 document.addEventListener('change', (e) => {

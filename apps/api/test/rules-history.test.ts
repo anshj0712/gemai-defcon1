@@ -176,6 +176,24 @@ describe('time travel', () => {
     expect(body.moments).toEqual([expect.objectContaining({ kind: 'rule_approved', at: approvedAt })]);
   });
 
+  it('answers the revenue charts in one call: each finding with its first hit, first known and versions', async () => {
+    await warehouse.insert('findings', [
+      { insertId: 't1', row: row('x', T0 + 600_000, { revenue_at_risk_minor: 10_000, valid_from: T0 + 300_000 }) },
+      { insertId: 't2', row: row('x', T0 + 900_000, { revenue_at_risk_minor: 40_000, valid_from: T0 + 300_000 }) },
+      { insertId: 't3', row: row('y', T0 + 700_000, { valid_from: T0 + 650_000 }) },
+    ]);
+    const res = await api().inject({ url: '/v1/history/timeline' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { findings: { finding_id: string; first_hit: number; first_known: number; versions: { revenue_at_risk_minor: number; recorded_to: number | null }[] }[] };
+    const x = body.findings.find((f) => f.finding_id === 'x')!;
+    expect(x.first_hit).toBe(T0 + 300_000);
+    expect(x.first_known).toBe(T0 + 600_000);
+    expect(x.versions.map((v) => v.revenue_at_risk_minor)).toEqual([10_000, 40_000]);
+    expect(x.versions[0]?.recorded_to).toBe(T0 + 900_000);
+    expect(x.versions[1]?.recorded_to).toBeNull();
+    expect(body.findings.map((f) => f.finding_id).sort()).toEqual(['x', 'y']);
+  });
+
   it('rejects an empty window', async () => {
     expect((await api().inject({ url: `/v1/history?from=${T0}&to=${T0}` })).statusCode).toBe(400);
   });

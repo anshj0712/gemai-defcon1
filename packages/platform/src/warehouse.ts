@@ -175,6 +175,8 @@ export interface WarehouseReader {
   sessionOutcomes(tenantId: string, sinceMs: number): Promise<SessionOutcome[]>;
   /** Every stored version of one finding, oldest first, with `recorded_to` derived from the next version. */
   findingVersions(tenantId: string, findingId: string, sinceMs: number): Promise<FindingRow[]>;
+  /** Every version of every finding (the slim columns the revenue charts need), oldest first, `recorded_to` derived. One query for the whole chart. */
+  findingsTimeline(tenantId: string, sinceMs: number): Promise<FindingRow[]>;
   /** Chunks starting in [fromMs, toMs) of the `maxSessions` most recently active sessions in that window. */
   chunksInWindow(tenantId: string, fromMs: number, toMs: number, maxSessions: number): Promise<WindowChunks>;
   /** The version of each finding current at `asOf` (one row per finding, `recorded_to` derived), highest score first. */
@@ -364,6 +366,18 @@ export class BigQueryWarehouseReader implements WarehouseReader {
     return (rows as Record<string, unknown>[]).map(versionRow);
   }
 
+  async findingsTimeline(tenantId: string, sinceMs: number): Promise<FindingRow[]> {
+    const [rows] = await this.bq.query({
+      query: `SELECT * FROM ${this.table('findings_versions')}
+              WHERE tenant_id = @tenant AND valid_from >= TIMESTAMP_MILLIS(@since)
+              ORDER BY finding_id, recorded_from LIMIT 5000`,
+      params: { tenant: tenantId, since: Math.floor(sinceMs) },
+      maximumBytesBilled: MAX_BYTES_BILLED,
+      parseJSON: true,
+    });
+    return (rows as Record<string, unknown>[]).map(versionRow);
+  }
+
   async chunksInWindow(tenantId: string, fromMs: number, toMs: number, maxSessions: number): Promise<WindowChunks> {
     const [rows] = await this.bq.query({
       // One extra session tells whether the window held more than were asked for.
@@ -457,6 +471,13 @@ export class LocalWarehouseReader implements WarehouseReader {
       .map(({ _insert_id: _id, ...row }) => row)
       .sort((a, b) => a.recorded_from - b.recorded_from);
     return rows.map((r, i) => ({ ...r, recorded_to: r.recorded_to ?? rows[i + 1]?.recorded_from ?? null }));
+  }
+
+  async findingsTimeline(tenantId: string, sinceMs: number): Promise<FindingRow[]> {
+    const rows = ((await this.store.rows('findings')) as unknown as (FindingRow & { _insert_id?: string })[])
+      .filter((r) => r.tenant_id === tenantId && r.valid_from >= sinceMs)
+      .map(({ _insert_id: _id, ...row }) => row);
+    return deriveRecordedTo(rows).sort((a, b) => (a.finding_id < b.finding_id ? -1 : a.finding_id > b.finding_id ? 1 : a.recorded_from - b.recorded_from));
   }
 
   async chunksInWindow(tenantId: string, fromMs: number, toMs: number, maxSessions: number): Promise<WindowChunks> {

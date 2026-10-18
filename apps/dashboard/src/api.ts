@@ -173,6 +173,15 @@ export interface HistoryView {
   moments: HistoryMomentView[];
 }
 
+/** Every version of every finding in one answer (the charts' source), plus the rule moments. */
+export interface TimelineView {
+  checked_at: number;
+  findings: { finding_id: string; first_hit: number; first_known: number; versions: { recorded_from: number; recorded_to: number | null; revenue_at_risk_minor: number }[] }[];
+  moments: HistoryMomentView[];
+}
+
+export const fetchTimeline = () => getJson<TimelineView>('/v1/history/timeline');
+
 export const fetchHistory = (asOf: number, from: number, to: number) => getJson<HistoryView>(`/v1/history?as_of=${Math.round(asOf)}&from=${Math.round(from)}&to=${Math.round(to)}`);
 
 export interface QualityReport {

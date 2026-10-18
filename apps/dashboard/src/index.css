@@ -133,10 +133,11 @@
     --sidebar-border: #e5e7eb;
     --sidebar-ring: #2563eb;
 
-    --topbar: #111827;
-    --topbar-foreground: #ffffff;
-    --topbar-muted: #cbd5e1;
-    --topbar-active: #1f2937;
+    /* The bar is a light surface a step above the page, with no line or shadow: tone separates it. */
+    --topbar: #ffffff;
+    --topbar-foreground: #111827;
+    --topbar-muted: #566073;
+    --topbar-active: #eef1f7;
     --money: #b91c1c;
     --danger-muted: #fef2f2;
     --danger-border: #fecaca;
@@ -309,6 +310,25 @@
   animation: cp-nudge 700ms ease-in-out 1;
   transform-origin: 50% 10%;
 }
+@utility bell-ring {
+  animation: cp-ring 2.4s ease-in-out infinite;
+  transform-origin: 50% 10%;
+}
+@utility bell-ping {
+  animation: cp-ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+@keyframes cp-ring {
+  0%, 38%, 100% { transform: rotate(0); }
+  6% { transform: rotate(-16deg); }
+  12% { transform: rotate(13deg); }
+  18% { transform: rotate(-9deg); }
+  24% { transform: rotate(6deg); }
+  30% { transform: rotate(-3deg); }
+}
+@keyframes cp-ping {
+  0% { transform: scale(0.7); opacity: 0.7; }
+  75%, 100% { transform: scale(1.7); opacity: 0; }
+}
 @keyframes cp-enter {
   from { opacity: 0; transform: translateY(6px); }
 }
@@ -335,7 +355,8 @@
     scroll-behavior: auto !important;
   }
   .motion-enter, .motion-reveal { animation-name: cp-fade !important; }
-  .motion-pop, .motion-nudge { animation: none !important; }
+  .motion-pop, .motion-nudge, .bell-ring { animation: none !important; }
+  .bell-ping { animation: none !important; opacity: 0.35; }
   [data-slot='sheet-content'], [data-slot='dialog-content'] { --tw-enter-translate-x: 0; --tw-enter-translate-y: 0; --tw-exit-translate-x: 0; --tw-exit-translate-y: 0; }
   .live-dot { animation: none !important; }
 }
