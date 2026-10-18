@@ -1,10 +1,12 @@
 import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { logsExplorerUrl, serviceLogFilter } from '@cp/logger';
 import { describe, loadInfraConfig, quoteForCmd, SERVICE_NAMES, type InfraConfig, type ServiceName } from '@cp/infra';
 import { findRepoRoot, loadDotEnv } from '@cp/platform';
 
 /**
- * `pnpm deploy:collector` / `deploy:processor` / `deploy:clusterer` / `deploy:agent`: build, test, build
+ * `pnpm deploy:collector` / `deploy:processor` / `deploy:clusterer` / `deploy:agent` / `deploy:api`: build, test, build
  * the image with Cloud Build, deploy to Cloud Run with its own service account, and (processor,
  * clusterer) point their subscription (events.raw.processor, signals.clusterer) at it as an
  * authenticated push endpoint. The agent is private and polls the issues itself: one instance, CPU
@@ -77,7 +79,11 @@ async function main(): Promise<void> {
     pnpm('test');
   }
 
-  gcloud(['builds', 'submit', '--config=infra/cloudbuild.yaml', `--substitutions=_SERVICE=${service},_IMAGE=${image}`, '.']);
+  // The shop and the API share one image (the shop is the same program in another mode, with the dashboard and shop files built in).
+  const urlOf = (svc: string) => (dryRun ? '' : gcloud(['run', 'services', 'describe', svc, `--region=${cfg.region}`, '--format=value(status.url)']));
+  const siteKey = Object.keys(JSON.parse(process.env.SITE_KEYS ?? '{"pk_local_demo":"demo"}') as Record<string, unknown>)[0] ?? 'pk_local_demo';
+  const buildArgs = service === 'api' || service === 'shop' ? `,_COLLECTOR_URL=${urlOf(cfg.services.collector)},_DASHBOARD_URL=${urlOf(cfg.services.api)},_SITE_KEY=${siteKey}` : '';
+  gcloud(['builds', 'submit', '--config=infra/cloudbuild.yaml', `--substitutions=_SERVICE=${service === 'shop' ? 'api' : service},_IMAGE=${image}${buildArgs}`, '.']);
 
   const env = [
     'CP_MODE=gcp',
@@ -112,25 +118,49 @@ async function main(): Promise<void> {
   if (service === 'collector') {
     gcloud([...common, '--allow-unauthenticated', '--concurrency=80', '--timeout=30', `--set-secrets=SITE_KEYS=${cfg.secrets.siteKeys}:latest`]);
   } else if (service === 'agent') {
-    // The slim image has no Chromium, so the deployed agent skips screenshots (the visual check runs
-    // locally, or from an image with a browser: set VISUAL_CHECK and SCREENSHOT_BROWSER).
+    // The agent image carries Playwright's Chromium, so the visual check runs in the cloud too (set
+    // AGENT_DEPLOY_VISUAL_CHECK=false to skip screenshots).
     const agentEnv = [
       `AGENT_TENANTS=${process.env.AGENT_TENANTS ?? 'demo'}`,
       `GEMINI_MODEL_BULK=${process.env.GEMINI_MODEL_BULK ?? 'gemini-3.5-flash-lite'}`,
       `GEMINI_MODEL_REASONING=${process.env.GEMINI_MODEL_REASONING ?? 'gemini-3.8-flash'}`,
-      `VISUAL_CHECK=${process.env.AGENT_DEPLOY_VISUAL_CHECK ?? 'false'}`,
+      `VISUAL_CHECK=${process.env.AGENT_DEPLOY_VISUAL_CHECK ?? 'true'}`,
+      'SCREENSHOT_BROWSER=bundled',
+      `AGENT_LLM=${process.env.AGENT_LLM ?? 'vertex'}`,
+      'AGENT_PORT=8080',
     ];
     const hasKey = dryRun || spawnSync(process.platform === 'win32' ? 'gcloud.cmd' : 'gcloud', ['secrets', 'describe', cfg.secrets.geminiApiKey, `--project=${cfg.projectId}`], { stdio: 'ignore', shell: process.platform === 'win32' }).status === 0;
     if (!hasKey) say(`note: secret ${cfg.secrets.geminiApiKey} not found; the agent runs its offline stand-in. Set GOOGLE_API_KEY in .env and rerun pnpm infra:up.`);
     const warm = String(Math.max(1, Number(minInstances)));
     gcloud([
-      ...common.map((a) => (a.startsWith('--min-instances=') ? `--min-instances=${warm}` : a.startsWith('--max-instances=') ? '--max-instances=1' : a.startsWith('--memory=') ? '--memory=1Gi' : a)),
+      ...common.map((a) =>
+        a.startsWith('--min-instances=') ? `--min-instances=${warm}` : a.startsWith('--max-instances=') ? '--max-instances=1' : a.startsWith('--memory=') ? '--memory=2Gi' : a === '--cpu=1' ? '--cpu=2' : a.startsWith('--set-env-vars=') ? `${a},${agentEnv.join(',')}` : a,
+      ),
       '--no-allow-unauthenticated',
       '--no-cpu-throttling',
       '--concurrency=10',
       '--timeout=300',
-      `--update-env-vars=${agentEnv.join(',')}`,
       ...(hasKey ? [`--set-secrets=GOOGLE_API_KEY=${cfg.secrets.geminiApiKey}:latest`] : []),
+    ]);
+  } else if (service === 'api') {
+    // One service for the API and the dashboard. It is public on the internet but asks for a password (the
+    // dashboard-password secret) on every request; it reaches the private agent with its own identity.
+    const agentUrl = gcloud(['run', 'services', 'describe', cfg.services.agent, `--region=${cfg.region}`, '--format=value(status.url)']) || 'https://cp-agent-<hash>.a.run.app';
+    gcloud(['run', 'services', 'add-iam-policy-binding', cfg.services.agent, `--region=${cfg.region}`, `--member=serviceAccount:${account}`, '--role=roles/run.invoker', '--quiet', '--format=none']);
+    gcloud([
+      ...common.map((a) => (a.startsWith('--set-env-vars=') ? `${a},API_PORT=8080,API_HOST=0.0.0.0,AGENT_URL=${agentUrl},DASHBOARD_DIR=apps/dashboard/dist,DEMO_STORE=false${existsSync(join(root, '.data', 'quality.json')) ? ',QUALITY_FILE=.data/quality.json' : ''}` : a)),
+      '--allow-unauthenticated',
+      '--concurrency=40',
+      '--timeout=60',
+      `--set-secrets=DASHBOARD_PASSWORD=${cfg.secrets.dashboardPassword}:latest`,
+    ]);
+  } else if (service === 'shop') {
+    // The synthetic demo shop: public, no login, no data. Bugs are switched on in the URL (?bugs=dead_button).
+    gcloud([
+      ...common.map((a) => (a.startsWith('--set-env-vars=') ? `${a},API_MODE=shop,API_PORT=8080,API_HOST=0.0.0.0,DASHBOARD_DIR=apps/demo-shop/dist` : a)),
+      '--allow-unauthenticated',
+      '--concurrency=80',
+      '--timeout=60',
     ]);
   } else {
     gcloud([...common, '--no-allow-unauthenticated', '--concurrency=20', '--timeout=120']);

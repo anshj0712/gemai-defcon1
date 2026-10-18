@@ -3,14 +3,17 @@ import type { FindingLike } from './truth.js';
 
 /** Small API client for the exit-test scripts (sim:check, sim:rescan). All data they read is synthetic. */
 
+/** A deployed API asks for a password (HTTP Basic, any user name): set API_PASSWORD to read it from these scripts. */
+const auth: Record<string, string> = process.env.API_PASSWORD ? { authorization: `Basic ${Buffer.from(`sim:${process.env.API_PASSWORD}`).toString('base64')}` } : {};
+
 export const get = async <T>(path: string): Promise<T> => {
-  const res = await fetch(`${URLS.api}${path}`);
+  const res = await fetch(`${URLS.api}${path}`, { headers: auth });
   if (!res.ok) throw new Error(`GET ${path}: HTTP ${res.status}`);
   return (await res.json()) as T;
 };
 
 export const post = async <T>(path: string, body: unknown): Promise<T> => {
-  const res = await fetch(`${URLS.api}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const res = await fetch(`${URLS.api}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', ...auth }, body: JSON.stringify(body) });
   const json = (await res.json().catch(() => ({}))) as T & { message?: string };
   if (!res.ok) throw new Error(`POST ${path}: HTTP ${res.status}${json.message ? `: ${json.message}` : ''}`);
   return json;

@@ -41,8 +41,9 @@ export async function launchBrowser(channel: string, headed: boolean): Promise<B
 export async function requireServices(names: (keyof typeof URLS)[]): Promise<void> {
   for (const name of names) {
     const url = name === 'shop' || name === 'dashboard' ? URLS[name] : `${URLS[name]}/healthz`;
-    const ok = await fetch(url).then((r) => r.ok, () => false);
-    if (!ok) throw new Error(`${name} is not reachable at ${url}. Start everything with: pnpm dev`);
+    // Any HTTP answer means it is up (a deployed API answers 401 without its password; Cloud Run answers /healthz itself with 404).
+    const ok = await fetch(url).then(() => true, () => false);
+    if (!ok) throw new Error(`${name} is not reachable at ${url}. Start everything with: pnpm dev (or check SHOP_URL, API_URL, COLLECTOR_URL)`);
   }
 }
 
