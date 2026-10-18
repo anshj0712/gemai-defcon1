@@ -31,7 +31,6 @@
     "upgrade": "remotion upgrade",
     "lint": "eslint src && tsc",
     "capture": "node scripts/capture.cjs",
-    "timeline": "node scripts/timeline.cjs",
     "render": "remotion render Demo out/demo.mp4 --codec=h264 --crf=18"
   },
   "allowScripts": {

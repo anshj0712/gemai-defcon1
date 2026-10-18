@@ -52,7 +52,7 @@ export const Rescan: React.FC = () => {
   return (
     <Bg variant="dark">
       <div style={{ position: 'absolute', left: 140, top: 64, opacity: head }}>
-        <Eyebrow text="Look back" index="05 / 06" />
+        <Eyebrow text="The merchant" index="02 / 03" />
         <div style={{ marginTop: 12 }}>
           <Words text="Approve a rule. It re-checks *30 days.*" at={0.2} size={54} />
         </div>

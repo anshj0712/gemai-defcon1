@@ -25,7 +25,12 @@ const say = (s) => process.stdout.write(`${s}\n`);
 const cursorJs = () => {
   const d = document.createElement('div');
   d.style.cssText = 'position:fixed;z-index:2147483647;width:26px;height:26px;border-radius:50%;background:rgba(26,115,232,.30);border:3px solid #1a73e8;pointer-events:none;transform:translate(-50%,-50%);left:-60px;top:-60px';
-  const add = () => document.documentElement.appendChild(d);
+  const add = () => {
+    document.documentElement.appendChild(d);
+    const st = document.createElement('style');
+    st.textContent = '#demo-toggle,#demo-panel,[role=note],[data-sonner-toaster]{display:none!important}';
+    document.documentElement.appendChild(st);
+  };
   if (document.documentElement) add();
   else document.addEventListener('DOMContentLoaded', add);
   document.addEventListener('mousemove', (e) => { d.style.left = e.clientX + 'px'; d.style.top = e.clientY + 'px'; }, true);
@@ -35,6 +40,8 @@ const cursorJs = () => {
 
 /** One clip: a fresh page, a video, and an event log (seconds from the start of the video). */
 async function clip(browser, id, run) {
+  const only = (process.env.ONLY || '').split(',').filter(Boolean);
+  if (only.length && !only.includes(id)) return;
   const dir = path.join(raw, id);
   fs.rmSync(dir, { recursive: true, force: true });
   const ctx = await browser.newContext({ viewport: { width: W, height: H }, recordVideo: { dir, size: { width: W, height: H } } });
@@ -123,48 +130,135 @@ async function liveData() {
   const data = await liveData();
   const browser = await chromium.launch({ channel: 'chrome', headless: true });
 
-  await clip(browser, 'shop', async (c) => {
+  const shopHelpers = {
+    /** Open the store with a set of live bugs and accept the recording banner. */
+    async open(p, bugs, pathname = '/') {
+      await p.goto(`${SHOP}${pathname}?bugs=${bugs}`, { waitUntil: 'domcontentloaded' });
+      await p.evaluate(() => { try { localStorage.setItem('cp_consent', 'granted'); } catch {} });
+      await p.getByRole('button', { name: 'Accept' }).click({ timeout: 2500 }).catch(() => {});
+    },
+    /** Put one pair in the bag (setup, cut from the clip). */
+    async fillBag(p, bugs) {
+      await shopHelpers.open(p, bugs, '/product/velocity-runner');
+      await p.waitForSelector('.size:not([disabled])', { timeout: 20000 });
+      await p.locator('.size:not([disabled])').first().click();
+      await p.waitForFunction(() => { const b = document.getElementById('add-to-bag'); return b && !b.disabled; }, null, { timeout: 20000 });
+      await p.click('#add-to-bag');
+      await sleep(500);
+      await p.locator('[data-testid="toast-close"]').click({ timeout: 1500 }).catch(() => {});
+    },
+    async toCheckout(p) {
+      await p.click('[data-testid="nav-cart"]');
+      await p.waitForSelector('#checkout');
+      await p.click('#checkout');
+      await p.waitForSelector('#checkout-form');
+    },
+    async fillCheckout(c, region) {
+      const p = c.page;
+      const type = async (sel, text) => {
+        await c.click(p.locator(sel), { scale: 1.35, hold: 1.0, pause: 60, steps: 8 });
+        await p.keyboard.type(text, { delay: 22 });
+      };
+      await type('#name', 'Asha Rao');
+      await type('#email', 'asha.rao@example.com');
+      await type('#phone', '98765 43210');
+      await type('#address', '12 MG Road, Bengaluru');
+      await c.focus(p.locator('#region'), { scale: 1.6, hold: 1.0 });
+      await c.glide(p.locator('#region'), 8);
+      await p.selectOption('#region', region);
+      await sleep(400);
+      await type('#card', '4111 1111 1111 1111');
+      await p.keyboard.press('Tab');
+      await p.keyboard.type('12/30', { delay: 22 });
+      await p.keyboard.press('Tab');
+      await p.keyboard.type('123', { delay: 22 });
+      await sleep(500);
+    },
+  };
+  const BUG = 'checkout_error';
+
+  await clip(browser, 'arrive', async (c) => {
     const p = c.page;
-    await p.goto(`${SHOP}/product/velocity-runner?bugs=checkout_error`, { waitUntil: 'domcontentloaded' });
-    await p.evaluate(() => { try { localStorage.setItem('cp_consent', 'granted'); } catch {} });
+    await shopHelpers.open(p, BUG, '/');
+    await p.waitForSelector('.hero', { timeout: 20000 });
+    await sleep(1200);
+    c.start();
+    await sleep(800);
+    await c.focus(p.locator('.hero-copy'), { scale: 1.3, hold: 2.0 });
+    await c.glide(p.locator('.hero-copy'), 18);
+    await sleep(2400);
+    await c.scroll(1000, 2000);
+    await sleep(1600);
+    await c.focus(p.getByText('Trending This Week'), { scale: 1.25, hold: 2.2 });
+    await c.glide(p.locator('[data-testid="product-velocity-runner"]'), 18);
+    await c.focus(p.locator('[data-testid="product-velocity-runner"]'), { scale: 1.45, hold: 2.0 });
+    await sleep(3000);
+  });
+
+  await clip(browser, 'browse', async (c) => {
+    const p = c.page;
+    await shopHelpers.open(p, BUG, '/product/velocity-runner');
     await p.waitForSelector('.size:not([disabled])', { timeout: 20000 });
-    await p.locator('.size:not([disabled])').first().click();
+    await sleep(1000);
+    c.start();
+    await sleep(700);
+    await c.focus(p.locator('h1').first(), { scale: 1.4, hold: 2.4 });
+    await sleep(2800);
+    await c.click(p.locator('.size:not([disabled])').nth(2), { scale: 1.7, hold: 1.2 });
     await p.waitForFunction(() => { const b = document.getElementById('add-to-bag'); return b && !b.disabled; }, null, { timeout: 20000 });
-    await p.click('#add-to-bag');
-    await sleep(500);
-    await p.getByRole('button', { name: 'Accept' }).click({ timeout: 3000 }).catch(() => {});
+    await sleep(600);
+    await c.click(p.locator('#add-to-bag'), { scale: 1.6, hold: 1.0 });
+    await sleep(800);
+    await c.focus(p.locator('#toast'), { scale: 1.5, hold: 2.8 });
+    await sleep(3600);
+  });
+
+  await clip(browser, 'bag', async (c) => {
+    const p = c.page;
+    await shopHelpers.fillBag(p, BUG);
     await p.click('[data-testid="nav-cart"]');
     await p.waitForSelector('#checkout');
-    await p.click('#checkout');
+    await sleep(900);
+    c.start();
+    await sleep(700);
+    await c.focus(p.locator('.summary, aside').first(), { scale: 1.35, hold: 3.0 });
+    await c.glide(p.locator('#checkout'), 16);
+    await sleep(3400);
+    await c.click(p.locator('#checkout'), { scale: 1.7, hold: 1.0 });
     await p.waitForSelector('#checkout-form');
+    await sleep(2400);
+  });
+
+  await clip(browser, 'checkout', async (c) => {
+    const p = c.page;
+    await shopHelpers.fillBag(p, BUG);
+    await shopHelpers.toCheckout(p);
     await sleep(700);
     c.start();
     await sleep(600);
-    const type = async (sel, text) => {
-      await c.click(p.locator(sel), { scale: 1.35, hold: 1.0, pause: 60, steps: 8 });
-      await p.keyboard.type(text, { delay: 22 });
-    };
-    await type('#name', 'Asha Rao');
-    await type('#email', 'asha.rao@example.com');
-    await type('#phone', '98765 43210');
-    await type('#address', '12 MG Road, Bengaluru');
-    await c.focus(p.locator('#region'), { scale: 1.6, hold: 1.0 });
-    await c.glide(p.locator('#region'), 8);
-    await p.selectOption('#region', 'Northeast');
-    await sleep(400);
-    await type('#card', '4111 1111 1111 1111');
-    await p.keyboard.press('Tab');
-    await p.keyboard.type('12/30', { delay: 22 });
-    await p.keyboard.press('Tab');
-    await p.keyboard.type('123', { delay: 22 });
-    await sleep(500);
+    await shopHelpers.fillCheckout(c, 'Northeast');
     await c.click(p.locator('#place-order'), { scale: 1.7, hold: 1.6, pause: 200 });
     await p.waitForFunction(() => (document.getElementById('checkout-error')?.textContent || '').length > 5, null, { timeout: 15000 }).catch(() => {});
     await sleep(600);
     await c.focus(p.locator('#checkout-error'), { scale: 1.9, hold: 1.8 });
     await sleep(1800);
     await c.click(p.locator('#place-order'), { scale: 1.7, hold: 1.2, pause: 160 });
-    await sleep(2200);
+    await sleep(2400);
+  });
+
+  await clip(browser, 'retained', async (c) => {
+    const p = c.page;
+    await shopHelpers.fillBag(p, '');
+    await shopHelpers.toCheckout(p);
+    await sleep(700);
+    c.start();
+    await sleep(500);
+    await shopHelpers.fillCheckout(c, 'South');
+    await c.click(p.locator('#place-order'), { scale: 1.7, hold: 1.2, pause: 200 });
+    await p.waitForSelector('text=all set', { timeout: 20000 });
+    await sleep(600);
+    await c.focus(p.locator('.order').first(), { scale: 1.4, hold: 2.8 });
+    await sleep(3200);
   });
 
   await clip(browser, 'dashboard', async (c) => {
@@ -258,6 +352,29 @@ async function liveData() {
     await sleep(2800);
     await c.click(p.locator('button[aria-label*="Delivery fee"]').first(), { scale: 1.8, hold: 1.4 });
     await sleep(1800);
+  });
+
+  // Act 3: the team marks the issue fixed. This changes the live demo data, so it is reopened right after recording.
+  await clip(browser, 'fix', async (c) => {
+    const p = c.page;
+    await p.goto(`${API}/?f=${Date.now()}#/issues/${data.top_id}`, { waitUntil: 'domcontentloaded' });
+    await p.waitForSelector('text=Reviewed by', { timeout: 20000 });
+    await dismissAll(p);
+    await sleep(1200);
+    await dismissAll(p);
+    c.start();
+    await sleep(700);
+    const mark = p.getByRole('button', { name: /Mark as fixed/ });
+    await c.glide(mark, 16);
+    await c.click(mark, { scale: 1.3, hold: 1.4 });
+    const reopen = p.getByRole('button', { name: /Reopen/ });
+    await reopen.waitFor({ timeout: 15000 }).catch(() => {});
+    await sleep(500);
+    await c.focus(p.getByText(/Marked fixed/).first(), { scale: 1.25, hold: 2.6 });
+    await sleep(2800);
+    // After the clip: put the demo data back the way it was.
+    await reopen.click({ timeout: 5000 }).then(() => say('  issue reopened after the fix clip'), () => say('  could not reopen: reopen it by hand on the issue page'));
+    await sleep(1500);
   });
 
   await browser.close();

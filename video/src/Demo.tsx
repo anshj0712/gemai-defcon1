@@ -1,15 +1,21 @@
 import React from 'react';
 import { AbsoluteFill, Sequence } from 'remotion';
+import arriveClip from '../public/clips/arrive.json';
+import bagClip from '../public/clips/bag.json';
+import browseClip from '../public/clips/browse.json';
+import checkoutClip from '../public/clips/checkout.json';
 import dashboardClip from '../public/clips/dashboard.json';
+import fixClip from '../public/clips/fix.json';
 import historyClip from '../public/clips/history.json';
 import issueClip from '../public/clips/issue.json';
 import replayClip from '../public/clips/replay.json';
+import retainedClip from '../public/clips/retained.json';
 import rulesClip from '../public/clips/rules.json';
-import shopClip from '../public/clips/shop.json';
 import { Beat, ClipMeta, ScreenScene } from './Footage';
 import { Arch } from './scenes/Arch';
+import { ActCard, Leave } from './scenes/Journey';
 import { Rescan } from './scenes/Rescan';
-import { AgentRun, Cta, Intro, Problem, Results } from './scenes/Story';
+import { AgentRun, Cta, Intro, Results } from './scenes/Story';
 import { C, FPS } from './theme';
 import { FadeIn } from './ui';
 
@@ -24,27 +30,119 @@ function at(clip: ClipMeta, secs: number) {
   };
 }
 
-const S = { intro: 6, problem: 9, shop: 13, agent: 9.5, dashboard: 12, issue: 12.5, replay: 11, rules: 5.5, rescan: 8, history: 7, arch: 14, results: 18, cta: 6.5 };
+/**
+ * Seconds per scene. Ids are stable: addvoiceover.md maps one voice file per id. A screen scene must stay within its
+ * recording at 0.7x (see the safe-length table in addvoiceover.md).
+ */
+const S = {
+  intro: 7,
+  act1: 4,
+  arrive: 13,
+  browse: 11,
+  bag: 9,
+  checkout: 15,
+  leave: 10,
+  act2: 4,
+  agent: 11,
+  dashboard: 12.5,
+  issue: 17,
+  replay: 11,
+  rules: 7,
+  rescan: 10,
+  history: 9.5,
+  act3: 4,
+  fix: 10,
+  retained: 14,
+  arch: 16,
+  results: 20.5,
+  cta: 8,
+};
 
-const ShopScene = () => {
-  const ev = at(shopClip as ClipMeta, S.shop);
-  const beats: Beat[] = [
-    { t: 0.2, text: 'A shopper fills in checkout.' },
-    { t: ev(6, 7), text: 'Places the order. *Payment fails.*' },
-    { t: ev(8, 10.5), text: 'They try again. Same error.' },
-  ];
-  return <ScreenScene clip={shopClip as ClipMeta} id="shop" secs={S.shop} eyebrow="The bug" index="01 / 06" beats={beats} />;
+const SHOPPER = '01 / 03';
+const MERCHANT = '02 / 03';
+const SAVE = '03 / 03';
+
+const Screen: React.FC<{ clip: unknown; id: string; secs: number; eyebrow: string; index: string; beats: Beat[] }> = ({ clip, ...rest }) => <ScreenScene clip={clip as ClipMeta} {...rest} />;
+
+const ArriveScene = () => {
+  const ev = at(arriveClip as ClipMeta, S.arrive);
+  return (
+    <Screen
+      clip={arriveClip}
+      id="arrive"
+      secs={S.arrive}
+      eyebrow="The shopper"
+      index={SHOPPER}
+      beats={[
+        { t: 0.2, text: 'A shopper arrives, *ready to buy.*' },
+        { t: ev(1, 6), text: "Browses what's trending this week." },
+      ]}
+    />
+  );
+};
+
+const BrowseScene = () => {
+  const ev = at(browseClip as ClipMeta, S.browse);
+  return (
+    <Screen
+      clip={browseClip}
+      id="browse"
+      secs={S.browse}
+      eyebrow="The shopper"
+      index={SHOPPER}
+      beats={[
+        { t: 0.2, text: 'Finds the *right pair.*' },
+        { t: ev(1, 4), text: 'Picks a size.' },
+        { t: ev(2, 6), text: 'Adds it to the bag.' },
+      ]}
+    />
+  );
+};
+
+const BagScene = () => {
+  const ev = at(bagClip as ClipMeta, S.bag);
+  return (
+    <Screen
+      clip={bagClip}
+      id="bag"
+      secs={S.bag}
+      eyebrow="The shopper"
+      index={SHOPPER}
+      beats={[
+        { t: 0.2, text: 'Bag ready: one pair, ₹10,795.' },
+        { t: ev(1, 5.5), text: 'On to *checkout.*' },
+      ]}
+    />
+  );
+};
+
+const CheckoutScene = () => {
+  const ev = at(checkoutClip as ClipMeta, S.checkout);
+  return (
+    <Screen
+      clip={checkoutClip}
+      id="checkout"
+      secs={S.checkout}
+      eyebrow="The shopper"
+      index={SHOPPER}
+      beats={[
+        { t: 0.2, text: 'Fills in every detail.' },
+        { t: ev(6, 9), text: 'Places the order. *Payment fails.*' },
+        { t: ev(8, 12.5), text: 'Tries again. Same error.' },
+      ]}
+    />
+  );
 };
 
 const DashboardScene = () => {
   const ev = at(dashboardClip as ClipMeta, S.dashboard);
   return (
-    <ScreenScene
-      clip={dashboardClip as ClipMeta}
+    <Screen
+      clip={dashboardClip}
       id="dashboard"
       secs={S.dashboard}
-      eyebrow="Rank"
-      index="03 / 06"
+      eyebrow="The merchant"
+      index={MERCHANT}
       beats={[
         { t: 0.2, text: 'Every issue, ranked by *rupees lost.*' },
         { t: ev(1, 4.5), text: 'Each colour is one bug, over time.' },
@@ -57,29 +155,29 @@ const DashboardScene = () => {
 const IssueScene = () => {
   const ev = at(issueClip as ClipMeta, S.issue);
   return (
-    <ScreenScene
-      clip={issueClip as ClipMeta}
+    <Screen
+      clip={issueClip}
       id="issue"
       secs={S.issue}
-      eyebrow="Explain"
-      index="04 / 06"
+      eyebrow="The merchant"
+      index={MERCHANT}
       beats={[
         { t: 0.2, text: 'Gemini explains *what happened.*' },
-        { t: ev(2, 4), text: 'Steps to reproduce, each one cited.' },
-        { t: ev(3, 6.5), text: 'Proof from the masked replay.' },
-        { t: ev(6, 9.5), text: 'Four AI jurors review it. *Code decides.*' },
+        { t: ev(2, 5), text: 'Steps to reproduce, each one cited.' },
+        { t: ev(3, 8.5), text: 'Proof from the masked replay.' },
+        { t: ev(6, 13), text: 'Four AI jurors review it. *Code decides.*' },
       ]}
     />
   );
 };
 
 const ReplayScene = () => (
-  <ScreenScene
-    clip={replayClip as ClipMeta}
+  <Screen
+    clip={replayClip}
     id="replay"
     secs={S.replay}
-    eyebrow="Explain"
-    index="04 / 06"
+    eyebrow="The merchant"
+    index={MERCHANT}
     beats={[
       { t: 0.2, text: 'Then the *flagged replay.*' },
       { t: 4.6, text: 'The exact moment the payment failed.' },
@@ -88,15 +186,15 @@ const ReplayScene = () => (
 );
 
 const RulesScene = () => (
-  <ScreenScene
-    clip={rulesClip as ClipMeta}
+  <Screen
+    clip={rulesClip}
     id="rules"
     secs={S.rules}
-    eyebrow="Look back"
-    index="05 / 06"
+    eyebrow="The merchant"
+    index={MERCHANT}
     beats={[
       { t: 0.2, text: 'The agent also *suggests rules.*' },
-      { t: 2.8, text: 'A person approves every one.' },
+      { t: 3.4, text: 'A person approves every one.' },
     ]}
   />
 );
@@ -104,47 +202,90 @@ const RulesScene = () => (
 const HistoryScene = () => {
   const ev = at(historyClip as ClipMeta, S.history);
   return (
-    <ScreenScene
-      clip={historyClip as ClipMeta}
+    <Screen
+      clip={historyClip}
       id="history"
       secs={S.history}
-      eyebrow="Look back"
-      index="05 / 06"
+      eyebrow="The merchant"
+      index={MERCHANT}
       beats={[
         { t: 0.2, text: 'How long each bug *went unnoticed.*' },
-        { t: ev(1, 3.2), text: 'Striped: damage found later by a new rule.' },
+        { t: ev(1, 3.6), text: 'Striped: damage found later by a new rule.' },
       ]}
     />
   );
 };
 
-const SCENES: { id: string; secs: number; el: React.ReactNode }[] = [
-  { id: 'intro', secs: S.intro, el: <Intro /> },
-  { id: 'problem', secs: S.problem, el: <Problem /> },
-  { id: 'shop', secs: S.shop, el: <ShopScene /> },
-  { id: 'agent', secs: S.agent, el: <AgentRun /> },
-  { id: 'dashboard', secs: S.dashboard, el: <DashboardScene /> },
-  { id: 'issue', secs: S.issue, el: <IssueScene /> },
-  { id: 'replay', secs: S.replay, el: <ReplayScene /> },
-  { id: 'rules', secs: S.rules, el: <RulesScene /> },
-  { id: 'rescan', secs: S.rescan, el: <Rescan /> },
-  { id: 'history', secs: S.history, el: <HistoryScene /> },
-  { id: 'arch', secs: S.arch, el: <Arch /> },
-  { id: 'results', secs: S.results, el: <Results /> },
-  { id: 'cta', secs: S.cta, el: <Cta /> },
+const FixScene = () => {
+  const ev = at(fixClip as ClipMeta, S.fix);
+  return (
+    <Screen
+      clip={fixClip}
+      id="fix"
+      secs={S.fix}
+      eyebrow="The save"
+      index={SAVE}
+      beats={[
+        { t: 0.2, text: 'The team ships *the fix.*' },
+        { t: ev(1, 4.5), text: 'Marked fixed. It reopens by itself if it returns.' },
+      ]}
+    />
+  );
+};
+
+const RetainedScene = () => {
+  const ev = at(retainedClip as ClipMeta, S.retained);
+  return (
+    <Screen
+      clip={retainedClip}
+      id="retained"
+      secs={S.retained}
+      eyebrow="The save"
+      index={SAVE}
+      beats={[
+        { t: 0.2, text: 'The next shopper checks out.' },
+        { t: ev(6, 8), text: 'Places the order.' },
+        { t: ev(7, 10), text: 'Order confirmed. *Shopper kept.*' },
+      ]}
+    />
+  );
+};
+
+const SCENES: { id: keyof typeof S; el: React.ReactNode }[] = [
+  { id: 'intro', el: <Intro /> },
+  { id: 'act1', el: <ActCard index="01" title="The shopper." line="Arrives ready to buy. Leaves without a word." /> },
+  { id: 'arrive', el: <ArriveScene /> },
+  { id: 'browse', el: <BrowseScene /> },
+  { id: 'bag', el: <BagScene /> },
+  { id: 'checkout', el: <CheckoutScene /> },
+  { id: 'leave', el: <Leave /> },
+  { id: 'act2', el: <ActCard index="02" title="The merchant." line="Finds out what happened, and what it cost." /> },
+  { id: 'agent', el: <AgentRun /> },
+  { id: 'dashboard', el: <DashboardScene /> },
+  { id: 'issue', el: <IssueScene /> },
+  { id: 'replay', el: <ReplayScene /> },
+  { id: 'rules', el: <RulesScene /> },
+  { id: 'rescan', el: <Rescan /> },
+  { id: 'history', el: <HistoryScene /> },
+  { id: 'act3', el: <ActCard index="03" title="The save." line="Fix it once. Keep the next shopper." /> },
+  { id: 'fix', el: <FixScene /> },
+  { id: 'retained', el: <RetainedScene /> },
+  { id: 'arch', el: <Arch /> },
+  { id: 'results', el: <Results /> },
+  { id: 'cta', el: <Cta /> },
 ];
 
 const frames = (secs: number) => Math.round(secs * FPS);
-export const TOTAL_FRAMES = SCENES.reduce((n, s) => n + frames(s.secs), 0) - OVERLAP * (SCENES.length - 1);
+export const TOTAL_FRAMES = SCENES.reduce((n, s) => n + frames(S[s.id]), 0) - OVERLAP * (SCENES.length - 1);
 
-/** Silent cut for now: the voice-over is added later, and scene lengths are set here. */
+/** Silent cut: the voice-over is added later (addvoiceover.md). */
 export const Demo: React.FC = () => {
   let from = 0;
   return (
     <AbsoluteFill style={{ background: C.ink }}>
       {SCENES.map((s, i) => {
         const start = from;
-        const dur = frames(s.secs);
+        const dur = frames(S[s.id]);
         from += dur - OVERLAP;
         return (
           <Sequence key={s.id} from={start} durationInFrames={dur} name={s.id}>
