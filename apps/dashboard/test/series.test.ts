@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ClusterSummary, SignalRowView } from '../src/api';
 import { duration } from '../src/format';
-import { buildLanes, revenueAt, revenueSeries, trendOf, withCurrent, type SeriesItem } from '../src/lib/series';
+import { buildLanes, changeMoments, focusWindow, revenueAt, revenueSeries, trendOf, withCurrent, type SeriesItem } from '../src/lib/series';
 import { groupSignals } from '../src/lib/signals';
 
 /** Dashboard charts and grouping. All numbers are synthetic. */
@@ -126,3 +126,23 @@ describe('duration in words', () => {
     expect(duration(2 * 86_400_000)).toBe('2 days');
   });
 });
+
+describe('chart moments', () => {
+  it('keeps one point per change, inside the window, merged within a second', () => {
+    const a = item('a', [
+      [10_000, 50_000, 100],
+      [50_000, null, 300],
+    ]);
+    const b = item('b', [[54_000, null, 50]], 90_000);
+    expect(changeMoments([a, b], [70_000, 54_300], 0, 100_000)).toEqual([0, 10_000, 50_000, 54_000, 70_000, 90_000, 100_000]);
+    expect(changeMoments([], [], 0, 100_000)).toEqual([0, 100_000]);
+  });
+
+  it('zooms on the stretch where things happened, with room after the last event', () => {
+    const w = focusWindow(1_000_000, 1_600_000, 90_000_000);
+    expect(w.from).toBeLessThan(1_000_000);
+    expect(w.to).toBeGreaterThan(1_600_000);
+    expect(w.to).toBeLessThan(2_200_000);
+  });
+});
+

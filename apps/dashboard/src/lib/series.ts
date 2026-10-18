@@ -42,9 +42,9 @@ export function revenueAt(item: SeriesItem, t: number): number {
  * `buckets + 1` evenly spaced points from `from` to `to`. The `top` findings with the most at risk at `to` (or, when
  * all are fixed, at their peak) get their own key (k0, k1, ...); the rest add up under "other".
  */
-export function revenueSeries(items: readonly SeriesItem[], from: number, to: number, buckets = 48, top = 5): { points: SeriesPoint[]; keys: SeriesKey[] } {
+export function revenueSeries(items: readonly SeriesItem[], from: number, to: number, buckets = 48, top = 5, at?: readonly number[]): { points: SeriesPoint[]; keys: SeriesKey[] } {
   const span = Math.max(1, to - from);
-  const times = Array.from({ length: buckets + 1 }, (_, i) => Math.round(from + (span * i) / buckets));
+  const times = at ? [...at] : Array.from({ length: buckets + 1 }, (_, i) => Math.round(from + (span * i) / buckets));
   const weight = (it: SeriesItem) => Math.max(revenueAt(it, to), ...times.map((t) => revenueAt(it, t)));
   const ranked = [...items].sort((a, b) => weight(b) - weight(a) || a.title.localeCompare(b.title));
   const named = ranked.slice(0, top).filter((it) => weight(it) > 0);
@@ -115,5 +115,29 @@ export function buildLanes(rows: readonly { id: string; title: string; firstHit:
   return rows
     .map((r) => ({ ...r, firstHit: Math.min(r.firstHit, r.firstKnown), blindMs: Math.max(0, r.firstKnown - r.firstHit) }))
     .sort((a, b) => b.revenueMinor - a.revenueMinor || a.title.localeCompare(b.title));
+}
+
+/**
+ * The stretch of time worth drawing: from just before the first hit to a little after the last event (an alert, a fix, a
+ * rule approval). Without it, an issue left open for a day squashes every minute that mattered into a sliver.
+ */
+export function focusWindow(start: number, lastEvent: number, now: number, minSpanMs = 600_000): { from: number; to: number } {
+  const last = Math.max(start, lastEvent);
+  const from = start - Math.max(30_000, (last - start) * 0.04);
+  const to = Math.min(Math.max(now, from + minSpanMs), Math.max(last + Math.max(120_000, (last - from) * 0.35), from + minSpanMs));
+  return { from, to };
+}
+
+/**
+ * The moments something changed, for a chart that spaces them evenly instead of by the clock: every version boundary,
+ * fix and approval inside [from, to], plus a point just before the first (so the first climb has a start) and one at
+ * `to`. A quiet night then takes no room, and a busy minute is not squeezed.
+ */
+export function changeMoments(items: readonly SeriesItem[], extra: readonly number[], from: number, to: number): number[] {
+  const raw = [from, ...items.flatMap((it) => [...it.versions.flatMap((v) => [v.recorded_from, v.recorded_to ?? from]), it.resolvedAt ?? from]), ...extra, to].filter((t) => t >= from && t <= to);
+  const sorted = [...new Set(raw)].sort((a, b) => a - b);
+  // Moments within a second of each other read as one.
+  const merged = sorted.filter((t, i) => i === 0 || t - sorted[i - 1]! > 1000);
+  return merged.length >= 2 ? merged : [from, to];
 }
 

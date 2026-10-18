@@ -3,7 +3,7 @@ import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { duration, money, moneyCompact } from './format';
-import type { Lane } from './lib/series';
+import { focusWindow, type Lane } from './lib/series';
 import { useRevenueSeries } from './lib/useRevenueSeries';
 
 const clock = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -29,8 +29,7 @@ export function DetectionLanes({ asOf, onPick }: { asOf: number | null; onPick: 
   // after it. Without this, an issue open for a day squashes every minute that mattered into a sliver.
   const approvalTimes = data.moments.filter((m) => m.kind === 'rule_approved').map((m) => m.at);
   const lastEvent = Math.max(start, ...lanes.flatMap((l) => [l.firstKnown, l.fixedAt ?? 0]), ...approvalTimes);
-  const from = start - Math.max(30_000, (lastEvent - start) * 0.04);
-  const to = Math.min(Math.max(data.to, from + MIN_SPAN_MS), Math.max(lastEvent + Math.max(120_000, (lastEvent - from) * 0.35), from + MIN_SPAN_MS));
+  const { from, to } = focusWindow(start, lastEvent, data.to, MIN_SPAN_MS);
   const span = to - from;
   const x = (t: number) => Math.min(100, Math.max(0, ((t - from) / span) * 100));
   const ticks = Array.from({ length: 5 }, (_, i) => from + (span * i) / 4);

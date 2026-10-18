@@ -171,74 +171,75 @@ export function DashboardPage() {
           open={ranked.flatMap((r) => (r.finding ? [{ id: r.cluster.cluster_id, title: r.finding.title, route: r.cluster.route, tier: r.finding.tier, shoppers: r.cluster.session_count }] : []))}
         />
 
-        <Card className="gap-3 bg-danger-muted/45 px-5 ring-danger-border/80">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="m-0 flex items-center gap-1.5 text-base font-semibold text-money">
-              <WarningCircleIcon aria-hidden="true" weight="fill" className="size-5" />
-              Fix these first
-            </h2>
-            <a href="#/issues" className="flex items-center gap-1 text-sm font-medium no-underline hover:underline">
-              All {ranked.length} <ArrowRightIcon aria-hidden="true" className="size-4" />
-            </a>
-          </div>
-          {fixFirst.length === 0 ? (
-            <p className="m-0 text-sm text-muted-foreground">Nothing to fix yet. Issues appear here once shoppers hit a problem.</p>
-          ) : (
-            <>
-              <p className="m-0 text-[13px] text-foreground/80">These lose the most money. Start with number 1.</p>
-              <ol className="m-0 flex list-none flex-col gap-2 p-0">
-                {fixFirst.map(({ cluster: c, finding: f, minor }, i) => (
-                  <li key={c.cluster_id}>
-                    <a
-                      href={`#/issues/${c.cluster_id}`}
-                      className="group/top flex flex-col gap-1.5 rounded-lg bg-card px-3 py-2.5 text-card-foreground no-underline ring-1 ring-danger-border/70 transition-[box-shadow,background-color] duration-200 hover:bg-card/80 hover:ring-tier-p0/60"
-                    >
-                      <span className="flex items-start gap-2.5">
-                        <span aria-hidden="true" className="mt-px grid size-6 shrink-0 place-items-center rounded-md bg-tier-p0 text-[13px] font-semibold text-tier-foreground tabular-nums">
-                          {i + 1}
+        <div className="flex flex-col gap-3">
+          <Card className="gap-3 bg-danger-muted/45 px-5 ring-danger-border/80">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="m-0 flex items-center gap-1.5 text-base font-semibold text-money">
+                <WarningCircleIcon aria-hidden="true" weight="fill" className="size-5" />
+                Fix these first
+              </h2>
+              <a href="#/issues" className="flex items-center gap-1 text-sm font-medium no-underline hover:underline">
+                All {ranked.length} <ArrowRightIcon aria-hidden="true" className="size-4" />
+              </a>
+            </div>
+            {fixFirst.length === 0 ? (
+              <p className="m-0 text-sm text-muted-foreground">Nothing to fix yet. Issues appear here once shoppers hit a problem.</p>
+            ) : (
+              <>
+                <p className="m-0 text-[13px] text-foreground/80">These lose the most money. Start with number 1.</p>
+                <ol className="m-0 flex list-none flex-col gap-2 p-0">
+                  {fixFirst.map(({ cluster: c, finding: f, minor }, i) => (
+                    <li key={c.cluster_id}>
+                      <a
+                        href={`#/issues/${c.cluster_id}`}
+                        className="group/top flex flex-col gap-1.5 rounded-lg bg-card px-3 py-2.5 text-card-foreground no-underline ring-1 ring-danger-border/70 transition-[box-shadow,background-color] duration-200 hover:bg-card/80 hover:ring-tier-p0/60"
+                      >
+                        <span className="flex items-start gap-2.5">
+                          <span aria-hidden="true" className="mt-px grid size-6 shrink-0 place-items-center rounded-md bg-tier-p0 text-[13px] font-semibold text-tier-foreground tabular-nums">
+                            {i + 1}
+                          </span>
+                          <span className="min-w-0 flex-1 text-sm leading-snug font-semibold">{f.title}</span>
+                          <b className="text-base font-semibold whitespace-nowrap text-money tabular-nums">{money(minor, f.revenue.currency)}</b>
                         </span>
-                        <span className="min-w-0 flex-1 text-sm leading-snug font-semibold">{f.title}</span>
-                        <b className="text-base font-semibold whitespace-nowrap text-money tabular-nums">{money(minor, f.revenue.currency)}</b>
-                      </span>
-                      <span className="flex items-center gap-2 pl-[34px] text-xs text-muted-foreground">
-                        <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-                          <span className="motion-grow block h-full rounded-full bg-tier-p0" style={{ width: `${Math.max(4, (minor / Math.max(1, atRisk)) * 100)}%` }} />
+                        <span className="flex items-center gap-2 pl-[34px] text-xs text-muted-foreground">
+                          <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                            <span className="motion-grow block h-full rounded-full bg-tier-p0" style={{ width: `${Math.max(4, (minor / Math.max(1, atRisk)) * 100)}%` }} />
+                          </span>
+                          <span className="whitespace-nowrap tabular-nums">{Math.round((minor / Math.max(1, atRisk)) * 100)}% of all losses</span>
                         </span>
-                        <span className="whitespace-nowrap tabular-nums">{Math.round((minor / Math.max(1, atRisk)) * 100)}% of all losses</span>
-                      </span>
-                      <span className="flex items-center gap-1.5 pl-[34px] text-xs text-muted-foreground">
-                        <TierBadge tier={f.tier} short /> {c.route} · {c.session_count} shoppers
-                      </span>
-                    </a>
-                  </li>
-                ))}
-              </ol>
-            </>
-          )}
-          <p className="m-0 mt-auto text-xs text-muted-foreground">Sorted by money lost, biggest first.</p>
-        </Card>
+                        <span className="flex items-center gap-1.5 pl-[34px] text-xs text-muted-foreground">
+                          <TierBadge tier={f.tier} short /> {c.route} · {c.session_count} shoppers
+                        </span>
+                      </a>
+                    </li>
+                  ))}
+                </ol>
+              </>
+            )}
+            <p className="m-0 mt-auto text-xs text-muted-foreground">Sorted by money lost, biggest first.</p>
+          </Card>
+          <Card className="gap-2 px-5">
+            <h2 className="m-0 text-base font-semibold">Where shoppers hurt</h2>
+            <p className="m-0 text-xs text-muted-foreground">Revenue at risk by page</p>
+            {pages.length > 0 ? (
+              <ChartContainer config={pageConfig} className="aspect-auto w-full" style={{ height: pages.length * 40 + 8 }}>
+                <BarChart data={pages} layout="vertical" margin={{ top: 4, right: 72, left: 0, bottom: 4 }} barCategoryGap={8}>
+                  <XAxis type="number" hide />
+                  <YAxis type="category" dataKey="route" tickLine={false} axisLine={false} width={104} tick={{ fontSize: 12 }} />
+                  <ChartTooltip cursor={false} content={<ChartTooltipContent hideIndicator formatter={(v) => <b className="font-semibold tabular-nums">{money(Number(v), currency)}</b>} />} />
+                  <Bar dataKey="revenue" fill="var(--color-revenue)" radius={[0, 4, 4, 0]} barSize={18}>
+                    <LabelList dataKey="revenue" position="right" className="fill-foreground" fontSize={12} formatter={(v: unknown) => moneyCompact(Number(v), currency)} />
+                  </Bar>
+                </BarChart>
+              </ChartContainer>
+            ) : (
+              <p className="m-0 text-sm text-muted-foreground">No revenue estimates yet.</p>
+            )}
+          </Card>
+        </div>
       </div>
 
-      <div className="mt-3 grid items-start gap-3 lg:grid-cols-3">
-        <Card className="gap-2 px-5">
-          <h2 className="m-0 text-base font-semibold">Where shoppers hurt</h2>
-          <p className="m-0 text-xs text-muted-foreground">Revenue at risk by page</p>
-          {pages.length > 0 ? (
-            <ChartContainer config={pageConfig} className="aspect-auto w-full" style={{ height: pages.length * 40 + 8 }}>
-              <BarChart data={pages} layout="vertical" margin={{ top: 4, right: 72, left: 0, bottom: 4 }} barCategoryGap={8}>
-                <XAxis type="number" hide />
-                <YAxis type="category" dataKey="route" tickLine={false} axisLine={false} width={104} tick={{ fontSize: 12 }} />
-                <ChartTooltip cursor={false} content={<ChartTooltipContent hideIndicator formatter={(v) => <b className="font-semibold tabular-nums">{money(Number(v), currency)}</b>} />} />
-                <Bar dataKey="revenue" fill="var(--color-revenue)" radius={[0, 4, 4, 0]} barSize={18}>
-                  <LabelList dataKey="revenue" position="right" className="fill-foreground" fontSize={12} formatter={(v: unknown) => moneyCompact(Number(v), currency)} />
-                </Bar>
-              </BarChart>
-            </ChartContainer>
-          ) : (
-            <p className="m-0 text-sm text-muted-foreground">No revenue estimates yet.</p>
-          )}
-        </Card>
-
+      <div className="mt-3 grid items-start gap-3 lg:grid-cols-2">
         <Card className="gap-3 px-5">
           <div className="flex items-center justify-between">
             <h2 className="m-0 flex items-center gap-1.5 text-base font-semibold">

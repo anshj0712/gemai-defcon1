@@ -1,16 +1,20 @@
-import { ArrowDownIcon, ArrowRightIcon, ArrowUpIcon, MinusIcon } from '@phosphor-icons/react';
-import { Area, AreaChart, XAxis, YAxis } from 'recharts';
+import { useMemo } from 'react';
+import { ArrowDownIcon, ArrowRightIcon, ArrowUpIcon, MinusIcon, TrendUpIcon, WarningIcon } from '@phosphor-icons/react';
+import { Area, AreaChart, CartesianGrid, ReferenceLine, XAxis, YAxis } from 'recharts';
 import { Card } from '@/components/ui/card';
-import { ChartContainer, type ChartConfig } from '@/components/ui/chart';
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { AnimatedNumber, Eyebrow, TierBadge } from './components/common';
 import { duration, money, moneyCompact } from './format';
-import { revenueAt, trendOf, type SeriesItem, type TrendDirection } from './lib/series';
+import { changeMoments, focusWindow, revenueAt, revenueSeries, trendOf, type SeriesItem, type TrendDirection } from './lib/series';
 import type { RevenueSeries } from './lib/useRevenueSeries';
 
-const config = { total: { label: 'Money at risk', color: 'var(--money)' } } satisfies ChartConfig;
-const TIER_BAR: Record<string, string> = { P0: 'bg-tier-p0', P1: 'bg-tier-p1', P2: 'bg-tier-p2', P3: 'bg-tier-p3' };
+/** One color per issue in the stack, in the warm "loss" family; the last is everything else. Light and dark. */
+const COLORS_LIGHT = ['#dc2626', '#ea580c', '#ca8a04', '#db2777', '#7c3aed', '#94a3b8'];
+const COLORS_DARK = ['#ef4444', '#f97316', '#eab308', '#ec4899', '#8b5cf6', '#64748b'];
+
+const clock = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
 const TREND: Record<TrendDirection, { label: string; cls: string; Icon: typeof ArrowUpIcon }> = {
   up: { label: 'Getting worse', cls: 'bg-danger-muted text-money', Icon: ArrowUpIcon },
@@ -30,36 +34,56 @@ export interface OpenIssue {
 }
 
 /**
- * Money at risk, made readable: the total with how it moved, then every open issue as a bar sized by the money it
- * costs, biggest first, each with a "getting worse / better" tag. Replaces a stacked area that showed shape but not
- * what to do about it.
+ * Money at risk, read at a glance. Top: the total, how it moved, and the two numbers that say how bad it is. Middle: a
+ * large chart of the money lost over time, stacked by issue so you can see which problem drove each jump, with the
+ * moments rules were approved and issues fixed marked on it. Bottom: the same issues as a ranked list in the chart's
+ * colors, each with a "getting worse / better" tag, so the list is also the chart's key.
  */
 export function RevenueRanking({ series, open, currency }: { series: RevenueSeries | null; open: OpenIssue[]; currency: string }) {
-  if (!series) return <Skeleton className="h-80 rounded-xl" aria-label="Loading the revenue chart" />;
-  const windowMs = trendWindow(series.from, series.to);
-  const openIds = new Set(open.map((o) => o.id));
-  const byId = new Map<string, SeriesItem>(series.items.map((it) => [it.id, it]));
-  const rows = open
-    .map((o) => {
-      const item = byId.get(o.id);
-      return { ...o, now: item ? revenueAt(item, series.to) : 0, trend: item ? trendOf(item, series.to, windowMs) : null };
-    })
-    .filter((r) => r.now > 0)
-    .sort((a, b) => b.now - a.now)
-    .slice(0, 6);
-  const openItems = series.items.filter((it) => openIds.has(it.id));
-  const total = openItems.reduce((n, it) => n + revenueAt(it, series.to), 0);
-  const before = openItems.reduce((n, it) => n + revenueAt(it, series.to - windowMs), 0);
-  const delta = total - before;
-  const max = rows[0]?.now ?? 1;
-  const shown = rows.reduce((n, r) => n + r.now, 0);
+  const model = useMemo(() => {
+    if (!series) return null;
+    const openIds = new Set(open.map((o) => o.id));
+    const items: SeriesItem[] = series.items.filter((it) => openIds.has(it.id));
+    const lanes = series.lanes.filter((l) => openIds.has(l.id));
+    const approvals = series.moments.filter((m) => m.kind === 'rule_approved').map((m) => m.at);
+    const start = lanes.length ? Math.min(...lanes.map((l) => l.firstHit)) : series.from;
+    const lastEvent = Math.max(start, ...lanes.map((l) => l.firstKnown), ...series.fixes.map((f) => f.at), ...approvals);
+    const { from, to } = focusWindow(start, lastEvent, series.to);
+    // One point per moment something changed, spaced evenly: a quiet night takes no room on the chart.
+    const fixTimes = series.fixes.map((f) => f.at);
+    const { points, keys } = revenueSeries(items, from, to, 0, 5, changeMoments(items, [...approvals, ...fixTimes], from, to));
+    const windowMs = trendWindow(series.from, series.to);
+    const byId = new Map(items.map((it) => [it.id, it]));
+    const meta = new Map(open.map((o) => [o.id, o]));
+    const rows = keys.map((k, i) => {
+      const item = k.id ? byId.get(k.id) : null;
+      const m = k.id ? meta.get(k.id) : null;
+      // "Other" folds the smaller issues together: its trend is the sum of theirs.
+      const rest = k.id === null ? items.filter((it) => !keys.some((kk) => kk.id === it.id)) : [];
+      const now = item ? revenueAt(item, series.to) : rest.reduce((n, it) => n + revenueAt(it, series.to), 0);
+      const before = item ? revenueAt(item, series.to - windowMs) : rest.reduce((n, it) => n + revenueAt(it, series.to - windowMs), 0);
+      const trend = item ? trendOf(item, series.to, windowMs).direction : now > before * 1.05 ? 'up' : now < before * 0.95 ? 'down' : 'flat';
+      return { key: k.key, i, label: k.label, id: k.id, now, trend: trend as TrendDirection, meta: m };
+    });
+    const total = items.reduce((n, it) => n + revenueAt(it, series.to), 0);
+    const before = items.reduce((n, it) => n + revenueAt(it, series.to - windowMs), 0);
+    const worse = items.filter((it) => trendOf(it, series.to, windowMs).direction === 'up' && revenueAt(it, series.to) > 0).length;
+    const costing = items.filter((it) => revenueAt(it, series.to) > 0).length;
+    return { points, rows, from, to, approvals: approvals.filter((a) => a >= from && a <= to), fixes: series.fixes.filter((f) => f.at >= from && f.at <= to), total, delta: total - before, windowMs, worse, costing };
+  }, [series, open]);
+
+  if (!model) return <Skeleton className="h-[34rem] rounded-xl" aria-label="Loading the revenue chart" />;
+  const { rows, total, delta, windowMs, worse, costing } = model;
+  const top = rows.find((r) => r.id !== null);
+  const config: ChartConfig = Object.fromEntries(rows.map((r) => [r.key, { label: r.label, theme: { light: COLORS_LIGHT[r.key === 'other' ? 5 : Math.min(r.i, 4)]!, dark: COLORS_DARK[r.key === 'other' ? 5 : Math.min(r.i, 4)]! } }]));
+  const maxNow = Math.max(1, ...rows.map((r) => r.now));
 
   return (
-    <Card className="gap-4 px-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <Card className="gap-5 px-6">
+      <div className="grid gap-5 lg:grid-cols-[auto_minmax(0,1fr)] lg:items-end">
         <div className="flex flex-col">
           <Eyebrow>Money your store is losing right now</Eyebrow>
-          <span className="text-[52px] leading-[1.05] font-semibold tracking-[-0.03em] text-money">
+          <span className="text-[56px] leading-[1.05] font-semibold tracking-[-0.03em] text-money">
             <AnimatedNumber value={total} format={(n) => money(Math.round(n), currency)} ms={900} />
           </span>
           <span className={cn('flex items-center gap-1 text-[13px] font-medium', delta > 0 ? 'text-money' : delta < 0 ? 'text-success' : 'text-muted-foreground')}>
@@ -67,66 +91,120 @@ export function RevenueRanking({ series, open, currency }: { series: RevenueSeri
             {delta === 0 ? 'No change' : `${delta > 0 ? 'Up' : 'Down'} ${money(Math.abs(delta), currency)}`} in the last {duration(windowMs)}
           </span>
         </div>
-        <div className="w-44 max-w-full" aria-hidden="true">
-          <ChartContainer config={config} className="aspect-auto h-14 w-full">
-            <AreaChart data={series.points} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
-              <XAxis dataKey="t" type="number" domain={[series.from, series.to]} hide />
-              <YAxis hide domain={[0, 'dataMax']} />
-              <Area dataKey="total" type="monotone" stroke="var(--color-total)" strokeWidth={2} fill="var(--color-total)" fillOpacity={0.12} isAnimationActive={false} />
-            </AreaChart>
-          </ChartContainer>
-          <span className="block text-right text-[11px] text-muted-foreground">trend since the first alert</span>
+        <div className="grid grid-cols-2 gap-3 lg:justify-items-end">
+          <div className="flex w-full max-w-60 flex-col gap-0.5 rounded-lg bg-muted/60 px-3.5 py-2.5">
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <WarningIcon aria-hidden="true" className="size-3.5" />
+              One issue causes
+            </span>
+            <b className="text-xl font-semibold tabular-nums">{top ? `${Math.round((top.now / Math.max(1, total)) * 100)}%` : '-'}</b>
+            <span className="truncate text-xs text-muted-foreground">{top?.label ?? 'of the losses'}</span>
+          </div>
+          <div className="flex w-full max-w-60 flex-col gap-0.5 rounded-lg bg-muted/60 px-3.5 py-2.5">
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <TrendUpIcon aria-hidden="true" className="size-3.5" />
+              Getting worse
+            </span>
+            <b className={cn('text-xl font-semibold tabular-nums', worse > 0 && 'text-money')}>
+              {worse} of {costing}
+            </b>
+            <span className="text-xs text-muted-foreground">issues cost more than {duration(windowMs)} ago</span>
+          </div>
         </div>
       </div>
 
-      {rows.length === 0 ? (
-        <p className="m-0 text-sm text-muted-foreground">No issue has a money estimate yet. They appear here once shoppers who left are counted.</p>
+      {total > 0 ? (
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h3 className="m-0 text-sm font-semibold">Money lost over time, by issue</h3>
+            <span className="text-xs text-muted-foreground">Each color is one issue. A jump means it started costing money. Quiet stretches are shortened.</span>
+          </div>
+          <ChartContainer config={config} className="aspect-auto h-72 w-full">
+            <AreaChart data={model.points} margin={{ top: 10, right: 8, left: 4, bottom: 0 }}>
+              <CartesianGrid vertical={false} />
+              <XAxis dataKey="t" type="category" tickFormatter={(t: number) => clock(t)} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={64} />
+              <YAxis tickFormatter={(v: number) => moneyCompact(v, currency)} tickLine={false} axisLine={false} width={60} />
+              <ChartTooltip
+                cursor={{ strokeWidth: 1 }}
+                content={
+                  <ChartTooltipContent
+                    indicator="dot"
+                    labelFormatter={(_, p) => clock(Number(p?.[0]?.payload?.t ?? 0))}
+                    formatter={(v, name) => (
+                      <span className="flex w-full items-center justify-between gap-3">
+                        <span className="max-w-56 truncate text-muted-foreground">{config[String(name)]?.label}</span>
+                        <b className="font-semibold tabular-nums">{money(Number(v), currency)}</b>
+                      </span>
+                    )}
+                  />
+                }
+              />
+              {[...rows].reverse().map((r) => (
+                <Area key={r.key} dataKey={r.key} stackId="loss" type="monotone" stroke="var(--card)" strokeWidth={1.5} fill={`var(--color-${r.key})`} fillOpacity={0.9} isAnimationActive={false} />
+              ))}
+              {model.approvals.map((a) => (
+                <ReferenceLine key={`a-${a}`} x={a} stroke="var(--agent-strong)" strokeWidth={1.5} strokeDasharray="4 3" ifOverflow="discard" />
+              ))}
+              {model.fixes.map((f) => (
+                <ReferenceLine key={`f-${f.id}`} x={f.at} stroke="var(--success-solid)" strokeWidth={1.5} strokeDasharray="4 3" ifOverflow="discard" />
+              ))}
+            </AreaChart>
+          </ChartContainer>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <span aria-hidden="true" className="h-0.5 w-4 rounded-full bg-agent-strong" />A rule was approved ({model.approvals.length})
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span aria-hidden="true" className="h-0.5 w-4 rounded-full bg-success-solid" />
+              An issue was fixed ({model.fixes.length})
+            </span>
+          </div>
+        </div>
       ) : (
-        <ol className="m-0 flex list-none flex-col gap-2.5 p-0">
-          {rows.map((r, i) => {
-            const t = TREND[r.trend?.direction ?? 'flat'];
-            return (
-              <li key={r.id}>
-                <a
-                  href={`#/issues/${r.id}`}
-                  className="group/row grid grid-cols-[1.25rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1 rounded-lg px-2 py-1.5 text-foreground no-underline transition-colors hover:bg-muted/50 sm:grid-cols-[1.25rem_minmax(0,1.1fr)_minmax(0,1.4fr)_auto]"
-                >
-                  <span aria-hidden="true" className="text-sm font-medium text-muted-foreground tabular-nums">
-                    {i + 1}
-                  </span>
-                  <span className="flex min-w-0 flex-col">
-                    <span className="truncate text-sm font-semibold">{r.title}</span>
-                    <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <TierBadge tier={r.tier} short /> {r.route} · {r.shoppers} shoppers
-                    </span>
-                  </span>
-                  <span className="col-span-2 flex items-center gap-2 sm:col-span-1" role="img" aria-label={`${money(r.now, currency)}, ${Math.round((r.now / Math.max(1, total)) * 100)}% of the total`}>
-                    <span className="h-3 flex-1 overflow-hidden rounded-full bg-muted">
-                      <span className={cn('motion-grow block h-full rounded-full', TIER_BAR[r.tier] ?? 'bg-tier-p3')} style={{ width: `${Math.max(3, (r.now / max) * 100)}%` }} />
-                    </span>
-                  </span>
-                  <span className="col-span-2 flex items-center justify-between gap-3 sm:col-span-1 sm:flex-col sm:items-end sm:gap-0.5">
-                    <b className="text-base font-semibold whitespace-nowrap text-money tabular-nums">{moneyCompact(r.now, currency)}</b>
-                    <span className={cn('inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium', t.cls)}>
-                      <t.Icon aria-hidden="true" className="size-3" />
-                      {t.label}
-                    </span>
-                  </span>
-                </a>
-              </li>
-            );
-          })}
-        </ol>
+        <p className="m-0 text-sm text-muted-foreground">No issue has a money estimate yet. They appear here once shoppers who left are counted.</p>
       )}
+
+      <ol className="m-0 grid list-none gap-x-6 gap-y-1 p-0 xl:grid-cols-2">
+        {rows.map((r) => {
+          const t = TREND[r.trend];
+          const Row = r.id ? 'a' : 'div';
+          return (
+            <li key={r.key}>
+              <Row
+                {...(r.id ? { href: `#/issues/${r.id}` } : {})}
+                className={cn('grid grid-cols-[0.75rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 rounded-lg px-2 py-2 text-foreground no-underline', r.id && 'transition-colors hover:bg-muted/50')}
+              >
+                <span aria-hidden="true" className="size-3 rounded-[3px]" style={{ background: `var(--color-${r.key})` }} />
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate text-sm font-semibold">{r.label}</span>
+                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    {r.meta ? (
+                      <>
+                        <TierBadge tier={r.meta.tier} short /> {r.meta.route} · {r.meta.shoppers} shoppers
+                      </>
+                    ) : (
+                      'the smaller ones added together'
+                    )}
+                  </span>
+                </span>
+                <span className="flex flex-col items-end gap-0.5">
+                  <b className="text-base font-semibold whitespace-nowrap text-money tabular-nums">{moneyCompact(r.now, currency)}</b>
+                  <span className={cn('inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium', t.cls)}>
+                    <t.Icon aria-hidden="true" className="size-3" />
+                    {t.label}
+                  </span>
+                </span>
+                <span className="col-span-3 -mt-0.5 h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+                  <span className="motion-grow block h-full rounded-full" style={{ width: `${Math.max(2, (r.now / maxNow) * 100)}%`, background: `var(--color-${r.key})` }} />
+                </span>
+              </Row>
+            </li>
+          );
+        })}
+      </ol>
+
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-        <span>
-          {rows.length > 0 && (
-            <>
-              The top {rows.length} issue{rows.length === 1 ? '' : 's'} are {Math.round((shown / Math.max(1, total)) * 100)}% of the money lost.{' '}
-            </>
-          )}
-          “Getting worse” compares with {duration(windowMs)} ago.
-        </span>
+        <span>“Getting worse” compares with {duration(windowMs)} ago. Bars are sized against the biggest issue.</span>
         <a href="#/history" className="flex items-center gap-1 font-medium no-underline hover:underline">
           See how long each one went unnoticed <ArrowRightIcon aria-hidden="true" className="size-3.5" />
         </a>
