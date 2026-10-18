@@ -35,7 +35,7 @@ function at(clip: ClipMeta, secs: number) {
 /**
  * Seconds per scene: the base length, or the voice line plus breathing room, whichever is longer. Ids are stable: one
  * voice file per id in public/voice (scripts/voice.cjs). A screen scene must stay within its recording at 0.7x, so it is
- * capped at MAX (see the safe-length table in addvoiceover.md).
+ * capped at MAX (its recording played at the 0.7x floor).
  */
 const LEAD = 0.6;
 const TAIL = 0.6;
