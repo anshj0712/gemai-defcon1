@@ -334,6 +334,8 @@ describe('a churn watch pass', () => {
     expect(new Set(signals.map((s) => s.session_id)).size).toBe(10);
     expect(signals.every((s) => s.session_id.startsWith('s_fee_'))).toBe(true);
     expect((await state.getRule('demo', fee.rule_id))!.feedback).toEqual([expect.objectContaining({ verdict: 'approved', feature_key: fee.draft!.watch!.feature.key, churn_reason: 'shipping_cost' })]);
+    // The live rule remembers that the agent proposed it, so the dashboard can file it under the agent's rules.
+    expect((await state.getRule('demo', fee.rule_id))!.active?.origin).toBe('agent');
   });
 
   it('publishes the shoppers it suspects, so revenue at risk leaves them out of its baseline', async () => {

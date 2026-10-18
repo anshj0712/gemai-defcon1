@@ -1,25 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
+import { BellSimpleIcon, XIcon } from '@phosphor-icons/react';
+import { toast } from 'sonner';
+import { Badge } from '@/components/ui/badge';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 import { fetchRules, type RuleView } from './api';
+import { openProposals, proposalsLabel, toastLine } from './lib/inbox';
+
 
 const POLL_MS = 5000;
 const TOAST_MS = 12_000;
 const SEEN_KEY = 'cp_seen_hypotheses';
-
-/** Open agent proposals: the churn watcher's hypotheses and rule suggestions for issues, newest first. */
-export function openProposals(rules: readonly RuleView[]): RuleView[] {
-  return rules.filter((r) => r.draft?.origin === 'agent').sort((a, b) => b.draft!.created_at - a.draft!.created_at);
-}
-
-/** What a proposal's toast says: the hypothesis title and its gap, or the suggested rule's title. */
-export function toastLine(r: RuleView): { title: string; detail: string } {
-  const d = r.draft!;
-  const w = d.watch;
-  if (!w) return { title: d.rule.title, detail: 'A rule suggested for a recurring issue.' };
-  return {
-    title: w.title,
-    detail: `${Math.round(w.segment.abandonment * 100)}% of ${w.segment.sessions} shoppers left, against ${Math.round(w.baseline.abandonment * 100)}% of the others (synthetic data).`,
-  };
-}
 
 function readSeen(): Set<string> | null {
   try {
@@ -40,15 +32,47 @@ function writeSeen(ids: Iterable<string>): void {
 
 const keyOf = (r: RuleView) => `${r.rule_id}@${r.draft!.created_at}`;
 
+const review = () => setTimeout(() => document.getElementById('agent-suspects')?.scrollIntoView({ behavior: 'smooth' }), 50);
+
+/** The toast for a new proposal: visibly the agent's (dashed violet), never a finding. */
+function showProposal(r: RuleView): void {
+  const line = toastLine(r);
+  toast.custom(
+    (id) => (
+      <div className="flex w-[356px] flex-col gap-2 rounded-lg border border-agent-border bg-popover p-4 text-popover-foreground shadow-[0_12px_32px_-16px_rgb(15_23_42/0.35)]">
+        <div className="flex items-center justify-between gap-2">
+          <Badge className="bg-agent-muted text-agent">{r.draft?.watch ? 'The agent suspects' : 'The agent suggests a rule'}</Badge>
+          <Button variant="ghost" size="icon-xs" aria-label="Dismiss" onClick={() => toast.dismiss(id)}>
+            <XIcon aria-hidden="true" />
+          </Button>
+        </div>
+        <p className="m-0 font-medium">{line.title}</p>
+        <p className="m-0 text-[13px] text-muted-foreground">{line.detail}</p>
+        <a
+          href="#/rules"
+          className={cn(buttonVariants({ size: 'sm' }), 'self-start no-underline')}
+          onClick={() => {
+            toast.dismiss(id);
+            review();
+          }}
+        >
+          Review
+        </a>
+      </div>
+    ),
+    { duration: TOAST_MS },
+  );
+}
+
 /**
  * The agent's inbox in the top bar: a bell with the number of open proposals, and a toast when a new one arrives
  * ("The agent suspects ..."). Proposals are hypotheses, not findings; the toast links to the Rules tab to review.
  */
 export function AgentInbox() {
   const [open, setOpen] = useState<RuleView[]>([]);
-  const [toast, setToast] = useState<RuleView | null>(null);
   const seen = useRef<Set<string> | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // Bumped when a new proposal arrives: the bell nudges once and its count pops.
+  const [arrivals, setArrivals] = useState(0);
 
   useEffect(() => {
     let stop = false;
@@ -63,9 +87,8 @@ export function AgentInbox() {
           if (fresh.length > 0) {
             for (const r of fresh) seen.current.add(keyOf(r));
             writeSeen(seen.current);
-            setToast(fresh[0]!);
-            clearTimeout(timer.current);
-            timer.current = setTimeout(() => setToast(null), TOAST_MS);
+            showProposal(fresh[0]!);
+            setArrivals((n) => n + 1);
           }
         },
         () => undefined,
@@ -75,41 +98,28 @@ export function AgentInbox() {
     return () => {
       stop = true;
       clearInterval(t);
-      clearTimeout(timer.current);
     };
   }, []);
 
-  const line = toast ? toastLine(toast) : null;
+  const label = proposalsLabel(open.length);
   return (
     <>
-      <a className={`inbox${open.length ? ' has' : ''}`} href="#/rules" title={open.length ? `${open.length} open agent proposal${open.length > 1 ? 's' : ''}` : 'No open agent proposals'} aria-label="Agent proposals">
-        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-          <path fill="currentColor" d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm7-6V11a7 7 0 0 0-5.5-6.84V3.5a1.5 1.5 0 0 0-3 0v.66A7 7 0 0 0 5 11v5l-2 2v1h18v-1l-2-2Z" />
-        </svg>
-        {open.length > 0 && <span className="inbox-count">{open.length}</span>}
-      </a>
-      {toast && line && (
-        <div className="agent-toast" role="status">
-          <div className="agent-toast-head">
-            <span className="hyp-badge">{toast.draft?.watch ? 'The agent suspects' : 'The agent suggests a rule'}</span>
-            <button className="agent-toast-close" onClick={() => setToast(null)} aria-label="Dismiss">
-              ×
-            </button>
-          </div>
-          <b>{line.title}</b>
-          <p>{line.detail}</p>
-          <a
-            className="btn primary tiny"
-            href="#/rules"
-            onClick={() => {
-              setToast(null);
-              setTimeout(() => document.getElementById('agent-suspects')?.scrollIntoView({ behavior: 'smooth' }), 50);
-            }}
-          >
-            Review
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <a href="#/rules" aria-label={label} className={cn(buttonVariants({ variant: 'ghost', size: 'icon' }), 'relative text-topbar-muted hover:bg-topbar-active hover:text-topbar-foreground dark:hover:bg-topbar-active', open.length > 0 && 'text-agent-border')} onClick={review}>
+            <BellSimpleIcon key={arrivals} aria-hidden="true" className={arrivals > 0 ? 'motion-nudge' : undefined} />
+            {open.length > 0 && (
+              <span key={`${open.length}-${arrivals}`} aria-hidden="true" className="motion-pop absolute -top-0.5 -right-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-agent-strong px-1 text-[10px] leading-none font-semibold text-tier-foreground">
+                {open.length}
+              </span>
+            )}
           </a>
-        </div>
-      )}
+        </TooltipTrigger>
+        <TooltipContent>{label}</TooltipContent>
+      </Tooltip>
+      <span role="status" aria-atomic="true" className="sr-only">
+        {label}
+      </span>
     </>
   );
 }

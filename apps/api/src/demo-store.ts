@@ -63,15 +63,17 @@ export function registerDemoStore(app: FastifyInstance, opts: DemoStoreOptions =
     const bugs = bugsOf(req);
     const body = AuthorizeBody.safeParse(req.body ?? {});
     const attempt = body.success ? body.data.attempt : 1;
-    // BUG card_declined: every card is declined (and the shop's "Use another card" button is dead).
-    if (bugs.has('card_declined')) {
-      await sleep(STORE_DELAYS.authorize);
-      return reply.headers(noStore).send({ ok: false, reason: 'card_declined' });
-    }
+    // With both payment bugs live they take turns, so each shows: the 1st try times out, the 2nd is declined, the 3rd
+    // goes through (and checkout_error can then fail a Northeast order). Alone, each behaves as described below.
     // BUG slow_payment: the first attempt hangs for 6.5 s, then the bank times out; a retry goes through.
     if (bugs.has('slow_payment') && attempt === 1) {
       await sleep(STORE_DELAYS.authorizeSlow);
       return reply.headers(noStore).send({ ok: false, reason: 'bank_timeout' });
+    }
+    // BUG card_declined: every card is declined (and the shop's "Use another card" button is dead).
+    if (bugs.has('card_declined') && !(bugs.has('slow_payment') && attempt > 2)) {
+      await sleep(STORE_DELAYS.authorize);
+      return reply.headers(noStore).send({ ok: false, reason: 'card_declined' });
     }
     await sleep(STORE_DELAYS.authorize);
     return reply.headers(noStore).send({ ok: true, auth_id: `AUTH-${Math.floor(100000 + random() * 900000)}` });

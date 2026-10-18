@@ -1,8 +1,25 @@
-import { useCallback, useEffect, useState } from 'react';
-import type { ChurnReason, DryRun, RescanStatus, RevenueAtRisk, WatchMeta } from '@cp/schema';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import type { DryRun, RescanStatus, RevenueAtRisk } from '@cp/schema';
+import { CheckIcon, CaretDownIcon, GearSixIcon, PencilSimpleIcon, PlayIcon, PlusIcon, BinocularsIcon, DetectiveIcon, ThumbsDownIcon, ArrowUUpLeftIcon, UserIcon } from '@phosphor-icons/react';
+import { toast } from 'sonner';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
+import { cn } from '@/lib/utils';
 import { ApiError, approveRule, draftRule, fetchClusters, fetchRules, redraftRule, rejectRule, rescanRule, runWatch, undoRule, type BuiltinRuleView, type ClusterSummary, type RuleView } from './api';
+import { Eyebrow, Module, OriginChip, PageHeader, PageTabsList } from './components/common';
 import { ago, formulaLine, money, pct, time } from './format';
-import { probeValue, ProbesPanel } from './ProbesPanel';
+import { probeValue } from './lib/probes';
+import { liveOrigin } from './lib/rules';
+import type { RulesTab } from './lib/route';
+import { chanceText, CHURN_REASONS, watchSummary, watchValue } from './lib/watch';
+import { ProbesPanel } from './ProbesPanel';
 
 /** Example sentences. The first one finds the demo shop's silent quantity-price bug (synthetic data). */
 export const EXAMPLES = [
@@ -14,61 +31,44 @@ export const EXAMPLES = [
 ];
 
 const REFRESH_MS = 2000;
-
-/** Churn reason labels (the schema's CHURN_REASONS; typed against it so the two cannot drift). */
-export const CHURN_REASONS: Record<ChurnReason, string> = {
-  ux: 'Poor user experience',
-  shipping_cost: 'Shipping cost',
-  delivery_time: 'Delivery time',
-  returns: 'Returns hassle',
-  price: 'Price',
-  support: 'Customer service',
-  personalization: 'Personalization',
-  discount: 'Discounts and promotions',
-  payment_declined: 'Declined card',
-  payment_gateway: 'Payment gateway',
-  other: 'Other',
-};
+const APPLIED_TOAST_MS = 20_000;
+const LOST_HOW = 'Affected sessions with a cart × average cart × (their abandonment − baseline abandonment), over the sessions the dry run flags.';
 
 /** "Model gemini-3.8-flash" or the offline stand-in, said plainly. */
 function authorLine(a: { model: string; offline: boolean }): string {
-  return a.offline ? 'Drafted by the offline stand-in (a template parser, not Gemini). Set GOOGLE_API_KEY for Gemini.' : `Drafted by ${a.model}`;
+  return a.offline ? 'Drafted by the offline stand-in (a template parser, not Gemini).' : `Drafted by ${a.model}`;
 }
 
-/** Who worded an agent suggestion: Gemini, or the offline stand-in, said plainly. */
-function suggesterLine(s: { model: string; offline: boolean }): string {
-  return s.offline ? 'Suggested by the offline stand-in (templated, not Gemini). Set GOOGLE_API_KEY for Gemini.' : `Suggested by ${s.model}`;
-}
+const ruleCode = (text: string) => (
+  <p className="m-0 flex flex-wrap items-baseline gap-2">
+    <code className="rounded-md border bg-muted px-2 py-1 text-[13px]">{text}</code>
+    <span className="text-xs text-muted-foreground">(money in minor units)</span>
+  </p>
+);
 
-const LOST_HOW = 'Affected sessions with a cart × average cart × (their abandonment − baseline abandonment), over the sessions the dry run flags.';
+const sentenceLine = (s: string) => <p className="m-0 text-sm text-muted-foreground italic">“{s}”</p>;
 
-/**
- * Revenue already lost to the pattern: the revenue-at-risk formula over the dry run's hits. Prominent on an
- * agent suggestion (it is why the suggestion matters), one compact line on a merchant's own draft.
- */
-function RevenueLost({ r, prominent, at }: { r: RevenueAtRisk; prominent: boolean; at: number }) {
-  const ok = r.status === 'ok';
-  // Computed once, when the draft and its dry run were made; it does not move with later sessions.
-  const asOf = <span className="muted small-inline">as of {time(at)}</span>;
-  if (!prominent) {
-    return (
-      <p className="small-p" title={ok ? `${LOST_HOW} ${formulaLine(r)}` : undefined}>
-        Estimated revenue lost to date: {ok ? <b className="bad">{money(r.revenue_at_risk_minor, r.currency)}</b> : <span className="muted">{r.note ?? 'not enough data yet'}</span>} {asOf} <span className="synthetic-note">synthetic data</span>
-      </p>
-    );
-  }
+function ErrorNote({ error }: { error: Error | null }) {
+  if (!error) return null;
   return (
-    <div className={`lost${ok ? '' : ' pending'}`}>
-      <p className="lost-line">
-        Estimated revenue lost to date: {ok ? <b>{money(r.revenue_at_risk_minor, r.currency)}</b> : <span className="muted">not enough data yet</span>} {asOf} <span className="synthetic-note">synthetic data</span>
+    <Alert variant="destructive">
+      <AlertTitle>That did not work.</AlertTitle>
+      <AlertDescription>{error.message}</AlertDescription>
+    </Alert>
+  );
+}
+
+/** The revenue-at-risk formula over the dry run's hits, shown inside a rule's details. */
+function RevenueDetail({ r, at }: { r: RevenueAtRisk; at: number }) {
+  if (r.status !== 'ok') return <p className="m-0 text-[13px] text-muted-foreground">Revenue lost: {r.note ?? 'not enough data yet'}.</p>;
+  return (
+    <div className="flex flex-col gap-1 rounded-lg border border-danger-border bg-danger-muted px-3 py-2">
+      <p className="m-0 text-sm">
+        Estimated revenue lost to date: <b className="text-money tabular-nums">{money(r.revenue_at_risk_minor, r.currency)}</b> <span className="text-xs text-muted-foreground">as of {time(at)}</span>
       </p>
-      {ok ? (
-        <p className="small-p muted" title={formulaLine(r)}>
-          {LOST_HOW} {formulaLine(r)}
-        </p>
-      ) : (
-        r.note && <p className="small-p muted">{r.note}</p>
-      )}
+      <p className="m-0 text-xs text-muted-foreground">
+        {LOST_HOW} {formulaLine(r)}
+      </p>
     </div>
   );
 }
@@ -87,66 +87,83 @@ function sideText(left: number | null, right: number | null, currency: string | 
 
 function DryRunBlock({ d, probe }: { d: DryRun; probe?: string | undefined }) {
   return (
-    <>
-      <p className="small-p">
-        Checked <b>{d.sessions_scanned}</b> recent session{d.sessions_scanned === 1 ? '' : 's'}{d.truncated ? ' (the newest; more exist)' : ''}. The rule applies to <b>{d.sessions_applicable}</b> and would flag{' '}
-        <b className={d.sessions_hit ? 'bad' : ''}>{d.sessions_hit}</b>
+    <div className="flex flex-col gap-2">
+      <p className="m-0 text-[13px]">
+        Checked <b className="tabular-nums">{d.sessions_scanned}</b> recent session{d.sessions_scanned === 1 ? '' : 's'}
+        {d.truncated ? ' (the newest; more exist)' : ''}. The rule applies to <b className="tabular-nums">{d.sessions_applicable}</b> and would flag <b className={cn('tabular-nums', d.sessions_hit > 0 && 'text-money')}>{d.sessions_hit}</b>
         {d.hit_rate !== null && <> ({pct(d.hit_rate)} of those it applies to)</>}. {d.hits_in_issues > 0 ? `${d.hits_in_issues} of them are already in an issue.` : 'None of them is in an issue yet.'}
       </p>
       {d.samples.length > 0 && (
-        <table className="signals compact">
-          <tbody>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Time</TableHead>
+              <TableHead>Page</TableHead>
+              <TableHead title="Left side of the rule against its right side">Values</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Replay</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {d.samples.map((s) => (
-              <tr key={s.session_id}>
-                <td>{time(s.event_time)}</td>
-                <td>{s.route}</td>
-                <td title="Left side of the rule against its right side">
-                  {sideText(s.left, s.right, s.currency, probe)}
-                </td>
-                <td>{s.in_issue ? <span className="muted">in an issue</span> : <span className="found-later">new</span>}</td>
-                <td>
-                  <a className="btn tiny" href={`#/sessions/${s.session_id}`}>
+              <TableRow key={s.session_id}>
+                <TableCell className="tabular-nums">{time(s.event_time)}</TableCell>
+                <TableCell className="font-mono text-xs">{s.route}</TableCell>
+                <TableCell className="tabular-nums">{sideText(s.left, s.right, s.currency, probe)}</TableCell>
+                <TableCell>{s.in_issue ? <Badge variant="secondary">In an issue</Badge> : <Badge className="bg-agent-muted text-agent">New</Badge>}</TableCell>
+                <TableCell className="text-right">
+                  <a className={cn(buttonVariants({ variant: 'outline', size: 'xs' }), 'no-underline')} href={`#/sessions/${s.session_id}`}>
+                    <PlayIcon data-icon="inline-start" aria-hidden="true" />
                     Watch replay
                   </a>
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       )}
-    </>
+    </div>
   );
 }
+
+const RESCAN_STATE: Record<string, string> = {
+  running: 'bg-agent-muted text-agent',
+  done: 'bg-success-muted text-success',
+  failed: 'bg-danger-muted text-money',
+  interrupted: 'bg-danger-muted text-money',
+};
 
 function RescanBlock({ s, issue, onRescan, busy }: { s: RescanStatus; issue: ClusterSummary | null; onRescan: () => void; busy: boolean }) {
   const pctDone = s.sessions_total > 0 ? Math.min(1, s.sessions_scanned / s.sessions_total) : s.status === 'running' ? 0 : 1;
   const days = Math.round((s.window.to - s.window.from) / 86_400_000);
+  const bad = s.status === 'failed' || s.status === 'interrupted';
   return (
-    <div className="rescan">
-      <div className="rescan-head">
-        <b>Re-scan of the last {days} days</b>
-        <span className={`rescan-state ${s.status}`}>{s.status === 'running' ? 'running' : s.status === 'done' ? 'done' : s.status}</span>
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <b className="text-sm font-semibold">Re-scan of the last {days} days</b>
+        <Badge className={RESCAN_STATE[s.status] ?? 'bg-muted text-muted-foreground'}>{s.status}</Badge>
       </div>
-      <div className="bar">
-        <span style={{ width: `${pctDone * 100}%`, background: s.status === 'failed' || s.status === 'interrupted' ? '#dc2626' : '#7c3aed' }} />
+      <div className="h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={Math.round(pctDone * 100)} aria-valuemin={0} aria-valuemax={100} aria-label="Re-scan progress">
+        <span className={cn('block h-full rounded-full transition-[width]', bad ? 'bg-destructive' : 'bg-agent-strong')} style={{ width: `${pctDone * 100}%` }} />
       </div>
-      <p className="small-p">
-        {s.sessions_scanned} of {s.sessions_total || '…'} sessions read{s.truncated ? ' (capped at the newest)' : ''} · <b>{s.sessions_hit}</b> session{s.sessions_hit === 1 ? '' : 's'} hit · {s.signals_written} signal
+      <p className="m-0 text-[13px] text-muted-foreground">
+        {s.sessions_scanned} of {s.sessions_total || '…'} sessions read{s.truncated ? ' (capped at the newest)' : ''} · <b className="text-foreground">{s.sessions_hit}</b> session{s.sessions_hit === 1 ? '' : 's'} hit · {s.signals_written} signal
         {s.signals_written === 1 ? '' : 's'} written with their original times
         {s.sessions_failed > 0 && <> · {s.sessions_failed} unreadable</>}
         {s.finished_at && <> · finished {ago(s.finished_at)}</>}
       </p>
-      {s.error && <p className="notice">{s.error}</p>}
-      <div className="row-actions">
+      {s.error && <ErrorNote error={new Error(s.error)} />}
+      <div className="flex flex-wrap gap-2">
         {issue && (
-          <a className="btn primary" href={`#/issues/${issue.cluster_id}`}>
+          <a className={cn(buttonVariants({ size: 'sm' }), 'no-underline')} href={`#/issues/${issue.cluster_id}`}>
             Open the issue ({issue.session_count} sessions)
           </a>
         )}
         {s.status !== 'running' && (
-          <button className="btn" disabled={busy} onClick={onRescan}>
+          <Button variant="outline" size="sm" disabled={busy} onClick={onRescan}>
+            <BinocularsIcon data-icon="inline-start" aria-hidden="true" />
             Re-scan again
-          </button>
+          </Button>
         )}
       </div>
     </div>
@@ -154,244 +171,332 @@ function RescanBlock({ s, issue, onRescan, busy }: { s: RescanStatus; issue: Clu
 }
 
 /**
- * A pending draft: the merchant's own, or one the agent suggested for a recurring issue. Both have the same
- * dry run and the same two actions; approving is the only thing that makes either live and starts a re-scan.
+ * One rule as a compact row: who it is from, what it is, the one number that matters, and its actions. Everything else
+ * (rates, the formula, the dry run, the reasoning) waits behind the chevron.
  */
-function DraftCard({ r, busy, error, onApprove, onDiscard }: { r: RuleView; busy: string | null; error: Error | null; onApprove: () => void; onDiscard: () => void }) {
-  const d = r.draft!;
-  const agent = d.origin === 'agent';
-  const suggester = d.suggester ?? null;
-  const lost = d.revenue_lost ?? null;
+function RuleRow({ chips, title, figure, actions, children, tone }: { chips: ReactNode; title: ReactNode; figure?: ReactNode; actions: ReactNode; children: ReactNode; tone?: 'agent' }) {
+  const [open, setOpen] = useState(false);
   return (
-    <div className={`panel rule-card draft${agent ? ' agent' : ''}`}>
-      <div className="finding-head">
-        <span className="kind invariant">Draft · v{d.rule.version}</span>
-        {agent && <span className="agent-badge">Suggested by the agent</span>}
-        <span className="muted small-inline">{authorLine(d.author)}</span>
-      </div>
-      <h3 className="rule-title">{d.rule.title}</h3>
-      <p className="sentence">“{d.sentence}”</p>
-      {agent && (
-        <>
-          {suggester?.explanation && (
-            <p className="small-p">
-              <b>Why:</b> {suggester.explanation}
-            </p>
-          )}
-          {suggester && suggester.assumptions.length > 0 && (
-            <ul className="assumptions">
-              {suggester.assumptions.map((a) => (
-                <li key={a}>{a}</li>
-              ))}
-            </ul>
-          )}
-          <p className="small-p muted">
-            {suggester ? suggesterLine(suggester) : 'Suggested by the agent'}
-            {d.cluster_id && (
-              <>
-                {' · '}
-                <a href={`#/issues/${d.cluster_id}`}>Open the issue that prompted it</a>
-              </>
-            )}
-          </p>
-          {lost && <RevenueLost r={lost} prominent at={d.created_at} />}
-        </>
-      )}
-      <p className="rule-text">
-        <code>{r.text.draft}</code> <span className="muted small">(money in minor units)</span>
-      </p>
-      {d.author.explanation && <p className="small-p">{d.author.explanation}</p>}
-      {d.author.assumptions.length > 0 && (
-        <ul className="assumptions">
-          {d.author.assumptions.map((a) => (
-            <li key={a}>{a}</li>
-          ))}
-        </ul>
-      )}
-      <h4>Dry run (nothing written)</h4>
-      {d.dry_run ? <DryRunBlock d={d.dry_run} probe={d.rule.highlight_probe} /> : <p className="muted">No dry run.</p>}
-      {!agent && lost && <RevenueLost r={lost} prominent={false} at={d.created_at} />}
-      <div className="row-actions">
-        <button className="btn primary" disabled={busy !== null} onClick={onApprove}>
-          {busy === `approve-${r.rule_id}` ? 'Approving…' : 'Approve and re-scan the last 30 days'}
-        </button>
-        <button className="btn" disabled={busy !== null} onClick={onDiscard}>
-          Discard
-        </button>
-      </div>
-      {error && (
-        <div className="notice">
-          <b>That did not work.</b> {error.message}
+    <Collapsible open={open} onOpenChange={setOpen} className={cn('rounded-xl bg-card ring-1 ring-border transition-shadow duration-200', tone === 'agent' && 'ring-agent-border', open && 'shadow-[0_10px_28px_-18px_rgb(15_23_42/0.35)]')}>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <div className="flex flex-wrap items-center gap-1.5">{chips}</div>
+          <span className="text-[15px] leading-snug font-semibold">{title}</span>
         </div>
-      )}
+        {figure && <div className="text-right">{figure}</div>}
+        <div className="flex flex-wrap items-center gap-2">{actions}</div>
+        <CollapsibleTrigger asChild>
+          <Button variant="ghost" size="icon-sm" aria-label={open ? 'Hide details' : 'Show details'} title={open ? 'Hide details' : 'Show details'}>
+            <CaretDownIcon aria-hidden="true" className={cn('transition-transform duration-200 ease-out-expo', open && 'rotate-180')} />
+          </Button>
+        </CollapsibleTrigger>
+      </div>
+      <CollapsibleContent>
+        <div className="motion-reveal flex flex-col gap-3 border-t px-4 pt-3 pb-4">{children}</div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+const lostFigure = (r: RevenueAtRisk | null | undefined) =>
+  r && r.status === 'ok' ? (
+    <div className="flex flex-col">
+      <span className="font-semibold text-money tabular-nums">{money(r.revenue_at_risk_minor, r.currency)}</span>
+      <span className="text-xs text-muted-foreground">lost so far</span>
+    </div>
+  ) : null;
+
+const CONFIDENCE: Record<string, string> = { high: 'bg-success-muted text-success', medium: 'bg-secondary text-secondary-foreground', low: 'bg-warn-muted text-warn' };
+
+function HypStat({ value, label, tone }: { value: string; label: ReactNode; tone?: 'bad' }) {
+  return (
+    <div className={cn('flex flex-col gap-0.5 rounded-lg border px-3 py-2', tone === 'bad' ? 'border-danger-border bg-danger-muted' : 'bg-muted/50')}>
+      <b className={cn('text-xl leading-tight font-semibold tabular-nums', tone === 'bad' && 'text-money')}>{value}</b>
+      <span className="text-xs text-muted-foreground">{label}</span>
     </div>
   );
 }
 
-/** One line on what a watch pass looked at and what it raised. */
-export function watchSummary(r: { results: unknown }): string {
-  const x = r.results as { sessions?: number; decided?: number; numbers?: number; candidates?: { outcome: string }[] } | null;
-  if (!x || typeof x !== 'object') return 'The agent looked at the latest sessions.';
-  const drafted = (x.candidates ?? []).filter((c) => c.outcome === 'drafted').length;
-  const declined = (x.candidates ?? []).length - drafted;
-  return `Looked at ${x.sessions ?? 0} sessions (${x.decided ?? 0} with a settled cart) and ${x.numbers ?? 0} numbers: ${drafted ? `${drafted} new hypothes${drafted === 1 ? 'is' : 'es'}` : 'nothing new'}${declined ? `, ${declined} judged not worth a rule` : ''}.`;
-}
-
-/** "very unlikely to be chance (p < 0.001)": a p-value said plainly. */
-export function chanceText(p: number): string {
-  if (p < 0.001) return 'very unlikely to be chance (p < 0.001)';
-  if (p < 0.01) return `unlikely to be chance (p = ${p.toFixed(3)})`;
-  return `p = ${p.toFixed(2)}`;
-}
-
-/** A value of the number a hypothesis is about, in its unit. */
-export function watchValue(unit: WatchMeta['feature']['unit'], v: number | null): string {
-  if (v === null) return 'none';
-  if (unit === 'money') return money(v, 'INR');
-  if (unit === 'ms') return v >= 1000 ? `${(v / 1000).toFixed(1)} s` : `${Math.round(v)} ms`;
-  return v.toLocaleString('en-IN');
-}
-
-/**
- * The churn watcher's hypothesis: a number code found that shoppers leave over, the agent's reading of it, the
- * probe and rule it proposes, and the dry run. Visibly not a finding: nothing is flagged until a person approves,
- * changes the rule, or says it is not a problem (the agent reads that note next time).
- */
-function HypothesisCard({
-  r,
-  busy,
-  error,
-  onApprove,
-  onRedraft,
-  onReject,
-}: {
-  r: RuleView;
+interface Actions {
   busy: string | null;
-  error: Error | null;
-  onApprove: () => void;
-  onRedraft: (sentence: string) => void;
-  onReject: (note: string) => void;
-}) {
+  errorFor: (r: RuleView) => Error | null;
+  approve: (r: RuleView) => void;
+  discard: (r: RuleView) => void;
+  redraft: (r: RuleView, sentence: string) => void;
+  reject: (r: RuleView, note: string) => void;
+}
+
+/** The churn watcher's hypothesis: visibly the agent's (dashed violet), never a finding until approved. */
+function HypothesisRow({ r, a }: { r: RuleView; a: Actions }) {
   const d = r.draft!;
   const w = d.watch!;
-  const [mode, setMode] = useState<'none' | 'edit' | 'reject'>('none');
+  const [dialog, setDialog] = useState<'none' | 'edit' | 'reject'>('none');
   const [sentence, setSentence] = useState(d.sentence);
   const [note, setNote] = useState('');
   const page = w.feature.route ?? 'the store';
   const probe = d.proposed_probes?.[0] ?? null;
   const suggester = d.suggester;
+  const closeDialog = (o: boolean) => !o && setDialog('none');
+  const busyHere = (k: string) => a.busy === `${k}-${r.rule_id}`;
   return (
-    <div className="panel rule-card hypothesis">
-      <div className="finding-head">
-        <span className="hyp-badge">Hypothesis · not a finding yet</span>
-        <span className="reason-chip">{CHURN_REASONS[w.churn_reason] ?? w.churn_reason}</span>
-        <span className={`confidence ${w.confidence}`}>{w.confidence} confidence</span>
-        <span className="muted small-inline">{suggester ? (suggester.offline ? 'offline stand-in (templated)' : suggester.model) : 'agent'} · found {ago(w.found_at)}</span>
-      </div>
-      <h3 className="rule-title">{w.title}</h3>
-      <div className="hyp-stats">
-        <div className="hyp-stat bad">
-          <b>{pct(w.segment.abandonment)}</b>
-          <span>
-            left without ordering after {w.feature.unit === 'ms' ? 'waiting' : 'seeing'} {w.direction === 'gte' ? '≥' : '≤'} {watchValue(w.feature.unit, w.threshold)} ({w.segment.sessions} sessions)
-          </span>
-        </div>
-        <div className="hyp-stat">
-          <b>{pct(w.baseline.abandonment)}</b>
-          <span>
-            of other shoppers who reached {page} left ({w.baseline.sessions})
-          </span>
-        </div>
-        <div className="hyp-stat">
-          <b>+{Math.round(w.lift * 100)} pts</b>
-          <span>{chanceText(w.p_value)}</span>
-        </div>
-      </div>
-      {d.revenue_lost && <RevenueLost r={d.revenue_lost} prominent at={d.created_at} />}
-      <p className="small-p">
-        <b>Why I think so:</b> {w.hypothesis}
-      </p>
-      <div className="hyp-number">
-        {probe ? (
+    <>
+      <RuleRow
+        tone="agent"
+        chips={
           <>
-            <span className="src recorded">New probe</span> <code>{probe.name}</code> reads <code>{probe.selector}</code> on {probe.routes?.join(', ') ?? 'every page'} as {probe.kind === 'money' ? 'money' : 'a number'}. Nobody probed it: the agent found it on the recorded pages. Approving registers it.
+            <OriginChip origin="agent" icon={DetectiveIcon}>
+              Hypothesis · not a finding yet
+            </OriginChip>
+            <Badge variant="outline" className="border-warn-border bg-warn-muted text-warn">
+              {CHURN_REASONS[w.churn_reason] ?? w.churn_reason}
+            </Badge>
+            <Badge className={CONFIDENCE[w.confidence] ?? CONFIDENCE.medium}>{w.confidence} confidence</Badge>
           </>
-        ) : (
+        }
+        title={w.title}
+        figure={lostFigure(d.revenue_lost)}
+        actions={
           <>
-            <span className={`src ${w.feature.source === 'request' ? 'request' : 'declared'}`}>{w.feature.source === 'request' ? 'Request probe' : 'Probe'}</span> <code>{w.feature.name}</code> on {page}.
+            <Button size="sm" disabled={a.busy !== null} onClick={() => a.approve(r)}>
+              <CheckIcon data-icon="inline-start" aria-hidden="true" />
+              {busyHere('approve') ? 'Approving…' : probe ? 'Approve probe and rule' : 'Approve rule'}
+            </Button>
+            <Button size="sm" variant="outline" disabled={a.busy !== null} onClick={() => setDialog('edit')}>
+              <PencilSimpleIcon data-icon="inline-start" aria-hidden="true" />
+              {busyHere('redraft') ? 'Drafting again…' : 'Change the rule'}
+            </Button>
+            <Button size="sm" variant="outline" disabled={a.busy !== null} onClick={() => setDialog('reject')}>
+              <ThumbsDownIcon data-icon="inline-start" aria-hidden="true" />
+              {busyHere('reject') ? 'Telling the agent…' : 'Not a problem'}
+            </Button>
           </>
-        )}{' '}
-        <span className="muted">
-          In the segment: {watchValue(w.feature.unit, w.values.segment_min)}
-          {w.values.segment_max !== w.values.segment_min ? ` – ${watchValue(w.feature.unit, w.values.segment_max)}` : ''}; everyone else: up to {watchValue(w.feature.unit, w.values.others_max)}.
-        </span>
-      </div>
-      <p className="sentence">“{d.sentence}”</p>
-      <p className="rule-text">
-        <code>{r.text.draft}</code> <span className="muted small">(money in minor units)</span>
+        }
+      >
+        <div className="grid gap-2 md:grid-cols-3">
+          <HypStat tone="bad" value={pct(w.segment.abandonment)} label={<>left without ordering after {w.feature.unit === 'ms' ? 'waiting' : 'seeing'} {w.direction === 'gte' ? '≥' : '≤'} {watchValue(w.feature.unit, w.threshold)} ({w.segment.sessions} sessions)</>} />
+          <HypStat value={pct(w.baseline.abandonment)} label={<>of other shoppers who reached {page} left ({w.baseline.sessions})</>} />
+          <HypStat value={`+${Math.round(w.lift * 100)} pts`} label={chanceText(w.p_value)} />
+        </div>
+        {d.revenue_lost && <RevenueDetail r={d.revenue_lost} at={d.created_at} />}
+        <p className="m-0 text-sm">
+          <b className="font-semibold">Why I think so:</b> {w.hypothesis}
+        </p>
+        <p className="m-0 text-[13px] leading-relaxed">
+          {probe ? (
+            <>
+              <Badge className="mr-1 bg-agent-muted text-agent">New probe</Badge>
+              <code>{probe.name}</code> reads <code>{probe.selector}</code> on {probe.routes?.join(', ') ?? 'every page'} as {probe.kind === 'money' ? 'money' : 'a number'}. Nobody probed it: the agent found it on the recorded pages. Approving registers
+              it.
+            </>
+          ) : (
+            <>
+              <Badge variant="outline" className="mr-1">
+                {w.feature.source === 'request' ? 'Request probe' : 'Probe'}
+              </Badge>
+              <code>{w.feature.name}</code> on {page}.
+            </>
+          )}{' '}
+          <span className="text-muted-foreground">
+            In the segment: {watchValue(w.feature.unit, w.values.segment_min)}
+            {w.values.segment_max !== w.values.segment_min ? ` – ${watchValue(w.feature.unit, w.values.segment_max)}` : ''}; everyone else: up to {watchValue(w.feature.unit, w.values.others_max)}.
+          </span>
+        </p>
+        {sentenceLine(d.sentence)}
+        {ruleCode(r.text.draft ?? '')}
+        <Eyebrow>Dry run (nothing written)</Eyebrow>
+        {d.dry_run ? <DryRunBlock d={d.dry_run} probe={d.rule.highlight_probe} /> : <p className="m-0 text-muted-foreground">No dry run.</p>}
+        <p className="m-0 text-xs text-muted-foreground">
+          {suggester ? (suggester.offline ? 'Offline stand-in (templated)' : suggester.model) : 'Agent'} · found {ago(w.found_at)}. Nothing is flagged until you approve. Approving {probe ? 'registers the probe, ' : ''}runs the rule on live traffic, and re-scans the last 30 days.
+        </p>
+      </RuleRow>
+      <ErrorNote error={a.errorFor(r)} />
+
+      <Dialog open={dialog === 'edit'} onOpenChange={closeDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change the rule</DialogTitle>
+            <DialogDescription>
+              Rewrite the sentence; the rule author drafts it again with a fresh dry run. Keep the probe name (<code>{probe?.name ?? w.feature.name}</code>) in the sentence.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea rows={3} value={sentence} onChange={(e) => setSentence(e.target.value)} maxLength={500} aria-label="Rule sentence" />
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button
+              disabled={a.busy !== null || sentence.trim().length < 8}
+              onClick={() => {
+                setDialog('none');
+                a.redraft(r, sentence);
+              }}
+            >
+              Draft again
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={dialog === 'reject'} onOpenChange={closeDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Not a problem?</DialogTitle>
+            <DialogDescription>Say why it is expected. The agent reads your note next time and will not raise this number again unless the gap grows.</DialogDescription>
+          </DialogHeader>
+          <Textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} aria-label="Why this is expected" placeholder="For example: express delivery costs ₹499 by design." />
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button
+              variant="destructive"
+              disabled={a.busy !== null}
+              onClick={() => {
+                setDialog('none');
+                a.reject(r, note);
+              }}
+            >
+              Discard and tell the agent
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+/** A draft rule waiting for approval: one the agent suggested for a recurring issue, or one the merchant wrote. */
+function DraftRow({ r, a }: { r: RuleView; a: Actions }) {
+  const d = r.draft!;
+  const agent = d.origin === 'agent';
+  const suggester = d.suggester ?? null;
+  return (
+    <>
+      <RuleRow
+        tone={agent ? 'agent' : undefined}
+        chips={
+          <>
+            {agent ? (
+              <OriginChip origin="agent" icon={DetectiveIcon}>
+                Suggested for a recurring issue
+              </OriginChip>
+            ) : (
+              <OriginChip origin="human" icon={UserIcon}>
+                Your draft
+              </OriginChip>
+            )}
+            <Badge variant="outline">v{d.rule.version}</Badge>
+          </>
+        }
+        title={d.rule.title}
+        figure={lostFigure(d.revenue_lost)}
+        actions={
+          <>
+            <Button size="sm" disabled={a.busy !== null} onClick={() => a.approve(r)}>
+              <CheckIcon data-icon="inline-start" aria-hidden="true" />
+              {a.busy === `approve-${r.rule_id}` ? 'Approving…' : 'Approve and re-scan'}
+            </Button>
+            <Button size="sm" variant="outline" disabled={a.busy !== null} onClick={() => a.discard(r)}>
+              Discard
+            </Button>
+          </>
+        }
+      >
+        {sentenceLine(d.sentence)}
+        {agent && suggester?.explanation && (
+          <p className="m-0 text-[13px]">
+            <b className="font-semibold">Why:</b> {suggester.explanation}
+          </p>
+        )}
+        {agent && suggester && suggester.assumptions.length > 0 && (
+          <ul className="m-0 list-disc pl-5 text-[13px] text-muted-foreground">
+            {suggester.assumptions.map((x) => (
+              <li key={x}>{x}</li>
+            ))}
+          </ul>
+        )}
+        {agent && d.cluster_id && (
+          <p className="m-0 text-xs">
+            <a href={`#/issues/${d.cluster_id}`}>Open the issue that prompted it</a>
+          </p>
+        )}
+        {d.revenue_lost && <RevenueDetail r={d.revenue_lost} at={d.created_at} />}
+        {ruleCode(r.text.draft ?? '')}
+        {d.author.explanation && <p className="m-0 text-[13px]">{d.author.explanation}</p>}
+        {d.author.assumptions.length > 0 && (
+          <ul className="m-0 list-disc pl-5 text-[13px] text-muted-foreground">
+            {d.author.assumptions.map((x) => (
+              <li key={x}>{x}</li>
+            ))}
+          </ul>
+        )}
+        <Eyebrow>Dry run (nothing written)</Eyebrow>
+        {d.dry_run ? <DryRunBlock d={d.dry_run} probe={d.rule.highlight_probe} /> : <p className="m-0 text-muted-foreground">No dry run.</p>}
+        <p className="m-0 text-xs text-muted-foreground">{authorLine(d.author)}</p>
+      </RuleRow>
+      <ErrorNote error={a.errorFor(r)} />
+    </>
+  );
+}
+
+/** A live rule: what it checks, who proposed it, and its re-scan; Undo switches it off. */
+function LiveRow({ r, issue, busy, onUndo, onRescan }: { r: RuleView; issue: ClusterSummary | null; busy: boolean; onUndo: () => void; onRescan: () => void }) {
+  const a = r.active!;
+  const s = r.rescan;
+  return (
+    <RuleRow
+      chips={
+        <>
+          <Badge className="bg-success-muted text-success">Live · v{a.rule.version}</Badge>
+          {s && <Badge className={RESCAN_STATE[s.status] ?? 'bg-muted text-muted-foreground'}>re-scan {s.status}</Badge>}
+          <span className="text-xs text-muted-foreground">
+            approved {ago(a.approved_at)} by {a.approved_by}
+          </span>
+        </>
+      }
+      title={r.title}
+      figure={
+        s ? (
+          <div className="flex flex-col">
+            <span className="font-semibold text-agent tabular-nums">{s.sessions_hit}</span>
+            <span className="text-xs text-muted-foreground">found in history</span>
+          </div>
+        ) : undefined
+      }
+      actions={
+        <Button size="sm" variant="outline" disabled={busy} onClick={onUndo} title="Switch this rule off. What it already found stays as history.">
+          <ArrowUUpLeftIcon data-icon="inline-start" aria-hidden="true" />
+          Undo
+        </Button>
+      }
+    >
+      {sentenceLine(a.sentence)}
+      <p className="m-0">
+        <code className="rounded-md border bg-muted px-2 py-1 text-[13px]">{r.text.active}</code>
       </p>
-      <h4>Dry run (nothing written)</h4>
-      {d.dry_run ? <DryRunBlock d={d.dry_run} probe={d.rule.highlight_probe} /> : <p className="muted">No dry run.</p>}
-      <p className="small-p muted">Nothing is flagged until you approve. Approving {probe ? 'registers the probe, ' : ''}runs the rule on live traffic, and re-scans the last 30 days.</p>
-      <div className="row-actions">
-        <button className="btn primary" disabled={busy !== null} onClick={onApprove}>
-          {busy === `approve-${r.rule_id}` ? 'Approving…' : probe ? 'Approve probe and rule' : 'Approve rule'}
-        </button>
-        <button className="btn" disabled={busy !== null} onClick={() => setMode(mode === 'edit' ? 'none' : 'edit')}>
-          Change the rule
-        </button>
-        <button className="btn" disabled={busy !== null} onClick={() => setMode(mode === 'reject' ? 'none' : 'reject')}>
-          Not a problem
-        </button>
-      </div>
-      {mode === 'edit' && (
-        <div className="hyp-form">
-          <textarea rows={2} value={sentence} onChange={(e) => setSentence(e.target.value)} maxLength={500} />
-          <div className="row-actions">
-            <button className="btn primary" disabled={busy !== null || sentence.trim().length < 8} onClick={() => onRedraft(sentence)}>
-              {busy === `redraft-${r.rule_id}` ? 'Drafting again…' : 'Draft again'}
-            </button>
-            <span className="muted small-inline">Keep the probe name ({probe?.name ?? w.feature.name}) in the sentence.</span>
-          </div>
-        </div>
-      )}
-      {mode === 'reject' && (
-        <div className="hyp-form">
-          <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder="Why is this expected? For example: express delivery costs ₹499 by design. The agent reads this next time." />
-          <div className="row-actions">
-            <button className="btn" disabled={busy !== null} onClick={() => onReject(note)}>
-              {busy === `reject-${r.rule_id}` ? 'Telling the agent…' : 'Discard and tell the agent'}
-            </button>
-          </div>
-        </div>
-      )}
-      {error && (
-        <div className="notice">
-          <b>That did not work.</b> {error.message}
-        </div>
-      )}
-    </div>
+      {s && <RescanBlock s={s} issue={issue} busy={busy} onRescan={onRescan} />}
+      {a.author && <p className="m-0 text-xs text-muted-foreground">{authorLine(a.author)}</p>}
+    </RuleRow>
   );
 }
 
 /**
- * Rules in plain English (Phase 4). A merchant describes what must always hold; Gemini drafts an
- * invariant over the store's probes; a dry run shows what it would flag; approving it runs it on live
- * traffic and re-scans the last 30 days, so shoppers it already hurt show up as found later.
+ * Rules in plain English. Three tabs: what is waiting for approval, what is live, and the probes rules compare. In each,
+ * what the agent proposed and what the merchant added are separate modules, so it is always clear whose idea a rule is.
+ * Every rule is a compact row; its numbers open with the chevron.
  */
-export function RulesPage() {
+export function RulesPage({ tab }: { tab?: RulesTab }) {
   const [rules, setRules] = useState<RuleView[] | null>(null);
   const [builtin, setBuiltin] = useState<BuiltinRuleView[]>([]);
   const [clusters, setClusters] = useState<ClusterSummary[]>([]);
   const [sentence, setSentence] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<ApiError | Error | null>(null);
-  /** The action that failed, so a draft card shows its own error instead of the composer. */
+  /** The action that failed, so a row shows its own error instead of the composer. */
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [watchNote, setWatchNote] = useState<string | null>(null);
-  // The rule just switched on, shown for a while with an Undo button.
-  const [applied, setApplied] = useState<{ id: string; title: string } | null>(null);
+  const [writing, setWriting] = useState(false);
 
   const load = useCallback(
     () =>
@@ -419,11 +524,21 @@ export function RulesPage() {
     setErrorKey(null);
     try {
       const res = (await fn()) as { rule?: { rule_id: string; title: string } } | undefined;
+      // The rule just switched on: say so for a while, with an Undo.
       if (key.startsWith('approve-') && res?.rule) {
-        setApplied({ id: res.rule.rule_id, title: res.rule.title });
-        setTimeout(() => setApplied((a) => (a?.id === res.rule!.rule_id ? null : a)), 20_000);
+        const { rule_id, title } = res.rule;
+        toast.success('Rule is live', {
+          id: `applied-${rule_id}`,
+          description: `${title}. It now checks every new session, and the last 30 days are being re-scanned. Changed your mind?`,
+          duration: APPLIED_TOAST_MS,
+          action: { label: 'Undo', onClick: () => void act(`undo-${rule_id}`, () => undoRule(rule_id)) },
+        });
       }
-      if (key.startsWith('undo-')) setApplied(null);
+      if (key.startsWith('undo-')) toast.dismiss(`applied-${key.slice('undo-'.length)}`);
+      if (key === 'draft') {
+        setWriting(false);
+        setSentence('');
+      }
       await load();
     } catch (e) {
       setError(e instanceof Error ? e : new Error(String(e)));
@@ -433,162 +548,190 @@ export function RulesPage() {
     }
   };
 
-  const issueFor = (ruleId: string) => clusters.find((c) => c.kind === 'invariant' && c.anchor === ruleId) ?? null;
-
-  if (loadError && !rules) return <p className="muted">Could not load rules ({loadError}). Is the API running? Try <code>pnpm dev</code>.</p>;
-  if (!rules) return <p className="muted">Loading…</p>;
-
-  const drafts = rules.filter((r) => r.draft);
-  // Drafts stored before origin existed have none: they are the merchant's.
-  const hypotheses = drafts.filter((r) => r.draft!.origin === 'agent' && r.draft!.watch);
-  const suggested = drafts.filter((r) => r.draft!.origin === 'agent' && !r.draft!.watch);
-  const own = drafts.filter((r) => r.draft!.origin !== 'agent');
-  const errorFor = (r: RuleView) => (['approve', 'reject', 'redraft'].some((a) => errorKey === `${a}-${r.rule_id}`) ? error : null);
-  const active = rules.filter((r) => r.active);
-  const card = (r: RuleView) => (
-    <DraftCard
-      key={`draft-${r.rule_id}`}
-      r={r}
-      busy={busy}
-      error={errorKey === `approve-${r.rule_id}` || errorKey === `reject-${r.rule_id}` ? error : null}
-      onApprove={() => void act(`approve-${r.rule_id}`, () => approveRule(r.rule_id, r.draft!.rule.version))}
-      onDiscard={() => void act(`reject-${r.rule_id}`, () => rejectRule(r.rule_id))}
+  const header = (
+    <PageHeader
+      title="Rules"
+      description="What must always be true in your store. The agent proposes rules from what it sees; you approve them. An approved rule checks every new session and re-scans the last 30 days."
     />
   );
 
+  if (loadError && !rules) {
+    return (
+      <>
+        {header}
+        <Alert variant="destructive">
+          <AlertTitle>Could not load rules</AlertTitle>
+          <AlertDescription>
+            {loadError}. Is the API running? Try <code>pnpm dev</code>.
+          </AlertDescription>
+        </Alert>
+      </>
+    );
+  }
+  if (!rules) {
+    return (
+      <>
+        {header}
+        <div className="flex flex-col gap-3" aria-busy="true" aria-label="Loading rules">
+          <Skeleton className="h-10 w-96 rounded-lg" />
+          <Skeleton className="h-48 rounded-xl" />
+        </div>
+      </>
+    );
+  }
+
+  const issueFor = (ruleId: string) => clusters.find((c) => c.kind === 'invariant' && c.anchor === ruleId) ?? null;
+  const drafts = rules.filter((r) => r.draft);
+  const byLost = (a: RuleView, b: RuleView) => (b.draft?.revenue_lost?.revenue_at_risk_minor ?? 0) - (a.draft?.revenue_lost?.revenue_at_risk_minor ?? 0);
+  // Drafts stored before origin existed have none: they are the merchant's.
+  const agentDrafts = drafts.filter((r) => r.draft!.origin === 'agent').sort(byLost);
+  const ownDrafts = drafts.filter((r) => r.draft!.origin !== 'agent');
+  const live = rules.filter((r) => r.active);
+  const liveAgent = live.filter((r) => liveOrigin(r) === 'agent');
+  const liveOwn = live.filter((r) => liveOrigin(r) === 'human');
+  const actions: Actions = {
+    busy,
+    errorFor: (r) => (['approve', 'reject', 'redraft'].some((k) => errorKey === `${k}-${r.rule_id}`) ? error : null),
+    approve: (r) => void act(`approve-${r.rule_id}`, () => approveRule(r.rule_id, r.draft!.rule.version)),
+    discard: (r) => void act(`reject-${r.rule_id}`, () => rejectRule(r.rule_id)),
+    redraft: (r, s) => void act(`redraft-${r.rule_id}`, () => redraftRule(r.rule_id, s)),
+    reject: (r, note) => void act(`reject-${r.rule_id}`, () => rejectRule(r.rule_id, note)),
+  };
+  const liveRow = (r: RuleView) => (
+    <LiveRow
+      key={r.rule_id}
+      r={r}
+      issue={issueFor(r.rule_id)}
+      busy={busy !== null}
+      onUndo={() => void act(`undo-${r.rule_id}`, () => undoRule(r.rule_id))}
+      onRescan={() => void act(`rescan-${r.rule_id}`, () => rescanRule(r.rule_id))}
+    />
+  );
+  const current = tab ?? 'waiting';
+  const composerError = error && errorKey === 'draft' ? error : null;
+
   return (
     <>
-      <div className="page-head">
-        <h1>Rules</h1>
-        <span className="muted small">Synthetic data: demo sessions only</span>
-      </div>
-      <p className="muted lead">
-        Describe something that must always be true in your store, or let the agent find what makes shoppers leave. Gemini turns it into a check over the numbers your sessions report (probes), a dry run shows what it would
-        flag, and approving it runs it on live traffic and re-scans the last 30 days. Shoppers it already hurt show up as <span className="found-later">found later</span>.
-      </p>
+      {header}
+      <Tabs value={current} onValueChange={(v) => (window.location.hash = v === 'waiting' ? '#/rules' : `#/rules/${v}`)}>
+        <PageTabsList>
+          <TabsTrigger value="waiting">
+            Waiting for approval <span className="text-muted-foreground tabular-nums">{drafts.length}</span>
+          </TabsTrigger>
+          <TabsTrigger value="live">
+            Live rules <span className="text-muted-foreground tabular-nums">{live.length + builtin.length}</span>
+          </TabsTrigger>
+          <TabsTrigger value="probes">Probes</TabsTrigger>
+        </PageTabsList>
 
-      <section className="suggested suspects" id="agent-suspects">
-        <div className="suggested-head">
-          <h2 className="section-title">The agent suspects</h2>
-          <span className="muted small-inline">It watches every session for numbers shoppers leave over. These are hypotheses: nothing is flagged until you approve.</span>
-          <button className="btn tiny" disabled={busy !== null} onClick={() => void act('watch', async () => setWatchNote(watchSummary(await runWatch())))}>
-            {busy === 'watch' ? 'Looking…' : 'Look now'}
-          </button>
-        </div>
-        {watchNote && <p className="small-p muted">{watchNote}</p>}
-        {hypotheses.length === 0 && suggested.length === 0 ? (
-          <p className="muted small-p">Nothing suspected yet. The agent proposes a probe and a rule when shoppers who meet some number (a fee, a wait, a delivery estimate) leave far more often than everyone else.</p>
-        ) : (
-          <>
-            {hypotheses.map((r) => (
-              <HypothesisCard
-                key={`hyp-${r.rule_id}`}
-                r={r}
-                busy={busy}
-                error={errorFor(r)}
-                onApprove={() => void act(`approve-${r.rule_id}`, () => approveRule(r.rule_id, r.draft!.rule.version))}
-                onRedraft={(s) => void act(`redraft-${r.rule_id}`, () => redraftRule(r.rule_id, s))}
-                onReject={(note) => void act(`reject-${r.rule_id}`, () => rejectRule(r.rule_id, note))}
-              />
+        <TabsContent value="waiting" className="motion-reveal flex flex-col gap-4 pt-4">
+          <Module
+            id="agent-suspects"
+            origin="agent"
+            icon={DetectiveIcon}
+            title="Suggested by the agent"
+            count={agentDrafts.length}
+            description="It watches every session for numbers shoppers leave over, and suggests rules for recurring issues. These are hypotheses: nothing is flagged until you approve."
+            action={
+              <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => void act('watch', async () => setWatchNote(watchSummary(await runWatch())))}>
+                <BinocularsIcon data-icon="inline-start" aria-hidden="true" />
+                {busy === 'watch' ? 'Looking…' : 'Look now'}
+              </Button>
+            }
+          >
+            {watchNote && <p className="m-0 text-[13px] text-muted-foreground">{watchNote}</p>}
+            {agentDrafts.length === 0 ? (
+              <p className="m-0 text-[13px] text-muted-foreground">Nothing suspected yet. The agent proposes a probe and a rule when shoppers who meet some number (a fee, a wait, a delivery estimate) leave far more often than everyone else.</p>
+            ) : (
+              agentDrafts.map((r) => (r.draft!.watch ? <HypothesisRow key={r.rule_id} r={r} a={actions} /> : <DraftRow key={r.rule_id} r={r} a={actions} />))
+            )}
+          </Module>
+
+          <Module
+            origin="human"
+            icon={UserIcon}
+            title="Your drafts"
+            count={ownDrafts.length}
+            description="Rules you wrote in plain English, with a dry run of what they would flag."
+            action={
+              <Button size="sm" onClick={() => setWriting(true)}>
+                <PlusIcon data-icon="inline-start" aria-hidden="true" />
+                Write a rule
+              </Button>
+            }
+          >
+            {ownDrafts.length === 0 ? (
+              <p className="m-0 text-[13px] text-muted-foreground">No drafts. Write a rule in plain English, for example: “The discount must never be more than 10% of the bag.”</p>
+            ) : (
+              ownDrafts.map((r) => <DraftRow key={r.rule_id} r={r} a={actions} />)
+            )}
+          </Module>
+        </TabsContent>
+
+        <TabsContent value="live" className="motion-reveal flex flex-col gap-4 pt-4">
+          <Module origin="agent" icon={DetectiveIcon} title="Proposed by the agent, approved by you" count={liveAgent.length} description="Rules the agent found and you switched on.">
+            {liveAgent.length === 0 ? <p className="m-0 text-[13px] text-muted-foreground">None yet. Approve one of the agent's suggestions to see it here.</p> : liveAgent.map(liveRow)}
+          </Module>
+          <Module origin="human" icon={UserIcon} title="Added by you" count={liveOwn.length} description="Rules you wrote and approved.">
+            {liveOwn.length === 0 ? <p className="m-0 text-[13px] text-muted-foreground">None yet.</p> : liveOwn.map(liveRow)}
+          </Module>
+          <Module origin="system" icon={GearSixIcon} title="Built in" count={builtin.length} description="Checks every store gets.">
+            {builtin.map((b) => (
+              <div key={b.rule_id} className="flex flex-wrap items-center gap-3 rounded-xl border bg-muted/30 px-4 py-3">
+                <Badge variant="secondary">v{b.version}</Badge>
+                <span className="font-semibold">{b.title}</span>
+                <code className="ml-auto rounded-md border bg-card px-2 py-1 text-[13px]">{b.text}</code>
+              </div>
             ))}
-            {suggested.map(card)}
-          </>
-        )}
-      </section>
+          </Module>
+        </TabsContent>
 
-      <h2 className="section-title">Write a rule</h2>
-      <div className="panel composer">
-        <textarea
-          value={sentence}
-          onChange={(e) => setSentence(e.target.value)}
-          placeholder="For example: the discount must never be more than 10% of the bag."
-          rows={3}
-          maxLength={500}
-          disabled={busy === 'draft'}
-        />
-        <div className="examples">
-          {EXAMPLES.map((ex) => (
-            <button key={ex} className="example" onClick={() => setSentence(ex)} disabled={busy === 'draft'}>
-              {ex}
-            </button>
-          ))}
-        </div>
-        <div className="row-actions">
-          <button className="btn primary" disabled={busy !== null || sentence.trim().length < 8} onClick={() => void act('draft', () => draftRule(sentence))}>
-            {busy === 'draft' ? 'Drafting… (rule author + dry run)' : 'Draft rule'}
-          </button>
-        </div>
-        {error && !drafts.some((r) => errorKey === `approve-${r.rule_id}` || errorKey === `reject-${r.rule_id}`) && (
-          <div className="notice">
-            <b>{error instanceof ApiError && error.code === 'not_understood' ? 'The rule author could not express this as a rule.' : 'That did not work.'}</b> {error.message}
-            {error instanceof ApiError && error.author && <p className="small-p muted">{authorLine(error.author)}</p>}
+        <TabsContent value="probes" className="motion-reveal pt-4">
+          <ProbesPanel onChanged={() => void load()} />
+        </TabsContent>
+      </Tabs>
+
+      <Dialog open={writing} onOpenChange={setWriting}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Write a rule</DialogTitle>
+            <DialogDescription>Describe something that must always be true. Gemini turns it into a check over the numbers your sessions report, and a dry run shows what it would flag before anything goes live.</DialogDescription>
+          </DialogHeader>
+          <Textarea
+            value={sentence}
+            onChange={(e) => setSentence(e.target.value)}
+            placeholder="For example: the discount must never be more than 10% of the bag."
+            rows={3}
+            maxLength={500}
+            disabled={busy === 'draft'}
+            aria-label="Rule in plain English"
+          />
+          <div className="flex flex-wrap gap-1.5">
+            {EXAMPLES.map((ex) => (
+              <Button key={ex} variant="outline" size="xs" className="h-auto max-w-full py-1 text-left whitespace-normal" onClick={() => setSentence(ex)} disabled={busy === 'draft'}>
+                {ex}
+              </Button>
+            ))}
           </div>
-        )}
-      </div>
-
-      {own.map(card)}
-
-      <ProbesPanel onChanged={() => void load()} />
-
-      <h2 className="section-title">Your rules</h2>
-      {active.length === 0 ? (
-        <p className="muted">No approved rules yet. Draft one above.</p>
-      ) : (
-        active.map((r) => {
-          const a = r.active!;
-          return (
-            <div key={`active-${r.rule_id}`} className="panel rule-card">
-              <div className="finding-head">
-                <span className="kind invariant">Live · v{a.rule.version}</span>
-                <span className="muted small-inline">
-                  approved {ago(a.approved_at)} by {a.approved_by}
-                  {a.author ? ` · ${a.author.offline ? 'offline stand-in' : a.author.model}` : ''}
-                </span>
-              </div>
-              <h3 className="rule-title">{r.title}</h3>
-              <p className="sentence">“{a.sentence}”</p>
-              <p className="rule-text">
-                <code>{r.text.active}</code>
-              </p>
-              <div className="row-actions">
-                <button className="btn" disabled={busy !== null} onClick={() => void act(`undo-${r.rule_id}`, () => undoRule(r.rule_id))} title="Switch this rule off. What it already found stays as history.">
-                  {busy === `undo-${r.rule_id}` ? 'Switching off…' : 'Undo (switch off)'}
-                </button>
-              </div>
-              {r.rescan && <RescanBlock s={r.rescan} issue={issueFor(r.rule_id)} busy={busy !== null} onRescan={() => void act(`rescan-${r.rule_id}`, () => rescanRule(r.rule_id))} />}
-            </div>
-          );
-        })
-      )}
-
-      <h2 className="section-title">Built-in rules</h2>
-      {builtin.map((b) => (
-        <div key={b.rule_id} className="panel rule-card builtin">
-          <div className="finding-head">
-            <span className="kind">Built-in · v{b.version}</span>
-          </div>
-          <h3 className="rule-title">{b.title}</h3>
-          <p className="rule-text">
-            <code>{b.text}</code>
-          </p>
-        </div>
-      ))}
-      <p className="muted small">All sessions and numbers are synthetic.</p>
-      {applied && (
-        <div className="agent-toast applied" role="status">
-          <div className="agent-toast-head">
-            <span className="hyp-badge">Rule is live</span>
-            <button className="agent-toast-close" onClick={() => setApplied(null)} aria-label="Dismiss">
-              ×
-            </button>
-          </div>
-          <b>{applied.title}</b>
-          <p>It now checks every new session, and the last 30 days are being re-scanned. Changed your mind?</p>
-          <button className="btn tiny" disabled={busy !== null} onClick={() => void act(`undo-${applied.id}`, () => undoRule(applied.id))}>
-            Undo
-          </button>
-        </div>
-      )}
+          {composerError && (
+            <Alert variant="destructive">
+              <AlertTitle>{composerError instanceof ApiError && composerError.code === 'not_understood' ? 'The rule author could not express this as a rule.' : 'That did not work.'}</AlertTitle>
+              <AlertDescription>
+                <span>{composerError.message}</span>
+                {composerError instanceof ApiError && composerError.author && <span className="text-xs">{authorLine(composerError.author)}</span>}
+              </AlertDescription>
+            </Alert>
+          )}
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button disabled={busy !== null || sentence.trim().length < 8} onClick={() => void act('draft', () => draftRule(sentence))}>
+              {busy === 'draft' ? 'Drafting… (rule author + dry run)' : 'Draft rule'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

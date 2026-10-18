@@ -128,6 +128,7 @@ Phase 4 additions (15 Oct):
 - `signals.rescan_id` (nullable STRING) is set on signals a retroactive re-scan wrote and is absent on live ones. `pnpm infra:up` adds it to an existing table in place.
 - `rules` rows for tenant rules are written on approval only: kind `generated`, with the compiled rule, the sentence, the author's model id and prompt hash, and the approver in `definition`. A draft never ran, so it is not part of the record.
 - Firestore `rules/{tenant}__{rule_id}` is the hot copy of one tenant rule: the approved version the processor runs, a pending draft with its dry run, and the latest re-scan's progress. The agent service is its only writer.
+- (18 Oct) The approved version keeps `origin` (`agent` or `human`, copied from the draft at approval), so the dashboard can show the agent's rules apart from the merchant's. Rules approved earlier have none; the dashboard falls back to the approval feedback (a churn-watcher feature key means the agent).
 - `Cluster.found_later` and `Finding.discovery` mark sessions a re-scan surfaced. A finding row's `details` now also carries `kind`, `route`, `anchor`, `cluster_title`, `last_seen` and `discovery`, so an as-of view needs no hot copy.
 
 Planned, not yet implemented: `RuleDraft` (below, section 6) gains `origin: 'human' | 'agent'` and, when agent-originated, the `cluster_id` that triggered it, so a proposal nobody typed a sentence for can still be traced to the issue that produced it.
@@ -533,7 +534,16 @@ How the replay payload is built:
 | Short clip | Opening a signal plays a short clip (6 s before to 3 s after, via `playRange`). |
 | Pinpointing | When playback reaches a flag, the element is found through the replay mirror (`node_id`, falling back to the selector). It is outlined in red, with a caption such as "Dead click on button#apply-coupon: no response within 800 ms". |
 
-**Demo bug switches (local mode only).** The dashboard's top bar shows which of the shop's three bugs are live and switches them. `GET` and `PUT /v1/demo/bugs` on the API keep the set in `.data/demo-bugs.json`; the routes do not exist in `CP_MODE=gcp`. The shop polls them every 2 s through a Vite proxy, using the `fetch` it took before the SDK wrapped it, so the poll is never recorded and cannot pass for a response to a click. A `?bugs=` in a shop tab (the simulator and e2e send it, even empty) overrides the switch for that tab.
+**Demo bug switches (local mode only; taken out of the dashboard on 18 Oct, see the next paragraph).** The dashboard's top bar showed which of the shop's three bugs are live and switches them. `GET` and `PUT /v1/demo/bugs` on the API keep the set in `.data/demo-bugs.json`; the routes do not exist in `CP_MODE=gcp`. The shop polls them every 2 s through a Vite proxy, using the `fetch` it took before the SDK wrapped it, so the poll is never recorded and cannot pass for a response to a click. A `?bugs=` in a shop tab (the simulator and e2e send it, even empty) overrides the switch for that tab.
+
+**Dashboard layout and demo bugs (18 Oct).** The bug switches are gone from the dashboard; every shop tab runs the five crucial bugs (`slow_payment`, `checkout_error`, `card_declined`, `cart_total`, `shipping_shock`) plus each other bug with an even chance, never `qty_price` beside `cart_total` (`apps/demo-shop/src/bugs.ts`; list in `docs/DEMO_BUGS.md`). With both payment-authorisation bugs live, the store's backend lets them take turns: the 1st try times out, the 2nd is declined, the 3rd goes through to checkout. Live shop tabs therefore have no clean baseline of their own; the simulator's clean shoppers provide it. The `/v1/demo/bugs` routes remain but nothing calls them. The dashboard is organised for a first glance, with detail one click away:
+
+- **Dashboard** (`#/`): KPI cards that link onward, revenue at risk now over a chart of revenue at risk over time (from the findings record; the live finding continues its history from its last update), Fix these first, revenue at risk by page, the agent's top suggestions, and accuracy.
+- **Issues** (`#/issues`): Fix this first with its revenue as the biggest number, then one compact row per issue with priority and page filters. An issue page has a fixed header and Summary, Proof, Sessions and Technical tabs.
+- **Rules**: tabs for Waiting for approval, Live rules and Probes; in each, the agent's and the merchant's are separate modules (live rules are filed by `ActiveRule.origin`). Each rule is a compact row; its numbers open with a chevron.
+- **Time travel**: revenue at risk over time stacked by issue, with rule approvals, fixes and the chosen moment marked, and a By rule table, above the then-and-now comparison.
+- **Signals**: grouped under the issue that clustered them.
+- The UI carries no synthetic labels; the writeup and video say the demo data is synthetic (AGENTS.md rule 10).
 
 **Issues feed (implemented 6 Oct).** The dashboard opens on Issues, one card per cluster, most recently active first. It shows:
 

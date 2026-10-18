@@ -1,0 +1,344 @@
+/* Layer order: the old stylesheet (legacy) sits above Tailwind's preflight (base) and below its
+   utilities, so its element defaults apply and utility classes win where they are added.
+   rrweb-player's CSS and replay.css stay unlayered (imported in main.tsx), so the player is untouched
+   by preflight. Palette, type and motion: design-system/churn-preventer/MASTER.md. */
+@layer theme, base, legacy, components, utilities;
+
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "./styles.css" layer(legacy);
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    --font-heading: var(--font-sans);
+    --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+    --font-mono: 'Geist Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace;
+    /* One easing for arrivals: fast start, long soft landing. Exits use ease-in and run shorter. */
+    --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-chart-5: var(--chart-5);
+    --color-chart-4: var(--chart-4);
+    --color-chart-3: var(--chart-3);
+    --color-chart-2: var(--chart-2);
+    --color-chart-1: var(--chart-1);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    /* App tokens: meaning, not hue. Each pairs a strong text color with a muted fill and a border. */
+    --color-topbar: var(--topbar);
+    --color-topbar-foreground: var(--topbar-foreground);
+    --color-topbar-muted: var(--topbar-muted);
+    --color-topbar-active: var(--topbar-active);
+    --color-money: var(--money);
+    --color-danger-muted: var(--danger-muted);
+    --color-danger-border: var(--danger-border);
+    --color-info: var(--info);
+    --color-info-muted: var(--info-muted);
+    --color-info-border: var(--info-border);
+    --color-kind: var(--kind);
+    --color-kind-muted: var(--kind-muted);
+    --color-agent: var(--agent);
+    --color-agent-muted: var(--agent-muted);
+    --color-agent-border: var(--agent-border);
+    --color-agent-strong: var(--agent-strong);
+    --color-synthetic: var(--synthetic);
+    --color-synthetic-muted: var(--synthetic-muted);
+    --color-synthetic-border: var(--synthetic-border);
+    --color-warn: var(--warn);
+    --color-warn-muted: var(--warn-muted);
+    --color-warn-border: var(--warn-border);
+    --color-warn-strong: var(--warn-strong);
+    --color-success: var(--success);
+    --color-success-muted: var(--success-muted);
+    --color-success-border: var(--success-border);
+    --color-success-strong: var(--success-strong);
+    --color-success-solid: var(--success-solid);
+    --color-tier-p0: var(--tier-p0);
+    --color-tier-p1: var(--tier-p1);
+    --color-tier-p2: var(--tier-p2);
+    --color-tier-p3: var(--tier-p3);
+    --color-tier-p0-ink: var(--tier-p0-ink);
+    --color-tier-p1-ink: var(--tier-p1-ink);
+    --color-tier-p2-ink: var(--tier-p2-ink);
+    --color-tier-p3-ink: var(--tier-p3-ink);
+    --color-tier-foreground: var(--tier-foreground);
+    --color-link: var(--link);
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* Light (the default): the dashboard's original monitoring palette. Slate neutrals, a navy top bar, blue for actions,
+   links and focus; red, orange, amber and slate for priority; violet for the agent. See MASTER.md. */
+:root {
+    --background: #f6f7fb;
+    --foreground: #111827;
+    --card: #ffffff;
+    --card-foreground: #111827;
+    --popover: #ffffff;
+    --popover-foreground: #111827;
+    --primary: #2563eb;
+    --primary-foreground: #ffffff;
+    --secondary: #f3f4f6;
+    --secondary-foreground: #111827;
+    --muted: #f3f4f6;
+    --muted-foreground: #666d7a;
+    --accent: #f3f4f6;
+    --accent-foreground: #111827;
+    --destructive: #dc2626;
+    --border: #e5e7eb;
+    --input: #d1d5db;
+    --ring: #2563eb;
+    --link: #2563eb;
+    --chart-1: #2563eb;
+    --chart-2: #7c3aed;
+    --chart-3: #f59e0b;
+    --chart-4: #16a34a;
+    --chart-5: #64748b;
+    --radius: 0.5rem;
+    --sidebar: #ffffff;
+    --sidebar-foreground: #111827;
+    --sidebar-primary: #2563eb;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #f3f4f6;
+    --sidebar-accent-foreground: #111827;
+    --sidebar-border: #e5e7eb;
+    --sidebar-ring: #2563eb;
+
+    --topbar: #111827;
+    --topbar-foreground: #ffffff;
+    --topbar-muted: #cbd5e1;
+    --topbar-active: #1f2937;
+    --money: #b91c1c;
+    --danger-muted: #fef2f2;
+    --danger-border: #fecaca;
+    --info: #1e40af;
+    --info-muted: #dbeafe;
+    --info-border: #bfdbfe;
+    --kind: #3730a3;
+    --kind-muted: #eef2ff;
+    --agent: #5b21b6;
+    --agent-muted: #ede9fe;
+    --agent-border: #a78bfa;
+    --agent-strong: #7c3aed;
+    --synthetic: #78350f;
+    --synthetic-muted: #fef3c7;
+    --synthetic-border: #fde68a;
+    --warn: #9a3412;
+    --warn-muted: #fff7ed;
+    --warn-border: #fed7aa;
+    --warn-strong: #f59e0b;
+    --success: #166534;
+    --success-muted: #dcfce7;
+    --success-border: #86efac;
+    --success-strong: #22c55e;
+    --success-solid: #16a34a;
+    --tier-p0: #dc2626;
+    --tier-p1: #ea580c;
+    --tier-p2: #ca8a04;
+    --tier-p3: #64748b;
+    --tier-p0-ink: #991b1b;
+    --tier-p1-ink: #9a3412;
+    --tier-p2-ink: #854d0e;
+    --tier-p3-ink: #334155;
+    --tier-foreground: #ffffff;
+}
+
+/* Dark (opt-in from the theme menu): the same hues, tonal rather than inverted. */
+.dark {
+    --background: oklch(0.129 0.042 264.695);
+    --foreground: oklch(0.984 0.003 247.858);
+    --card: oklch(0.208 0.042 265.755);
+    --card-foreground: oklch(0.984 0.003 247.858);
+    --popover: oklch(0.208 0.042 265.755);
+    --popover-foreground: oklch(0.984 0.003 247.858);
+    --primary: oklch(0.707 0.165 254.624);
+    --primary-foreground: oklch(0.129 0.042 264.695);
+    --secondary: oklch(0.279 0.041 260.031);
+    --secondary-foreground: oklch(0.984 0.003 247.858);
+    --muted: oklch(0.279 0.041 260.031);
+    --muted-foreground: oklch(0.704 0.04 256.788);
+    --accent: oklch(0.279 0.041 260.031);
+    --accent-foreground: oklch(0.984 0.003 247.858);
+    --destructive: oklch(0.704 0.191 22.216);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.707 0.165 254.624);
+    --link: oklch(0.707 0.165 254.624);
+    --chart-1: oklch(0.707 0.165 254.624);
+    --chart-2: oklch(0.702 0.183 293.541);
+    --chart-3: oklch(0.828 0.189 84.429);
+    --chart-4: oklch(0.723 0.219 149.579);
+    --chart-5: oklch(0.704 0.04 256.788);
+    --sidebar: oklch(0.208 0.042 265.755);
+    --sidebar-foreground: oklch(0.984 0.003 247.858);
+    --sidebar-primary: oklch(0.707 0.165 254.624);
+    --sidebar-primary-foreground: oklch(0.129 0.042 264.695);
+    --sidebar-accent: oklch(0.279 0.041 260.031);
+    --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
+    --sidebar-border: oklch(1 0 0 / 10%);
+    --sidebar-ring: oklch(0.707 0.165 254.624);
+
+    --topbar: oklch(0.208 0.042 265.755);
+    --topbar-foreground: oklch(0.984 0.003 247.858);
+    --topbar-muted: oklch(0.869 0.022 252.894);
+    --topbar-active: oklch(0.279 0.041 260.031);
+    --money: oklch(0.704 0.191 22.216);
+    --danger-muted: oklch(0.258 0.092 26.042);
+    --danger-border: oklch(0.396 0.141 25.723);
+    --info: oklch(0.809 0.105 251.813);
+    --info-muted: oklch(0.282 0.091 267.935);
+    --info-border: oklch(0.424 0.199 265.638);
+    --kind: oklch(0.785 0.115 274.713);
+    --kind-muted: oklch(0.257 0.09 281.288);
+    --agent: oklch(0.811 0.111 293.571);
+    --agent-muted: oklch(0.283 0.141 291.089);
+    --agent-border: oklch(0.491 0.27 292.581);
+    --agent-strong: oklch(0.702 0.183 293.541);
+    --synthetic: oklch(0.924 0.12 95.746);
+    --synthetic-muted: oklch(0.279 0.077 45.635);
+    --synthetic-border: oklch(0.473 0.137 46.201);
+    --warn: oklch(0.837 0.128 66.29);
+    --warn-muted: oklch(0.266 0.079 36.259);
+    --warn-border: oklch(0.47 0.157 37.304);
+    --warn-strong: oklch(0.828 0.189 84.429);
+    --success: oklch(0.871 0.15 154.449);
+    --success-muted: oklch(0.266 0.065 152.934);
+    --success-border: oklch(0.448 0.119 151.328);
+    --success-strong: oklch(0.723 0.219 149.579);
+    --success-solid: #16a34a;
+    --tier-p0: #dc2626;
+    --tier-p1: #ea580c;
+    --tier-p2: #ca8a04;
+    --tier-p3: #64748b;
+    --tier-p0-ink: #fca5a5;
+    --tier-p1-ink: #fdba74;
+    --tier-p2-ink: #fcd34d;
+    --tier-p3-ink: #cbd5e1;
+    --tier-foreground: #0f172a;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+    scrollbar-color: color-mix(in oklab, var(--muted-foreground) 45%, transparent) transparent;
+  }
+  body {
+    @apply bg-background text-foreground text-sm antialiased;
+    line-height: 1.55;
+    /* Every number lines up: prices, counts, times. */
+    font-variant-numeric: tabular-nums;
+  }
+  h1, h2, h3, h4 {
+    text-wrap: balance;
+  }
+  p, li, dd {
+    text-wrap: pretty;
+  }
+  code, kbd, samp {
+    @apply font-mono;
+  }
+  /* The surfaces the browser draws, in the palette: selection, caret, focus. */
+  ::selection {
+    background: color-mix(in oklab, var(--ring) 24%, transparent);
+  }
+  input, textarea {
+    caret-color: var(--ring);
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  /* Tailwind v4's preflight gives buttons the default cursor; anything clickable shows a pointer. */
+  button:not(:disabled), [role='button']:not([aria-disabled='true']), [role='tab'], [role='switch'], summary, input[type='range'] {
+    cursor: pointer;
+  }
+}
+
+/* ---------- Motion ----------
+   Motion explains change in a working tool: a page arriving, a section opening, a number moving, a new proposal.
+   Arrivals use ease-out-expo (150-300 ms); nothing makes the reader wait. */
+@utility motion-enter {
+  animation: cp-enter 260ms var(--ease-out-expo) both;
+}
+@utility motion-reveal {
+  animation: cp-reveal 220ms var(--ease-out-expo) both;
+}
+@utility motion-pop {
+  animation: cp-pop 420ms var(--ease-out-expo) both;
+}
+@utility motion-grow {
+  animation: cp-grow 700ms var(--ease-out-expo) both;
+  transform-origin: left center;
+}
+@keyframes cp-grow {
+  from { transform: scaleX(0); }
+}
+@utility motion-nudge {
+  animation: cp-nudge 700ms ease-in-out 1;
+  transform-origin: 50% 10%;
+}
+@keyframes cp-enter {
+  from { opacity: 0; transform: translateY(6px); }
+}
+@keyframes cp-reveal {
+  from { opacity: 0; transform: translateY(-4px); clip-path: inset(0 0 100% 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+@keyframes cp-pop {
+  0% { transform: scale(0.4); opacity: 0; }
+  60% { transform: scale(1.15); opacity: 1; }
+}
+@keyframes cp-nudge {
+  0%, 100% { transform: rotate(0); }
+  20% { transform: rotate(-14deg); }
+  40% { transform: rotate(10deg); }
+  60% { transform: rotate(-6deg); }
+  80% { transform: rotate(3deg); }
+}
+
+/* Reduced motion: fewer and gentler, not none. Movement goes; fades and color changes that carry state stay. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+  .motion-enter, .motion-reveal { animation-name: cp-fade !important; }
+  .motion-pop, .motion-nudge { animation: none !important; }
+  [data-slot='sheet-content'], [data-slot='dialog-content'] { --tw-enter-translate-x: 0; --tw-enter-translate-y: 0; --tw-exit-translate-x: 0; --tw-exit-translate-y: 0; }
+  .live-dot { animation: none !important; }
+}
+@keyframes cp-fade {
+  from { opacity: 0; }
+}

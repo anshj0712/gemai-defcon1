@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { fetchHistory, type HistoryFindingView, type HistoryMomentView, type HistoryView } from './api';
-import { money, TIER_NAMES, tierColor } from './format';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
+import { fetchHistory, type HistoryFindingView, type HistoryView } from './api';
+import { FoundLaterBadge, PageHeader, Stat, TierBadge } from './components/common';
+import { money } from './format';
+import { defaultAsOf, totalAtRisk } from './lib/history';
+import { RevenueTimeline, RuleImpact } from './RevenueTimeline';
 
 const WINDOWS = [
   { label: '24 hours', ms: 86_400_000 },
@@ -10,33 +19,26 @@ const WINDOWS = [
 
 const when = (ms: number) => new Date(ms).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-/** Total revenue at risk of the findings with an estimate, in the first currency seen. */
-export function totalAtRisk(list: readonly HistoryFindingView[]): { minor: number; currency: string | null } {
-  const ok = list.filter((f) => f.revenue_status === 'ok' && f.currency);
-  const currency = ok[0]?.currency ?? null;
-  return { minor: ok.filter((f) => f.currency === currency).reduce((n, f) => n + f.revenue_at_risk_minor, 0), currency };
-}
-
-/** Where the slider starts: just before the latest rule approval (the moment a re-scan changes the answer), else now. */
-export function defaultAsOf(moments: readonly HistoryMomentView[], now: number): number {
-  const approvals = moments.filter((m) => m.kind === 'rule_approved');
-  return approvals.length ? approvals[approvals.length - 1]!.at - 1000 : now;
-}
+const DESCRIPTION =
+  'What did we know at a moment in the past, compared with what we know now about the same stretch of shopper activity? Issues that appear only today were already hurting shoppers; the rules at the time did not flag them.';
 
 function Row({ f, foundLater }: { f: HistoryFindingView; foundLater: boolean }) {
   return (
-    <a href={`#/issues/${f.finding_id}`} className={`hist-row${foundLater ? ' later' : ''}`}>
-      <span className="tier sm" style={{ background: tierColor(f.tier) }}>
-        {TIER_NAMES[f.tier]?.split(' ')[0] ?? f.tier}
-      </span>
-      <span className="hist-title">
-        {f.title}
-        {foundLater && <span className="found-later">Found later</span>}
-        <span className="muted small-block">
+    <a
+      href={`#/issues/${f.finding_id}`}
+      className={cn('grid grid-cols-[auto_1fr_auto] items-start gap-3 rounded-lg border-t px-2 py-2.5 text-foreground no-underline transition-colors first:border-t-0 hover:bg-muted/60', foundLater && 'border-t-transparent bg-agent-muted hover:bg-agent-muted')}
+    >
+      <TierBadge tier={f.tier} short className="mt-0.5" />
+      <span className="flex min-w-0 flex-col gap-0.5">
+        <span className="flex flex-wrap items-center gap-1.5 font-medium">
+          {f.title}
+          {foundLater && <FoundLaterBadge>Found later</FoundLaterBadge>}
+        </span>
+        <span className="text-xs text-muted-foreground">
           {f.affected_sessions} sessions{f.found_later_sessions ? `, ${f.found_later_sessions} found by re-scan` : ''} · first hit {when(f.valid_from)} · recorded {when(f.recorded_from)}
         </span>
       </span>
-      <b className="hist-money">{f.revenue_status === 'ok' ? money(f.revenue_at_risk_minor, f.currency) : '…'}</b>
+      <b className="font-semibold whitespace-nowrap text-money tabular-nums">{f.revenue_status === 'ok' ? money(f.revenue_at_risk_minor, f.currency) : '…'}</b>
     </a>
   );
 }
@@ -83,8 +85,33 @@ export function HistoryPage() {
   }, [asOf, windowMs]);
 
   const later = useMemo(() => new Set(data?.found_later ?? []), [data]);
-  if (error && !data) return <p className="muted">Could not load the history ({error}). Is the API running? Try <code>pnpm dev</code>.</p>;
-  if (asOf === null || !data) return <p className="muted">Loading…</p>;
+  const header = (
+    <PageHeader title="Time travel" description={DESCRIPTION} />
+  );
+  if (error && !data) {
+    return (
+      <>
+        {header}
+        <Alert variant="destructive">
+          <AlertTitle>Could not load the history</AlertTitle>
+          <AlertDescription>
+            {error}. Is the API running? Try <code>pnpm dev</code>.
+          </AlertDescription>
+        </Alert>
+      </>
+    );
+  }
+  if (asOf === null || !data) {
+    return (
+      <>
+        {header}
+        <div className="flex flex-col gap-3" aria-busy="true" aria-label="Loading the history">
+          <Skeleton className="h-36 rounded-xl" />
+          <Skeleton className="h-64 rounded-xl" />
+        </div>
+      </>
+    );
+  }
 
   const then = totalAtRisk(data.then);
   const current = totalAtRisk(data.current);
@@ -94,80 +121,87 @@ export function HistoryPage() {
 
   return (
     <>
-      <div className="page-head">
-        <h1>Time travel</h1>
-        <span className="muted small">Synthetic data: demo sessions only</span>
-      </div>
-      <p className="muted lead">
-        What did we know at a moment in the past, compared with what we know now about the same stretch of shopper activity? Issues that appear only today were already hurting shoppers; the rules at the time did not flag them.
-      </p>
+      {header}
 
-      <div className="panel timeline">
-        <div className="timeline-head">
-          <span>
-            As of <b>{when(asOf)}</b>
+      <div className="mb-4 flex flex-col gap-4">
+        <RevenueTimeline asOf={asOf} onPick={(t) => setAsOf(Math.max(minT, Math.min(now, t)))} />
+        <RuleImpact />
+      </div>
+
+      <Card className="gap-3 px-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span className="text-sm">
+            As of <b className="font-semibold tabular-nums">{when(asOf)}</b>
           </span>
-          <label className="muted">
-            shopper activity in the{' '}
-            <select value={windowMs} onChange={(e) => setWindowMs(Number(e.target.value))}>
-              {WINDOWS.map((w) => (
-                <option key={w.ms} value={w.ms}>
-                  {w.label}
-                </option>
-              ))}
-            </select>{' '}
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            shopper activity in the
+            <Select value={String(windowMs)} onValueChange={(v) => setWindowMs(Number(v))}>
+              <SelectTrigger size="sm" className="w-28" aria-label="Stretch of shopper activity">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {WINDOWS.map((w) => (
+                    <SelectItem key={w.ms} value={String(w.ms)}>
+                      {w.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
             before it
           </label>
         </div>
-        <div className="slider-wrap">
-          <input type="range" min={minT} max={now} step={1000} value={asOf} onChange={(e) => setAsOf(Number(e.target.value))} aria-label="As of" />
+        <div className="relative pt-1 pb-4">
+          <input type="range" className="w-full accent-agent-strong" min={minT} max={now} step={1000} value={asOf} onChange={(e) => setAsOf(Number(e.target.value))} aria-label="As of" aria-valuetext={when(asOf)} />
           {data.moments.map((m) => (
-            <span key={`${m.kind}-${m.at}`} className={`tick ${m.kind}`} style={{ left: `${((m.at - minT) / span) * 100}%` }} title={`${m.label} · ${when(m.at)}`} />
+            <span
+              key={`${m.kind}-${m.at}`}
+              className={cn('absolute bottom-0.5 -ml-px h-3 w-[3px] rounded-sm', m.kind === 'rescan_done' ? 'bg-success-strong' : 'bg-agent-strong')}
+              style={{ left: `${((m.at - minT) / span) * 100}%` }}
+              title={`${m.label} · ${when(m.at)}`}
+            />
           ))}
         </div>
-        <div className="row-actions">
+        <div className="flex flex-wrap gap-2">
           {data.moments.map((m) => (
-            <button key={`jump-${m.kind}-${m.at}`} className="btn tiny" onClick={() => setAsOf(m.kind === 'rule_approved' ? m.at - 1000 : m.at + 1000)}>
+            <Button key={`jump-${m.kind}-${m.at}`} variant="outline" size="xs" onClick={() => setAsOf(m.kind === 'rule_approved' ? m.at - 1000 : m.at + 1000)}>
               {m.kind === 'rule_approved' ? 'Just before: ' : 'Just after: '}
               {m.label}
-            </button>
+            </Button>
           ))}
-          <button className="btn tiny" onClick={() => setAsOf(now)}>
+          <Button variant="outline" size="xs" onClick={() => setAsOf(now)}>
             Now
-          </button>
+          </Button>
         </div>
+      </Card>
+
+      <div className="my-4 grid gap-3 md:grid-cols-3">
+        <Stat value={data.then.length} label={`issues known at ${when(asOf)} · ${money(then.minor, then.currency)} at risk`} />
+        <Stat value={data.current.length} label={`issues known now, same stretch · ${money(current.minor, current.currency)} at risk`} />
+        <Stat
+          value={laterList.length}
+          tone={laterList.length ? 'agent' : undefined}
+          className={cn(laterList.length > 0 && 'bg-agent-muted ring-agent-border')}
+          label={
+            <>
+              found later · {money(laterMoney.minor, laterMoney.currency)} at risk
+            </>
+          }
+        />
       </div>
 
-      <div className="stat-row">
-        <div className="stat">
-          <b>{data.then.length}</b>
-          <span>
-            issues known at {when(asOf)} · {money(then.minor, then.currency)} at risk
-          </span>
-        </div>
-        <div className="stat">
-          <b>{data.current.length}</b>
-          <span>issues known now, same stretch · {money(current.minor, current.currency)} at risk</span>
-        </div>
-        <div className={`stat${laterList.length ? ' later' : ''}`}>
-          <b>{laterList.length}</b>
-          <span>found later · {money(laterMoney.minor, laterMoney.currency)} at risk (synthetic)</span>
-        </div>
+      <div className="grid items-start gap-4 lg:grid-cols-2">
+        <Card className="gap-2 px-4">
+          <h3 className="m-0 px-2 text-sm font-semibold">What we knew then</h3>
+          {data.then.length === 0 ? <p className="m-0 px-2 text-sm text-muted-foreground">No issues were on record at that moment for this stretch.</p> : data.then.map((f) => <Row key={f.finding_id} f={f} foundLater={false} />)}
+        </Card>
+        <Card className="gap-2 px-4">
+          <h3 className="m-0 px-2 text-sm font-semibold">What we know now about the same stretch</h3>
+          {data.current.length === 0 ? <p className="m-0 px-2 text-sm text-muted-foreground">No issues on record for this stretch.</p> : data.current.map((f) => <Row key={f.finding_id} f={f} foundLater={later.has(f.finding_id)} />)}
+        </Card>
       </div>
-
-      <div className="hist-grid">
-        <div className="panel">
-          <h3>What we knew then</h3>
-          {data.then.length === 0 ? <p className="muted">No issues were on record at that moment for this stretch.</p> : data.then.map((f) => <Row key={f.finding_id} f={f} foundLater={false} />)}
-        </div>
-        <div className="panel">
-          <h3>What we know now about the same stretch</h3>
-          {data.current.length === 0 ? <p className="muted">No issues on record for this stretch.</p> : data.current.map((f) => <Row key={f.finding_id} f={f} foundLater={later.has(f.finding_id)} />)}
-        </div>
-      </div>
-      <p className="muted small">
-        Both columns come from the versioned findings record (valid time and transaction time), not the live feed. All sessions and numbers are synthetic.
-      </p>
+      <p className="mt-4 mb-0 text-xs text-muted-foreground">Both columns come from the versioned findings record (valid time and transaction time), not the live feed.</p>
     </>
   );
 }

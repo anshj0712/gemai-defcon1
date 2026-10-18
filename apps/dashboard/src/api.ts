@@ -175,20 +175,6 @@ export interface HistoryView {
 
 export const fetchHistory = (asOf: number, from: number, to: number) => getJson<HistoryView>(`/v1/history?as_of=${Math.round(asOf)}&from=${Math.round(from)}&to=${Math.round(to)}`);
 
-/** Demo shop bug switches (local mode only; the routes are absent on GCP and these reject). */
-export interface DemoBugsView {
-  bugs: string[];
-  known: { id: string; label: string; detail: string; reason?: string; caught?: string; caught_detail?: string }[];
-  /** Churn reason id -> label, for grouping the switches. */
-  reasons?: Record<string, string>;
-}
-export const fetchDemoBugs = () => getJson<DemoBugsView>('/v1/demo/bugs');
-export async function putDemoBugs(bugs: string[]): Promise<DemoBugsView> {
-  const res = await fetch('/v1/demo/bugs', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ bugs }) });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return (await res.json()) as DemoBugsView;
-}
-
 export interface QualityReport {
   synthetic: true;
   checked_at: number;

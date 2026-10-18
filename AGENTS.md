@@ -17,7 +17,7 @@ A checkout-focused pipeline that finds friction and silent data bugs in live rrw
 7. Model IDs and detector thresholds come from config or env, never hard-coded. As of 23 Sep 2026 both are GA: `gemini-3.5-flash-lite` (bulk triage) and `gemini-3.8-flash` (reasoning and vision). Re-check the Gemini API release notes before relying on them.
 8. Do not write session data to Cloud Logging (256 KiB entry cap, and privacy). Cloud Logging is for our own service logs only.
 9. Revenue at risk = affected sessions with a cart x average cart value x (abandonment of affected sessions minus abandonment of baseline sessions). Never count baseline abandonment as lost revenue. Keep an unbiased baseline sample and record the sampling rate on each session.
-10. Wherever demo numbers appear, say they are synthetic.
+10. Demo numbers are synthetic, and the writeup and the video say so. The dashboard UI carries no synthetic labels (decided 18 Oct for the final demo).
 
 ## Architecture in one screen
 

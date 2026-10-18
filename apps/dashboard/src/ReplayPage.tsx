@@ -1,7 +1,14 @@
 import Player from 'rrweb-player';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ArrowLeftIcon, PlayIcon, ArrowCounterClockwiseIcon, WarningIcon } from '@phosphor-icons/react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 import { fetchReplay, type ReplayResponse } from './api';
-import { clipWindow, formatOffset, forPlayer, isFlagEvent, tagColors, type FlagPayload, type Marker } from './markers';
+import { Eyebrow } from './components/common';
+import { clipWindow, ERROR_COLOR, FLAG_COLORS, formatOffset, forPlayer, isFlagEvent, tagColors, type FlagPayload, type Marker } from './markers';
 
 /** Injected into the replay iframe: the outline drawn around the element a flag points at. */
 const FLAGGED_CSS =
@@ -9,6 +16,14 @@ const FLAGGED_CSS =
 
 const PLAYER_WIDTH = 960;
 const PLAYER_HEIGHT = 540;
+
+/** The legend uses the player's own colors (replay.css and markers.ts), so it matches what the replay draws. */
+const LEGEND: { label: string; color: string; ring?: boolean }[] = [
+  { label: "shopper's pointer and trail", color: '#2563eb', ring: true },
+  { label: 'click', color: '#f43f5e' },
+  { label: 'flagged element and timeline mark', color: FLAG_COLORS.dead_click ?? '#ef4444' },
+  { label: 'JS error', color: ERROR_COLOR },
+];
 
 interface Props {
   sessionId: string;
@@ -93,68 +108,113 @@ export function ReplayPage({ sessionId, signalId }: Props) {
     };
   }, [data, signalId, playClip]);
 
-  if (error) return <p className="muted">Could not load this session ({error}).</p>;
-  if (!data) return <p className="muted">Loading session…</p>;
+  // Back to wherever the viewer came from (Issues, an issue, or Signals); Issues when opened directly.
+  const back = (
+    <a
+      href="#/"
+      className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), '-ml-2 self-start text-muted-foreground no-underline')}
+      onClick={(e) => {
+        if (window.history.length > 1) {
+          e.preventDefault();
+          window.history.back();
+        }
+      }}
+    >
+      <ArrowLeftIcon data-icon="inline-start" aria-hidden="true" />
+      Back
+    </a>
+  );
+
+  if (error) {
+    return (
+      <div className="flex flex-col gap-3">
+        {back}
+        <Alert variant="destructive">
+          <AlertTitle>Could not load this session</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+  if (!data) {
+    return (
+      <div className="flex flex-col gap-3" aria-busy="true" aria-label="Loading session">
+        {back}
+        <Skeleton className="h-8 w-64" />
+        <div className="grid grid-cols-[984px_1fr] gap-5">
+          <Skeleton className="h-[640px] rounded-xl" />
+          <Skeleton className="h-64 rounded-xl" />
+        </div>
+      </div>
+    );
+  }
 
   const duration = formatOffset(data.session.ended_at - data.session.started_at);
   // Offsets on the replay's own clock (browser timestamps), the same origin the player uses.
   const replayStart = data.events[0]?.timestamp ?? 0;
   return (
-    <>
-      <p>
-        {/* Back to wherever the viewer came from (Issues, an issue, or Signals); Issues when opened directly. */}
-        <a
-          href="#/"
-          onClick={(e) => {
-            if (window.history.length > 1) {
-              e.preventDefault();
-              window.history.back();
-            }
-          }}
-        >
-          ← Back
-        </a>
+    <div className="flex flex-col gap-2">
+      {back}
+      <h1 className="m-0 text-[28px] leading-tight font-semibold tracking-[-0.02em]">Session replay</h1>
+      <p className="m-0 text-[13px] text-muted-foreground">
+        <code>{data.session.session_id}</code> · {data.session.route} · release {data.session.release} · {data.session.chunks} batches · {duration}
       </p>
-      <h1>Session replay</h1>
-      <p className="muted">
-        <code>{data.session.session_id}</code> · {data.session.route} · release {data.session.release} · {data.session.chunks} batches ·{' '}
-        {duration}
-      </p>
-      <div className="replay-layout">
-        <div className="player-col">
-          <div className="caption-slot">
+      <div className="mt-2 grid items-start gap-5 xl:grid-cols-[auto_1fr]">
+        <Card className="gap-2 p-3">
+          <div className="min-h-11">
             {caption ? (
-              <div className="caption">
-                <strong>⚠ {caption.at}</strong> {caption.label}
+              <div role="status" className="caption flex items-center gap-2 rounded-lg border border-danger-border bg-danger-muted px-3 py-2.5 font-medium text-money">
+                <WarningIcon aria-hidden="true" className="size-4 shrink-0" />
+                <strong className="tabular-nums">{caption.at}</strong> {caption.label}
               </div>
             ) : (
-              <div className="legend">
-                <span className="dot blue" /> shopper's pointer and trail <span className="dot rose" /> click <span className="dot red" /> flagged
-                element and timeline mark <span className="dot pink" /> JS error
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 py-3 text-xs text-muted-foreground">
+                {LEGEND.map((l) => (
+                  <span key={l.label} className="flex items-center gap-1.5">
+                    <span aria-hidden="true" className="inline-block size-3 rounded-full" style={l.ring ? { border: `3px solid ${l.color}` } : { background: l.color }} />
+                    {l.label}
+                  </span>
+                ))}
               </div>
             )}
           </div>
-          <div ref={container} className="player" />
-        </div>
-        <aside className="flags">
-          <h3>Flagged moments ({data.markers.length})</h3>
-          {data.markers.length === 0 && <p className="muted">Nothing flagged in this session.</p>}
-          {data.markers.map((m) => (
-            <button key={m.signal_id} type="button" className={`flag ${selected?.signal_id === m.signal_id ? 'active' : ''}`} onClick={() => playClip(m)}>
-              <span className="flag-time">{formatOffset(m.replay_ts - replayStart)}</span>
-              <span>{m.label}</span>
-            </button>
-          ))}
-          <div className="actions">
-            <button type="button" className="btn primary" disabled={!selected} onClick={() => selected && playClip(selected)}>
-              ▶ Replay flagged moment
-            </button>
-            <button type="button" className="btn" onClick={() => player.current?.goto(0, true)}>
-              Play full session
-            </button>
+          <div ref={container} className="player overflow-hidden rounded-lg" />
+        </Card>
+        <Card size="sm" className="gap-3 px-4">
+          <Eyebrow>Flagged moments ({data.markers.length})</Eyebrow>
+          {data.markers.length === 0 && <p className="m-0 text-sm text-muted-foreground">Nothing flagged in this session.</p>}
+          <div className="flex flex-col gap-2">
+            {data.markers.map((m) => {
+              const active = selected?.signal_id === m.signal_id;
+              return (
+                <button
+                  key={m.signal_id}
+                  type="button"
+                  aria-pressed={active}
+                  className={cn(
+                    'flex w-full cursor-pointer items-baseline gap-3 rounded-lg bg-card px-3 py-2 text-left text-sm ring-1 ring-border transition-colors duration-200 hover:bg-muted',
+                    active && 'bg-danger-muted ring-danger-border hover:bg-danger-muted',
+                  )}
+                  onClick={() => playClip(m)}
+                >
+                  <span className="shrink-0 rounded-[4px] bg-danger-muted px-1.5 font-mono text-[12px] font-medium text-money tabular-nums">{formatOffset(m.replay_ts - replayStart)}</span>
+                  <span>{m.label}</span>
+                </button>
+              );
+            })}
           </div>
-        </aside>
+          <div className="mt-1 flex flex-col gap-2">
+            <Button disabled={!selected} onClick={() => selected && playClip(selected)}>
+              <ArrowCounterClockwiseIcon data-icon="inline-start" aria-hidden="true" />
+              Replay flagged moment
+            </Button>
+            <Button variant="outline" onClick={() => player.current?.goto(0, true)}>
+              <PlayIcon data-icon="inline-start" aria-hidden="true" />
+              Play full session
+            </Button>
+          </div>
+        </Card>
       </div>
-    </>
+    </div>
   );
 }

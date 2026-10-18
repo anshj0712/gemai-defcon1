@@ -36,6 +36,7 @@ export default defineConfig({
       project('@cp/agent', 'apps/agent'),
       project('@cp/sdk', 'apps/sdk'),
       project('@cp/dashboard', 'apps/dashboard'),
+      project('@cp/demo-shop', 'apps/demo-shop'),
       project('@cp/infra', 'infra'),
       project('@cp/sim', 'sim'),
     ],

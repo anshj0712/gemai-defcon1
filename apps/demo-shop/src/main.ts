@@ -3,12 +3,13 @@ import '@fontsource-variable/oswald';
 import './styles.css';
 import { init, type CpClient } from '@cp/sdk';
 import { BRAND, CATEGORIES, PRODUCTS, SIZES, money, productById, shoeSvg, type Product } from './catalog';
+import { isBug, pickSessionBugs, type Bug } from './bugs';
 import { icons } from './icons';
 
 /**
  * STRIDE: a synthetic store for exercising the pipeline (all data is made up). Thirteen bugs, one or more per
- * common churn reason, can be switched on with `?bugs=dead_button,shipping_shock,...` or from the dashboard
- * (localhost:5174). The store's backend is the API's synthetic store (apps/api/src/demo-store.ts).
+ * common churn reason. Every tab runs the five crucial ones (slow_payment, checkout_error, card_declined, cart_total,
+ * shipping_shock) plus a random set of the others (bugs.ts); `?bugs=dead_button,...` forces a set instead. The store's backend is the API's synthetic store (apps/api/src/demo-store.ts).
  *   dead_button     Apply Coupon silently stops responding after the third click
  *   ghost_line      Remove leaves a bag line in the bag at quantity 0 (₹0) and then stops responding; totals agree, so
  *                   no built-in rule fires (the agent suggests one)
@@ -21,7 +22,8 @@ import { icons } from './icons';
  *   returns_hidden  the Returns policy button on the product page does nothing
  *   support_down    Chat with us at checkout fails with a 503 and a JS error
  *   recs_sold_out   Picked for you (bag) suggests sold-out shoes, and Quick add does nothing
- *   card_declined   every card is declined at payment, and Use another card does nothing
+ *   card_declined   every card is declined at payment, and Use another card does nothing (with slow_payment also
+ *                   live: the try after the bank timeout is declined, and the next one goes through)
  *   checkout_error  the Northeast region gets a 500 and a JS error at payment
  *   slow_payment    payment authorisation hangs 6.5 s, then the bank times out (the agent proposes a speed rule)
  *
@@ -40,53 +42,18 @@ declare global {
 // Bug flags and the recorder
 // ---------------------------------------------------------------------------------------------
 
-const BUG_NAMES = [
-  'dead_button',
-  'cart_total',
-  'checkout_error',
-  'qty_price',
-  'ghost_line',
-  'shipping_shock',
-  'slow_delivery',
-  'slow_payment',
-  'slow_stock',
-  'card_declined',
-  'returns_hidden',
-  'support_down',
-  'recs_sold_out',
-] as const;
-type Bug = (typeof BUG_NAMES)[number];
-const isBug = (s: string): s is Bug => (BUG_NAMES as readonly string[]).includes(s);
-
-// The original fetch, taken before the SDK wraps it: polling the dashboard switch must not be recorded,
-// or a poll landing just after a click would look like that click's response and hide a dead click.
-const rawFetch = window.fetch.bind(window);
-
-/** An explicit ?bugs= in the URL (the simulator and e2e use it, even empty) wins for that tab. */
+/**
+ * Which bugs are live in this tab. An explicit ?bugs= in the URL (the simulator and e2e use it, even empty) wins.
+ * Otherwise a fresh tab gets the five crucial bugs plus its own random set of the others (see bugs.ts), kept for the
+ * whole tab session, so every shopper meets the money-path bugs and a different mix of the rest.
+ */
 function loadBugs(): Set<Bug> {
   const fromUrl = new URLSearchParams(location.search).get('bugs');
   if (fromUrl !== null) sessionStorage.setItem('demo_bugs', fromUrl);
+  if (sessionStorage.getItem('demo_bugs') === null) sessionStorage.setItem('demo_bugs', pickSessionBugs().join(','));
   return new Set((sessionStorage.getItem('demo_bugs') ?? '').split(',').filter(isBug));
 }
 const bugs = loadBugs();
-const tabOverride = sessionStorage.getItem('demo_bugs') !== null;
-
-/** Otherwise the dashboard (localhost:5174) decides which bugs are live; follow it every 2 s. */
-async function followDashboardBugs(): Promise<void> {
-  if (tabOverride) return;
-  try {
-    const res = await rawFetch('/v1/demo/bugs', { cache: 'no-store' });
-    if (!res.ok) return;
-    const body = (await res.json()) as { bugs?: unknown };
-    const live = Array.isArray(body.bugs) ? body.bugs.filter((b): b is Bug => typeof b === 'string' && isBug(b)) : [];
-    bugs.clear();
-    for (const b of live) bugs.add(b);
-  } catch {
-    // The API is not running: keep the current set.
-  }
-}
-void followDashboardBugs();
-setInterval(() => void followDashboardBugs(), 2000);
 
 const DASHBOARD_URL = import.meta.env.VITE_CP_DASHBOARD ?? 'http://localhost:5174';
 const cp = init({
@@ -638,8 +605,8 @@ function renderHelp(): void {
         <li><strong>returns_hidden</strong>: on a product page, Returns policy does nothing.</li>
         <li><strong>support_down</strong>: at checkout, Chat with us fails.</li>
         <li><strong>recs_sold_out</strong>: in your Bag, Quick add under Picked for you does nothing.</li>
-        <li><strong>card_declined</strong>: Place Order: the card is declined, and Use another card does nothing.</li>
-        <li><strong>slow_payment</strong>: Place Order waits 6.5 seconds, then the bank times out (a second try works).</li>
+        <li><strong>card_declined</strong>: Place Order: the card is declined, and Use another card does nothing. With slow_payment also live, it is the try after the timeout that is declined; press Place Order once more and it goes through.</li>
+        <li><strong>slow_payment</strong>: Place Order waits 6.5 seconds, then the bank times out (a second try works, unless card_declined is live too).</li>
       </ul>
       <p>The agent finds the slow, shipping and delivery bugs on its own: watch the Rules tab for "The agent suspects".</p>
       <h2>Privacy</h2>

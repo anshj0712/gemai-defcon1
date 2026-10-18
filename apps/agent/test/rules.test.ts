@@ -232,7 +232,7 @@ describe('rule service', () => {
     clock += 60_000;
     const approvedAt = clock;
     const approved = await rules.approve('demo', doc.rule_id, 1, 'test-merchant');
-    expect(approved).toMatchObject({ active: { approved_by: 'test-merchant', approved_at: approvedAt }, draft: null, versions: [{ version: 1, approved_at: approvedAt }] });
+    expect(approved).toMatchObject({ active: { approved_by: 'test-merchant', approved_at: approvedAt, origin: 'human' }, draft: null, versions: [{ version: 1, approved_at: approvedAt }] });
     expect(approved.rescan?.status).toBe('running');
     await rules.idle();
 

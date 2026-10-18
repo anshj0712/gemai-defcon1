@@ -70,3 +70,11 @@ export const plain = (text: string) =>
 
 /** Marked fixed, and not seen again since. An issue seen after it was marked is open again. */
 export const isResolved = (f: { resolution?: { resolved_at: number } | undefined; last_seen: number } | null | undefined): boolean => !!f?.resolution && f.last_seen <= f.resolution.resolved_at;
+
+/** Money for chart axes and tight labels: ₹10.9L, ₹96K (Indian compact units for INR). */
+export function moneyCompact(minor: number | null | undefined, currency: string | null | undefined): string {
+  if (typeof minor !== 'number') return '-';
+  const code = currency && /^[A-Z]{3}$/.test(currency) ? currency : undefined;
+  const opts: Intl.NumberFormatOptions = code ? { style: 'currency', currency: code, notation: 'compact', maximumFractionDigits: 1 } : { notation: 'compact', maximumFractionDigits: 1 };
+  return new Intl.NumberFormat('en-IN', opts).format(minor / 100);
+}

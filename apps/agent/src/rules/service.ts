@@ -485,7 +485,7 @@ export function createRuleService(deps: RuleServiceDeps) {
         return {
           ...current,
           title: draft.rule.title,
-          active: { rule: draft.rule, sentence: draft.sentence, author: draft.author, approved_at: t, approved_by: approvedBy },
+          active: { rule: draft.rule, sentence: draft.sentence, author: draft.author, approved_at: t, approved_by: approvedBy, origin: draft.origin ?? 'human' },
           draft: null,
           rescan: startRescan(tenantId, draft.rule, await registeredProbes(tenantId)),
           versions: [...current.versions, { version: draft.rule.version, approved_at: t }],

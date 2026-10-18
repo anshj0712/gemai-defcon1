@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseRoute } from '../src/App';
+import { parseRoute } from '../src/lib/route';
 import { clipWindow, formatOffset, forPlayer, injectMarkers, isFlagEvent, tagColors, type Marker } from '../src/markers';
 
 const marker = (replay_ts: number, detector = 'dead_click'): Marker => ({
@@ -86,18 +86,19 @@ describe('parseRoute', () => {
     expect(parseRoute('#/sessions/s_abc123xyz')).toEqual({ page: 'replay', sessionId: 's_abc123xyz', signalId: null });
   });
 
-  it('routes the issues feed, issue pages, and the signals list', () => {
-    expect(parseRoute('#/')).toEqual({ page: 'issues' });
-    expect(parseRoute('')).toEqual({ page: 'issues' });
+  it('routes the dashboard, the issues list, issue pages, and the signals list', () => {
+    expect(parseRoute('#/')).toEqual({ page: 'dashboard' });
+    expect(parseRoute('')).toEqual({ page: 'dashboard' });
+    expect(parseRoute('#/issues')).toEqual({ page: 'issues' });
     expect(parseRoute('#/issues/0123456789abcdef0123')).toEqual({ page: 'issue', clusterId: '0123456789abcdef0123' });
     expect(parseRoute('#/signals')).toEqual({ page: 'signals' });
-    expect(parseRoute('#/sessions/../../x')).toEqual({ page: 'issues' });
+    expect(parseRoute('#/sessions/../../x')).toEqual({ page: 'dashboard' });
     expect(parseRoute('#/issues/not-an-id')).toEqual({ page: 'issues' });
   });
 });
 
 describe('findings in the dashboard', async () => {
-  const { rankIssues } = await import('../src/IssuesPage');
+  const { rankIssues } = await import('../src/lib/issues');
   const { formulaLine, money } = await import('../src/format');
 
   it('puts scored issues first in finding order, then unscored ones', () => {
