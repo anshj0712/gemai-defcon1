@@ -1,0 +1,34 @@
+{
+ "arch": {
+  "audio": "audio/arch.wav",
+  "secs": 22.58
+ },
+ "close": {
+  "audio": "audio/close.wav",
+  "secs": 7.2
+ },
+ "dashboard": {
+  "audio": "audio/dashboard.wav",
+  "secs": 20.24
+ },
+ "hook": {
+  "audio": "audio/hook.wav",
+  "secs": 11.44
+ },
+ "issue": {
+  "audio": "audio/issue.wav",
+  "secs": 20.08
+ },
+ "problem": {
+  "audio": "audio/problem.wav",
+  "secs": 12.32
+ },
+ "results": {
+  "audio": "audio/results.wav",
+  "secs": 20.66
+ },
+ "rules": {
+  "audio": "audio/rules.wav",
+  "secs": 21.86
+ }
+}
