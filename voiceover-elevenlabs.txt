@@ -1,0 +1,155 @@
+CHURN PREVENTER AGENT - VOICE-OVER FOR ELEVENLABS
+==================================================
+
+HOW TO USE
+----------
+1. Open ElevenLabs > Text to Speech.
+2. Model: Eleven v3 (it reads the [tags] in square brackets as acting directions).
+3. Voice: warm, low-to-medium pitch, calm narrator. Try "Brian", "Daniel", "George"
+   or "Adam" and keep whichever sounds warmest. Use the SAME voice for all 21 lines.
+4. Settings: Stability = Natural (the middle option). Speed = 1.0. Leave the rest default.
+5. Copy ONE block at a time (only the line under "PASTE"), generate it, and download it
+   as MP3 with the exact file name shown. 21 files in total.
+6. If a clip runs longer than its "Keep under" time, generate it again a little faster
+   (Speed 1.05 to 1.1). Do not change the words.
+7. Put all 21 MP3 files in this folder:  video/public/voice/
+   Then tell Claude "voice files are in". Claude will sync them and render the final video.
+
+Tags used below: [warm] [calm] [softly] [curious] [excited] [confident] [proud]
+[reassuring] [smiles] [sighs] [pause] [short pause] [long pause].
+"..." also makes a natural pause.
+
+
+---------------------------------------------------------------
+01  intro.mp3          Keep under: 6 s
+Mood: unhurried, small lift on "past"
+PASTE:
+[calm] Find the bug. [short pause] Rank the loss. [pause] [warm] Check the past.
+
+---------------------------------------------------------------
+02  act1.mp3           Keep under: 3 s
+Mood: quiet, like a chapter title
+PASTE:
+[softly] Act one. [short pause] The shopper.
+
+---------------------------------------------------------------
+03  arrive.mp3         Keep under: 12 s
+Mood: friendly, unhurried
+PASTE:
+[warm] Meet a shopper. They land on the store, ready to buy... and scroll through what's trending this week.
+
+---------------------------------------------------------------
+04  browse.mp3         Keep under: 10 s
+Mood: easy, smiling
+PASTE:
+[smiles] They find the pair they want, pick a size, and add it to the bag.
+
+---------------------------------------------------------------
+05  bag.mp3            Keep under: 8 s
+Mood: light, slow on the price
+PASTE:
+[warm] One pair... ten thousand, seven hundred and ninety-five rupees. [short pause] On to checkout.
+
+---------------------------------------------------------------
+06  checkout.mp3       Keep under: 14 s
+Mood: let "fails" land, quieter on the retry
+PASTE:
+[calm] They fill in every detail and press Place Order... [pause] and the payment fails. [softly] They try once more. [short pause] Same error.
+
+---------------------------------------------------------------
+07  leave.mp3          Keep under: 9 s
+Mood: soft, a little sad, never dramatic
+PASTE:
+[sighs] [softly] So they close the tab. No order. No complaint. [long pause] Nobody hears about it.
+
+---------------------------------------------------------------
+08  act2.mp3           Keep under: 3 s
+Mood: chapter title, a touch brighter
+PASTE:
+[calm] Act two. [short pause] The merchant.
+
+---------------------------------------------------------------
+09  agent.mp3          Keep under: 10 s
+Mood: more energy, brisk list
+PASTE:
+[confident] Churn Preventer was watching. It reads every session, spots the failed payments, groups them into one issue... and Gemini explains the cause.
+
+---------------------------------------------------------------
+10  dashboard.mp3      Keep under: 11.5 s
+Mood: confident, stress "rupees lost" and "fix first"
+PASTE:
+[confident] Every issue is ranked by rupees lost. Each colour is one bug, over time... [short pause] and this card says what to fix first.
+
+---------------------------------------------------------------
+11  issue.mp3          Keep under: 16 s
+Mood: steady, emphasis on "code"
+PASTE:
+[calm] Open it, and you get what happened, the steps to reproduce, and proof. Four AI jurors review the report... [pause] but the final call is made by code, not the model.
+
+---------------------------------------------------------------
+12  replay.mp3         Keep under: 10 s
+Mood: slower, almost hushed - the key moment
+PASTE:
+[softly] And here's the replay. [short pause] The exact moment the payment failed... from the shopper's own session, with private details masked.
+
+---------------------------------------------------------------
+13  rules.mp3          Keep under: 6 s
+Mood: light, matter-of-fact
+PASTE:
+[calm] The agent also suggests rules. [short pause] A person approves every one.
+
+---------------------------------------------------------------
+14  rescan.mp3         Keep under: 9 s
+Mood: building, smile on "ten seconds"
+PASTE:
+[curious] Approve one, and it re-checks the last thirty days... [excited] finding twelve past shoppers in about ten seconds.
+
+---------------------------------------------------------------
+15  history.mp3        Keep under: 8.5 s
+Mood: reflective
+PASTE:
+[calm] Time travel shows how long each bug went unnoticed. [short pause] [softly] The striped part is damage nobody saw.
+
+---------------------------------------------------------------
+16  act3.mp3           Keep under: 3 s
+Mood: chapter title, warm
+PASTE:
+[warm] Act three. [short pause] The save.
+
+---------------------------------------------------------------
+17  fix.mp3            Keep under: 9 s
+Mood: calm, reassuring
+PASTE:
+[reassuring] The team ships the fix and marks it done. If the bug ever comes back, the issue reopens by itself.
+
+---------------------------------------------------------------
+18  retained.mp3       Keep under: 13 s
+Mood: warm, satisfied, smile on "Shopper kept"
+PASTE:
+[warm] Now the next shopper checks out... places the order... [short pause] and it goes through. [smiles] Order confirmed. [short pause] Shopper kept.
+
+---------------------------------------------------------------
+19  arch.mp3           Keep under: 15 s
+Mood: technical but easy, do not rush the list
+PASTE:
+[calm] Under the hood: one script tag, Pub Sub, five detectors, and Gemini on Vertex AI... all on Google Cloud. [short pause] Only real issues reach the model, so cost stays flat as traffic grows.
+
+---------------------------------------------------------------
+20  results.mp3        Keep under: 19.5 s
+Mood: proud but grounded, slow on "zero false alarms"
+PASTE:
+[proud] On two hundred and forty test shoppers with thirteen planted bugs, it found all eight visible bugs... with zero false alarms. [long pause] [confident] Replay tools show you rage clicks. Churn Preventer finds silent bugs, ranks them in rupees, and checks the past.
+
+---------------------------------------------------------------
+21  cta.mp3            Keep under: 7 s
+Mood: warm, final, pitch drops a little at the end
+PASTE:
+[warm] Churn Preventer Agent. [pause] Find the bug... [short pause] [softly] before the shopper leaves.
+
+---------------------------------------------------------------
+CHECKLIST BEFORE HANDING OVER
+- 21 MP3 files, names exactly as above (intro.mp3 ... cta.mp3), all lowercase.
+- Same voice and same settings for every file.
+- No music or sound effects in the files (voice only).
+- No long silence at the start or end of a file.
+- All files in: video/public/voice/
