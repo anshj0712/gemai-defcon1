@@ -13,6 +13,7 @@ import { findRepoRoot, loadDotEnv } from '@cp/platform';
  * always allocated, at least one instance warm.
  *
  *   pnpm deploy:processor [-- --min 1] [--skip-tests] [--dry-run]
+ *   pnpm deploy:api -- --public   (no login at all: a public demo of synthetic data)
  *
  * Run `pnpm infra:up` once first. Minimum instances default to 0 (cheap); use --min 1 on demo day.
  */
@@ -148,11 +149,11 @@ async function main(): Promise<void> {
     const agentUrl = gcloud(['run', 'services', 'describe', cfg.services.agent, `--region=${cfg.region}`, '--format=value(status.url)']) || 'https://cp-agent-<hash>.a.run.app';
     gcloud(['run', 'services', 'add-iam-policy-binding', cfg.services.agent, `--region=${cfg.region}`, `--member=serviceAccount:${account}`, '--role=roles/run.invoker', '--quiet', '--format=none']);
     gcloud([
-      ...common.map((a) => (a.startsWith('--set-env-vars=') ? `${a},API_PORT=8080,API_HOST=0.0.0.0,AGENT_URL=${agentUrl},DASHBOARD_DIR=apps/dashboard/dist,DEMO_STORE=false${existsSync(join(root, '.data', 'quality.json')) ? ',QUALITY_FILE=.data/quality.json' : ''}` : a)),
+      ...common.map((a) => (a.startsWith('--set-env-vars=') ? `${a},API_PORT=8080,API_HOST=0.0.0.0,AGENT_URL=${agentUrl},DASHBOARD_DIR=apps/dashboard/dist,DEMO_STORE=false${flag('public') ? ',DASHBOARD_PUBLIC=true' : ''}${existsSync(join(root, '.data', 'quality.json')) ? ',QUALITY_FILE=.data/quality.json' : ''}` : a)),
       '--allow-unauthenticated',
       '--concurrency=40',
       '--timeout=60',
-      `--set-secrets=DASHBOARD_PASSWORD=${cfg.secrets.dashboardPassword}:latest`,
+      ...(flag('public') ? ['--remove-secrets=DASHBOARD_PASSWORD'] : [`--set-secrets=DASHBOARD_PASSWORD=${cfg.secrets.dashboardPassword}:latest`]),
     ]);
   } else if (service === 'shop') {
     // The synthetic demo shop: public, no login, no data. Bugs are switched on in the URL (?bugs=dead_button).

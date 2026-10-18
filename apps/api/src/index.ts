@@ -25,6 +25,8 @@ const ApiEnv = z.object({
   API_MODE: z.enum(['api', 'shop']).default('api'),
   /** Deployed: everyone must give this password (HTTP Basic). Unset locally. */
   DASHBOARD_PASSWORD: z.string().min(8).optional(),
+  /** Set true to run on Cloud Run with no login at all (a public demo of synthetic data). */
+  DASHBOARD_PUBLIC: z.enum(['true', 'false']).optional(),
   /** Deployed: the built dashboard, served by this same service. Unset locally (Vite serves it). */
   DASHBOARD_DIR: z.string().optional(),
 });
@@ -66,7 +68,7 @@ async function main(): Promise<void> {
     // On Cloud Run (K_SERVICE) the agent is private: call it with an ID token from the metadata server.
     rules: { agentUrl: e.AGENT_URL, agentAuth: process.env.K_SERVICE ? 'metadata' : 'none' },
   });
-  if (process.env.K_SERVICE && !e.DASHBOARD_PASSWORD) throw new Error('DASHBOARD_PASSWORD is required on Cloud Run: the API has no other login');
+  if (process.env.K_SERVICE && !e.DASHBOARD_PASSWORD && e.DASHBOARD_PUBLIC !== 'true') throw new Error('DASHBOARD_PASSWORD is required on Cloud Run, or set DASHBOARD_PUBLIC=true to run with no login');
   if (e.DASHBOARD_DIR && !existsSync(join(resolve(e.DASHBOARD_DIR), 'index.html'))) logger.warn({ dir: e.DASHBOARD_DIR }, 'DASHBOARD_DIR has no index.html: run pnpm build');
   await app.listen({ port: e.API_PORT, host: e.API_HOST });
   logger.info({ mode: pc.mode, port: e.API_PORT, tenant: e.API_DEFAULT_TENANT }, `api ready: http://localhost:${e.API_PORT}/v1/findings`);
