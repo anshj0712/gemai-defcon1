@@ -82,7 +82,7 @@ async function main(): Promise<void> {
   // The shop and the API share one image (the shop is the same program in another mode, with the dashboard and shop files built in).
   const urlOf = (svc: string) => (dryRun ? '' : gcloud(['run', 'services', 'describe', svc, `--region=${cfg.region}`, '--format=value(status.url)']));
   const siteKey = Object.keys(JSON.parse(process.env.SITE_KEYS ?? '{"pk_local_demo":"demo"}') as Record<string, unknown>)[0] ?? 'pk_local_demo';
-  const buildArgs = service === 'api' || service === 'shop' ? `,_COLLECTOR_URL=${urlOf(cfg.services.collector)},_DASHBOARD_URL=${urlOf(cfg.services.api)},_SITE_KEY=${siteKey}` : '';
+  const buildArgs = service === 'api' || service === 'shop' ? `,_COLLECTOR_URL=${urlOf(cfg.services.collector)},_DASHBOARD_URL=${urlOf(cfg.services.api)},_SHOP_URL=${urlOf(cfg.services.shop)},_SITE_KEY=${siteKey}` : '';
   gcloud(['builds', 'submit', '--config=infra/cloudbuild.yaml', `--substitutions=_SERVICE=${service === 'shop' ? 'api' : service},_IMAGE=${image}${buildArgs}`, '.']);
 
   const env = [

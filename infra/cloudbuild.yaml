@@ -2,11 +2,12 @@
 #   gcloud builds submit --config=infra/cloudbuild.yaml --substitutions=_SERVICE=collector,_IMAGE=<registry path> .
 steps:
   - name: gcr.io/cloud-builders/docker
-    args: ['build', '--build-arg', 'SERVICE=${_SERVICE}', '--build-arg', 'VITE_CP_COLLECTOR=${_COLLECTOR_URL}', '--build-arg', 'VITE_CP_DASHBOARD=${_DASHBOARD_URL}', '--build-arg', 'VITE_CP_SITE_KEY=${_SITE_KEY}', '-t', '${_IMAGE}', '.']
+    args: ['build', '--build-arg', 'SERVICE=${_SERVICE}', '--build-arg', 'VITE_CP_COLLECTOR=${_COLLECTOR_URL}', '--build-arg', 'VITE_CP_DASHBOARD=${_DASHBOARD_URL}', '--build-arg', 'VITE_CP_SITE_KEY=${_SITE_KEY}', '--build-arg', 'VITE_CP_SHOP_URL=${_SHOP_URL}', '-t', '${_IMAGE}', '.']
 substitutions:
   _COLLECTOR_URL: http://localhost:8080
   _DASHBOARD_URL: http://localhost:5174
   _SITE_KEY: pk_local_demo
+  _SHOP_URL: http://localhost:5173
 images:
   - '${_IMAGE}'
 options:
