@@ -82,3 +82,38 @@ export function withCurrent(versions: readonly SeriesVersion[], current: { at: n
   const closed = sorted.map((v) => (v.recorded_to === null || v.recorded_to > current.at ? { ...v, recorded_to: current.at } : v));
   return [...closed, { recorded_from: current.at, recorded_to: null, revenue_at_risk_minor: current.revenue_at_risk_minor }];
 }
+
+export type TrendDirection = 'up' | 'down' | 'flat';
+
+export interface Trend {
+  now: number;
+  before: number;
+  direction: TrendDirection;
+}
+
+/** Is this issue costing more or less than it was `windowMs` ago? A change under 5% counts as steady. */
+export function trendOf(item: SeriesItem, to: number, windowMs: number): Trend {
+  const now = revenueAt(item, to);
+  const before = revenueAt(item, to - windowMs);
+  const change = before === 0 ? (now > 0 ? 1 : 0) : (now - before) / before;
+  return { now, before, direction: change > 0.05 ? 'up' : change < -0.05 ? 'down' : 'flat' };
+}
+
+/** One issue on the detection timeline: when shoppers first hit it, when we first knew, and when it was fixed. */
+export interface Lane {
+  id: string;
+  title: string;
+  firstHit: number;
+  firstKnown: number;
+  fixedAt: number | null;
+  revenueMinor: number;
+  /** How long shoppers were hurt before the record knew (never negative). */
+  blindMs: number;
+}
+
+export function buildLanes(rows: readonly { id: string; title: string; firstHit: number; firstKnown: number; fixedAt: number | null; revenueMinor: number }[]): Lane[] {
+  return rows
+    .map((r) => ({ ...r, firstHit: Math.min(r.firstHit, r.firstKnown), blindMs: Math.max(0, r.firstKnown - r.firstHit) }))
+    .sort((a, b) => b.revenueMinor - a.revenueMinor || a.title.localeCompare(b.title));
+}
+

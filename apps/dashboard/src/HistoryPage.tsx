@@ -9,7 +9,9 @@ import { fetchHistory, type HistoryFindingView, type HistoryView } from './api';
 import { FoundLaterBadge, PageHeader, Stat, TierBadge } from './components/common';
 import { money } from './format';
 import { defaultAsOf, totalAtRisk } from './lib/history';
-import { RevenueTimeline, RuleImpact } from './RevenueTimeline';
+import { keep, peek } from './lib/swr';
+import { DetectionLanes } from './DetectionLanes';
+import { RuleImpact } from './RevenueTimeline';
 
 const WINDOWS = [
   { label: '24 hours', ms: 86_400_000 },
@@ -20,7 +22,7 @@ const WINDOWS = [
 const when = (ms: number) => new Date(ms).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
 const DESCRIPTION =
-  'What did we know at a moment in the past, compared with what we know now about the same stretch of shopper activity? Issues that appear only today were already hurting shoppers; the rules at the time did not flag them.';
+  'Pick a moment in the past. The left list is what we knew about then; the right list is what we know now about the same time. A problem that shows up only on the right was already hurting shoppers, but no rule existed yet to catch it.';
 
 function Row({ f, foundLater }: { f: HistoryFindingView; foundLater: boolean }) {
   return (
@@ -35,7 +37,7 @@ function Row({ f, foundLater }: { f: HistoryFindingView; foundLater: boolean }) 
           {foundLater && <FoundLaterBadge>Found later</FoundLaterBadge>}
         </span>
         <span className="text-xs text-muted-foreground">
-          {f.affected_sessions} sessions{f.found_later_sessions ? `, ${f.found_later_sessions} found by re-scan` : ''} · first hit {when(f.valid_from)} · recorded {when(f.recorded_from)}
+          {f.affected_sessions} sessions{f.found_later_sessions ? `, ${f.found_later_sessions} found in past sessions` : ''} · shoppers first hit it {when(f.valid_from)} · we noted it {when(f.recorded_from)}
         </span>
       </span>
       <b className="font-semibold whitespace-nowrap text-money tabular-nums">{f.revenue_status === 'ok' ? money(f.revenue_at_risk_minor, f.currency) : '…'}</b>
@@ -50,20 +52,22 @@ function Row({ f, foundLater }: { f: HistoryFindingView; foundLater: boolean }) 
  */
 export function HistoryPage() {
   const [now] = useState(() => Date.now());
-  const [asOf, setAsOf] = useState<number | null>(null);
-  const [windowMs, setWindowMs] = useState<number>(WINDOWS[1].ms);
-  const [data, setData] = useState<HistoryView | null>(null);
-  const [minT, setMinT] = useState<number>(now - 86_400_000);
+  // Starts from the last moment and answer this tab saw, so coming back shows the page at once.
+  const [asOf, setAsOf] = useState<number | null>(() => peek<number>('hist:asOf') ?? null);
+  const [windowMs, setWindowMs] = useState<number>(() => peek<number>('hist:window') ?? WINDOWS[1].ms);
+  const [data, setData] = useState<HistoryView | null>(() => peek<HistoryView>('hist:data') ?? null);
+  const [minT, setMinT] = useState<number>(() => peek<number>('hist:minT') ?? now - 86_400_000);
   const [error, setError] = useState<string | null>(null);
 
   // First load: find the moments and the earliest activity, then start just before the latest approval.
   useEffect(() => {
+    if (peek<number>('hist:asOf') !== undefined) return;
     fetchHistory(now, now - 30 * 86_400_000, now).then(
       (h) => {
         // Start a minute before the first shopper hit anything, so recent activity spans the whole slider.
         const earliest = h.current.length ? Math.min(...h.current.map((f) => f.valid_from)) - 60_000 : now - 3_600_000;
-        setMinT(earliest);
-        setAsOf(Math.max(earliest, defaultAsOf(h.moments, now)));
+        setMinT(keep('hist:minT', earliest));
+        setAsOf(keep('hist:asOf', Math.max(earliest, defaultAsOf(h.moments, now))));
       },
       (e: Error) => setError(e.message),
     );
@@ -74,7 +78,7 @@ export function HistoryPage() {
     let alive = true;
     const t = setTimeout(() => {
       fetchHistory(asOf, asOf - windowMs, asOf).then(
-        (h) => alive && (setData(h), setError(null)),
+        (h) => alive && (setData(keep('hist:data', h)), keep('hist:asOf', asOf), keep('hist:window', windowMs), setError(null)),
         (e: Error) => alive && setError(e.message),
       );
     }, 200);
@@ -124,7 +128,7 @@ export function HistoryPage() {
       {header}
 
       <div className="mb-4 flex flex-col gap-4">
-        <RevenueTimeline asOf={asOf} onPick={(t) => setAsOf(Math.max(minT, Math.min(now, t)))} />
+        <DetectionLanes asOf={asOf} onPick={(t) => setAsOf(Math.max(minT, Math.min(now, t)))} />
         <RuleImpact />
       </div>
 
@@ -134,7 +138,7 @@ export function HistoryPage() {
             As of <b className="font-semibold tabular-nums">{when(asOf)}</b>
           </span>
           <label className="flex items-center gap-2 text-sm text-muted-foreground">
-            shopper activity in the
+            shopper activity from the
             <Select value={String(windowMs)} onValueChange={(v) => setWindowMs(Number(v))}>
               <SelectTrigger size="sm" className="w-28" aria-label="Stretch of shopper activity">
                 <SelectValue />
@@ -149,7 +153,7 @@ export function HistoryPage() {
                 </SelectGroup>
               </SelectContent>
             </Select>
-            before it
+            before it (the time window)
           </label>
         </div>
         <div className="relative pt-1 pb-4">
@@ -177,8 +181,8 @@ export function HistoryPage() {
       </Card>
 
       <div className="my-4 grid gap-3 md:grid-cols-3">
-        <Stat value={data.then.length} label={`issues known at ${when(asOf)} · ${money(then.minor, then.currency)} at risk`} />
-        <Stat value={data.current.length} label={`issues known now, same stretch · ${money(current.minor, current.currency)} at risk`} />
+        <Stat value={data.then.length} label={`problems we knew about at ${when(asOf)} · ${money(then.minor, then.currency)} at risk`} />
+        <Stat value={data.current.length} label={`problems we know about now, same time · ${money(current.minor, current.currency)} at risk`} />
         <Stat
           value={laterList.length}
           tone={laterList.length ? 'agent' : undefined}
@@ -194,14 +198,14 @@ export function HistoryPage() {
       <div className="grid items-start gap-4 lg:grid-cols-2">
         <Card className="gap-2 px-4">
           <h3 className="m-0 px-2 text-sm font-semibold">What we knew then</h3>
-          {data.then.length === 0 ? <p className="m-0 px-2 text-sm text-muted-foreground">No issues were on record at that moment for this stretch.</p> : data.then.map((f) => <Row key={f.finding_id} f={f} foundLater={false} />)}
+          {data.then.length === 0 ? <p className="m-0 px-2 text-sm text-muted-foreground">Nothing was on record at that moment for this time.</p> : data.then.map((f) => <Row key={f.finding_id} f={f} foundLater={false} />)}
         </Card>
         <Card className="gap-2 px-4">
-          <h3 className="m-0 px-2 text-sm font-semibold">What we know now about the same stretch</h3>
-          {data.current.length === 0 ? <p className="m-0 px-2 text-sm text-muted-foreground">No issues on record for this stretch.</p> : data.current.map((f) => <Row key={f.finding_id} f={f} foundLater={later.has(f.finding_id)} />)}
+          <h3 className="m-0 px-2 text-sm font-semibold">What we know now about that same time</h3>
+          {data.current.length === 0 ? <p className="m-0 px-2 text-sm text-muted-foreground">Nothing on record for this time.</p> : data.current.map((f) => <Row key={f.finding_id} f={f} foundLater={later.has(f.finding_id)} />)}
         </Card>
       </div>
-      <p className="mt-4 mb-0 text-xs text-muted-foreground">Both columns come from the versioned findings record (valid time and transaction time), not the live feed.</p>
+      <p className="mt-4 mb-0 text-xs text-muted-foreground">Both lists come from the saved history of findings, not the live feed.</p>
     </>
   );
 }

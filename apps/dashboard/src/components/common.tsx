@@ -16,7 +16,7 @@ const TIER_CLASS: Record<string, string> = {
 };
 const TIER_MARK: Record<string, string> = { P0: 'bg-tier-p0', P1: 'bg-tier-p1', P2: 'bg-tier-p2', P3: 'bg-tier-p3' };
 
-/** "P0 · blocker" as a quiet flag: the tier's mark, its name in the tier's ink on a tint. `short` shows just "P0". */
+/** "P0 · urgent" as a quiet flag: the tier's mark, its name in the tier's ink on a tint. `short` shows just "P0". */
 export function TierBadge({ tier, short, className }: { tier: string; short?: boolean; className?: string }) {
   return (
     <Badge className={cn('gap-1.5 font-semibold', TIER_CLASS[tier] ?? TIER_CLASS.P3, className)}>
@@ -66,11 +66,11 @@ export function PendingTierBadge() {
   );
 }
 
-/** Element issues (a control on a page, indigo) or data-rule issues (a number that broke a rule, purple). */
+/** Page problems (a button or control that fails, indigo) or wrong-number issues (a number that broke a rule, purple). */
 export function KindBadge({ kind }: { kind: string }) {
   return (
     <Badge className={cn('font-medium', kind === 'invariant' ? 'bg-agent-muted text-agent' : 'bg-kind-muted text-kind')}>
-      {kind === 'invariant' ? 'Data rule' : 'Element'}
+      {kind === 'invariant' ? 'Wrong number' : 'Page problem'}
     </Badge>
   );
 }

@@ -21,7 +21,7 @@ const TABS: { id: Tab; href: string; label: string }[] = [
   { id: 'issues', href: '#/issues', label: 'Issues' },
   { id: 'rules', href: '#/rules', label: 'Rules' },
   { id: 'history', href: '#/history', label: 'Time travel' },
-  { id: 'signals', href: '#/signals', label: 'Signals' },
+  { id: 'signals', href: '#/signals', label: 'Raw alerts' },
 ];
 
 const tabOf = (route: Route): Tab => (route.page === 'issue' || route.page === 'replay' ? 'issues' : route.page);

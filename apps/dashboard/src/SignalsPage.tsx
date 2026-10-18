@@ -13,7 +13,7 @@ import { PageHeader, SymptomChip, TierBadge } from './components/common';
 import { ago, time } from './format';
 import { groupSignals, type SignalGroup } from './lib/signals';
 
-const DESCRIPTION = 'Every detector hit, grouped under the issue it belongs to. Each opens the replay at its moment. Refreshes every 5 s.';
+const DESCRIPTION = 'Every alert the system raised, grouped under the issue it belongs to. Open one to watch that shopper at that moment. Refreshes every 5 seconds.';
 /** The newest group opens on arrival; the rest stay folded so the page reads as a list of issues. */
 const OPEN_FIRST = 1;
 /** Rows shown per group before "Show all". */
@@ -94,7 +94,7 @@ function Group({ g, finding, defaultOpen }: { g: SignalGroup; finding: FindingSu
           </Table>
           {g.signals.length > ROWS && (
             <Button variant="ghost" size="sm" className="mt-1 ml-1 text-link" onClick={() => setAll(!all)}>
-              {all ? `Show the newest ${ROWS}` : `Show all ${g.signals.length} signals`}
+              {all ? `Show the newest ${ROWS}` : `Show all ${g.signals.length} alerts`}
             </Button>
           )}
         </div>
@@ -128,9 +128,9 @@ export function SignalsPage() {
   if (error) {
     return (
       <>
-        <PageHeader title="Signals" description={DESCRIPTION} />
+        <PageHeader title="Raw alerts" description={DESCRIPTION} />
         <Alert variant="destructive">
-          <AlertTitle>Could not load signals</AlertTitle>
+          <AlertTitle>Could not load alerts</AlertTitle>
           <AlertDescription>
             {error}. Is the API running? Try <code>pnpm dev</code>.
           </AlertDescription>
@@ -141,7 +141,7 @@ export function SignalsPage() {
   if (!signals) {
     return (
       <>
-        <PageHeader title="Signals" description={DESCRIPTION} />
+        <PageHeader title="Raw alerts" description={DESCRIPTION} />
         <Skeleton className="h-96 rounded-xl" aria-busy="true" aria-label="Loading signals" />
       </>
     );
@@ -149,14 +149,14 @@ export function SignalsPage() {
   if (signals.length === 0) {
     return (
       <>
-        <PageHeader title="Signals" description={DESCRIPTION} />
+        <PageHeader title="Raw alerts" description={DESCRIPTION} />
         <Empty className="border bg-card">
           <EmptyHeader>
             <EmptyMedia variant="icon">
               <PulseIcon aria-hidden="true" />
             </EmptyMedia>
-            <EmptyTitle>No signals yet</EmptyTitle>
-            <EmptyDescription>Open the demo shop (top right), add something to the bag, and use it like a shopper; signals appear here within seconds.</EmptyDescription>
+            <EmptyTitle>No alerts yet</EmptyTitle>
+            <EmptyDescription>Open the demo shop (top right), add something to the bag, and use it like a shopper; alerts appear here within seconds.</EmptyDescription>
           </EmptyHeader>
         </Empty>
       </>
@@ -167,7 +167,7 @@ export function SignalsPage() {
   const findingOf = new Map(findings.map((f) => [f.cluster_id, f]));
   return (
     <>
-      <PageHeader title="Signals" description={DESCRIPTION}>
+      <PageHeader title="Raw alerts" description={DESCRIPTION}>
         <span className="text-[13px] text-muted-foreground tabular-nums">
           {signals.length} newest signals in {groups.filter((g) => g.cluster).length} issue{groups.filter((g) => g.cluster).length === 1 ? '' : 's'}
         </span>

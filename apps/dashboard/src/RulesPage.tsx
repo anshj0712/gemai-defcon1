@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
+import { keep, peek } from './lib/swr';
 import { ApiError, approveRule, draftRule, fetchClusters, fetchRules, redraftRule, rejectRule, rescanRule, runWatch, undoRule, type BuiltinRuleView, type ClusterSummary, type RuleView } from './api';
 import { Eyebrow, Module, OriginChip, PageHeader, PageTabsList } from './components/common';
 import { ago, formulaLine, money, pct, time } from './format';
@@ -259,7 +260,7 @@ function HypothesisRow({ r, a }: { r: RuleView; a: Actions }) {
           <>
             <Button size="sm" disabled={a.busy !== null} onClick={() => a.approve(r)}>
               <CheckIcon data-icon="inline-start" aria-hidden="true" />
-              {busyHere('approve') ? 'Approving…' : probe ? 'Approve probe and rule' : 'Approve rule'}
+              {busyHere('approve') ? 'Approving…' : probe ? 'Approve and start tracking' : 'Approve rule'}
             </Button>
             <Button size="sm" variant="outline" disabled={a.busy !== null} onClick={() => setDialog('edit')}>
               <PencilSimpleIcon data-icon="inline-start" aria-hidden="true" />
@@ -316,7 +317,7 @@ function HypothesisRow({ r, a }: { r: RuleView; a: Actions }) {
           <DialogHeader>
             <DialogTitle>Change the rule</DialogTitle>
             <DialogDescription>
-              Rewrite the sentence; the rule author drafts it again with a fresh dry run. Keep the probe name (<code>{probe?.name ?? w.feature.name}</code>) in the sentence.
+              Rewrite the sentence; the rule author drafts it again with a fresh test run. Keep the probe name (<code>{probe?.name ?? w.feature.name}</code>) in the sentence.
             </DialogDescription>
           </DialogHeader>
           <Textarea rows={3} value={sentence} onChange={(e) => setSentence(e.target.value)} maxLength={500} aria-label="Rule sentence" />
@@ -394,7 +395,7 @@ function DraftRow({ r, a }: { r: RuleView; a: Actions }) {
           <>
             <Button size="sm" disabled={a.busy !== null} onClick={() => a.approve(r)}>
               <CheckIcon data-icon="inline-start" aria-hidden="true" />
-              {a.busy === `approve-${r.rule_id}` ? 'Approving…' : 'Approve and re-scan'}
+              {a.busy === `approve-${r.rule_id}` ? 'Approving…' : 'Approve and check past shoppers'}
             </Button>
             <Button size="sm" variant="outline" disabled={a.busy !== null} onClick={() => a.discard(r)}>
               Discard
@@ -486,9 +487,9 @@ function LiveRow({ r, issue, busy, onUndo, onRescan }: { r: RuleView; issue: Clu
  * Every rule is a compact row; its numbers open with the chevron.
  */
 export function RulesPage({ tab }: { tab?: RulesTab }) {
-  const [rules, setRules] = useState<RuleView[] | null>(null);
-  const [builtin, setBuiltin] = useState<BuiltinRuleView[]>([]);
-  const [clusters, setClusters] = useState<ClusterSummary[]>([]);
+  const [rules, setRules] = useState<RuleView[] | null>(() => peek<RuleView[]>('dash:rules') ?? null);
+  const [builtin, setBuiltin] = useState<BuiltinRuleView[]>(() => peek<BuiltinRuleView[]>('rules:builtin') ?? []);
+  const [clusters, setClusters] = useState<ClusterSummary[]>(() => peek<ClusterSummary[]>('dash:clusters') ?? []);
   const [sentence, setSentence] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<ApiError | Error | null>(null);
@@ -502,9 +503,9 @@ export function RulesPage({ tab }: { tab?: RulesTab }) {
     () =>
       Promise.all([fetchRules(), fetchClusters().catch(() => ({ clusters: [] as ClusterSummary[] }))]).then(
         ([r, c]) => {
-          setRules(r.rules);
-          setBuiltin(r.builtin);
-          setClusters(c.clusters);
+          setRules(keep('dash:rules', r.rules));
+          setBuiltin(keep('rules:builtin', r.builtin));
+          setClusters(keep('dash:clusters', c.clusters));
           setLoadError(null);
         },
         (e: Error) => setLoadError(e.message),
@@ -621,7 +622,7 @@ export function RulesPage({ tab }: { tab?: RulesTab }) {
           <TabsTrigger value="live">
             Live rules <span className="text-muted-foreground tabular-nums">{live.length + builtin.length}</span>
           </TabsTrigger>
-          <TabsTrigger value="probes">Probes</TabsTrigger>
+          <TabsTrigger value="probes">Tracked numbers</TabsTrigger>
         </PageTabsList>
 
         <TabsContent value="waiting" className="motion-reveal flex flex-col gap-4 pt-4">
@@ -652,7 +653,7 @@ export function RulesPage({ tab }: { tab?: RulesTab }) {
             icon={UserIcon}
             title="Your drafts"
             count={ownDrafts.length}
-            description="Rules you wrote in plain English, with a dry run of what they would flag."
+            description="Rules you wrote in plain English, with a test run showing what they would flag."
             action={
               <Button size="sm" onClick={() => setWriting(true)}>
                 <PlusIcon data-icon="inline-start" aria-hidden="true" />
@@ -695,7 +696,7 @@ export function RulesPage({ tab }: { tab?: RulesTab }) {
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Write a rule</DialogTitle>
-            <DialogDescription>Describe something that must always be true. Gemini turns it into a check over the numbers your sessions report, and a dry run shows what it would flag before anything goes live.</DialogDescription>
+            <DialogDescription>Describe something that must always be true. Gemini turns it into a check over the numbers your sessions report, and a test run shows what it would flag before anything goes live.</DialogDescription>
           </DialogHeader>
           <Textarea
             value={sentence}
@@ -727,7 +728,7 @@ export function RulesPage({ tab }: { tab?: RulesTab }) {
               <Button variant="outline">Cancel</Button>
             </DialogClose>
             <Button disabled={busy !== null || sentence.trim().length < 8} onClick={() => void act('draft', () => draftRule(sentence))}>
-              {busy === 'draft' ? 'Drafting… (rule author + dry run)' : 'Draft rule'}
+              {busy === 'draft' ? 'Drafting… (writing the rule and test-running it)' : 'Draft rule'}
             </Button>
           </DialogFooter>
         </DialogContent>

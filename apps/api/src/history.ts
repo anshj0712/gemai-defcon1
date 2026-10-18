@@ -79,6 +79,36 @@ export function historyMoments(rules: readonly RuleDoc[]): HistoryMoment[] {
   return out.sort((a, b) => a.at - b.at);
 }
 
+/**
+ * One answer for the revenue charts: every version of every finding, grouped by finding, plus the rule moments. It
+ * replaces one request (and one warehouse query) per finding, and it is kept for a few seconds because the Dashboard
+ * and Time travel ask for it together.
+ */
+export interface TimelineFinding {
+  finding_id: string;
+  /** Valid time of the earliest version: when shoppers first hit it, as the record believes now. */
+  first_hit: number;
+  /** Transaction time of the first version: when the system first knew about it. */
+  first_known: number;
+  versions: { recorded_from: number; recorded_to: number | null; revenue_at_risk_minor: number }[];
+}
+
+export function timelineView(rows: readonly FindingRow[]): TimelineFinding[] {
+  const byId = new Map<string, FindingRow[]>();
+  for (const r of rows) byId.set(r.finding_id, [...(byId.get(r.finding_id) ?? []), r]);
+  return [...byId.entries()].map(([finding_id, list]) => {
+    const sorted = [...list].sort((a, b) => a.recorded_from - b.recorded_from);
+    return {
+      finding_id,
+      first_hit: Math.min(...sorted.map((r) => r.valid_from)),
+      first_known: sorted[0]!.recorded_from,
+      versions: sorted.map((r) => ({ recorded_from: r.recorded_from, recorded_to: r.recorded_to, revenue_at_risk_minor: r.revenue_at_risk_minor })),
+    };
+  });
+}
+
+const TIMELINE_TTL_MS = 10_000;
+
 const HistoryQuery = z.object({
   tenant: z.string().regex(TENANT_ID).optional(),
   as_of: z.coerce.number().int().positive().optional(),
@@ -90,6 +120,43 @@ const HistoryQuery = z.object({
 const DEFAULT_WINDOW_MS = 7 * 86_400_000;
 
 export function registerHistoryRoute(app: FastifyInstance, deps: { reader: WarehouseReader; state: StateStore; defaultTenant: string; lookbackMs: number; now: () => number }): void {
+  // Stale-while-revalidate: an answer younger than TIMELINE_TTL_MS is served as is; an older one is served at once
+  // while a fresh one is fetched in the background, so a page never waits on the warehouse after the first load.
+  const timelines = new Map<string, { at: number; value: Promise<unknown>; refreshing: boolean }>();
+  const loadTimeline = (tenant: string, now: number) =>
+    Promise.all([deps.reader.findingsTimeline(tenant, now - deps.lookbackMs), deps.state.listRules(tenant)]).then(([rows, rules]) => ({
+      tenant,
+      checked_at: now,
+      findings: timelineView(rows),
+      moments: historyMoments(rules),
+      synthetic: true,
+    }));
+  app.get('/v1/history/timeline', async (req, reply) => {
+    const q = z.object({ tenant: z.string().regex(TENANT_ID).optional() }).safeParse(req.query);
+    if (!q.success) return reply.code(400).send({ error: 'invalid_query' });
+    const tenant = q.data.tenant ?? deps.defaultTenant;
+    const now = deps.now();
+    let hit = timelines.get(tenant);
+    if (!hit) {
+      const value = loadTimeline(tenant, now);
+      hit = { at: now, value, refreshing: false };
+      timelines.set(tenant, hit);
+      value.catch(() => timelines.delete(tenant));
+    } else if (now - hit.at > TIMELINE_TTL_MS && !hit.refreshing) {
+      const entry = hit;
+      entry.refreshing = true;
+      loadTimeline(tenant, now).then(
+        (fresh) => {
+          timelines.set(tenant, { at: now, value: Promise.resolve(fresh), refreshing: false });
+        },
+        () => {
+          entry.refreshing = false;
+        },
+      );
+    }
+    return reply.header('cache-control', 'no-store').send(await hit.value);
+  });
+
   app.get('/v1/history', async (req, reply) => {
     const q = HistoryQuery.safeParse(req.query);
     if (!q.success) return reply.code(400).send({ error: 'invalid_query' });
