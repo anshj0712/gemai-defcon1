@@ -176,6 +176,9 @@ main { min-height: 60vh; }
 .field select { padding-top: 20px; cursor: pointer; }
 .field label { position: absolute; left: 16px; top: 17px; color: var(--muted); pointer-events: none; transition: all 0.15s; }
 .field input:focus, .field select:focus { outline: none; border-color: var(--ink); }
+.field.has-error input { border-color: var(--error); }
+.field-error { display: block; margin: 4px 2px 0; font-size: 12.5px; line-height: 1.35; color: var(--error); }
+.field-error:empty { display: none; }
 .field input:focus + label, .field input:not(:placeholder-shown) + label, .field select + label { top: 7px; font-size: 12px; }
 .payment { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--soft); }
 .payment .field input { background: var(--white); }

@@ -122,11 +122,22 @@ async function tryCodes(c: Ctx): Promise<void> {
   }
 }
 
+/** A shopper number as letters (0 -> A, 25 -> Z, 26 -> BA): the shop's name check accepts letters only. */
+const letters = (n: number): string => {
+  let out = '';
+  let k = n;
+  do {
+    out = String.fromCharCode(65 + (k % 26)) + out;
+    k = Math.floor(k / 26);
+  } while (k > 0);
+  return out;
+};
+
 async function fillCheckout(c: Ctx): Promise<void> {
   await click(c, '#checkout');
   await c.page.waitForSelector('#checkout-form');
   const n = c.plan.index;
-  await typeInto(c.page, '#name', `Test Shopper ${n}`, { steps: c.steps });
+  await typeInto(c.page, '#name', `Test Shopper ${letters(n)}`, { steps: c.steps });
   await typeInto(c.page, '#email', `shopper${n}@example.com`, { steps: c.steps });
   await typeInto(c.page, '#phone', `+91 90000 ${String(10000 + n).slice(-5)}`, { steps: c.steps });
   await typeInto(c.page, '#address', `${1 + (n % 90)} Example Street`, { steps: c.steps });

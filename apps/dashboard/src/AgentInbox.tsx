@@ -148,7 +148,7 @@ export function AgentInbox() {
     <div className="relative">
       <Tooltip>
         <TooltipTrigger asChild>
-          <a href="#/rules" aria-label={label} className={cn(buttonVariants({ variant: 'ghost', size: 'icon' }), 'relative text-topbar-muted hover:bg-topbar-active hover:text-topbar-foreground dark:hover:bg-topbar-active', open.length > 0 && 'text-agent-border', unseen > 0 && 'text-topbar-foreground')} onClick={acknowledge}>
+          <a href="#/rules" aria-label={label} className={cn(buttonVariants({ variant: 'ghost', size: 'icon' }), 'relative text-topbar-muted hover:bg-topbar-active hover:text-topbar-foreground dark:hover:bg-topbar-active', open.length > 0 && 'text-agent', unseen > 0 && 'text-topbar-foreground')} onClick={acknowledge}>
             {unseen > 0 && <span aria-hidden="true" className="bell-ping pointer-events-none absolute inset-0 rounded-full bg-agent-strong/60" />}
             <BellSimpleIcon key={arrivals} aria-hidden="true" weight={unseen > 0 ? 'fill' : 'regular'} className={cn('relative', unseen > 0 ? 'bell-ring' : arrivals > 0 ? 'motion-nudge' : undefined)} />
             {open.length > 0 && (

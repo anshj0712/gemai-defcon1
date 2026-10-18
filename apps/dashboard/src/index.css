@@ -133,10 +133,11 @@
     --sidebar-border: #e5e7eb;
     --sidebar-ring: #2563eb;
 
-    --topbar: #111827;
-    --topbar-foreground: #ffffff;
-    --topbar-muted: #cbd5e1;
-    --topbar-active: #1f2937;
+    /* The bar is a light surface a step above the page, with no line or shadow: tone separates it. */
+    --topbar: #ffffff;
+    --topbar-foreground: #111827;
+    --topbar-muted: #566073;
+    --topbar-active: #eef1f7;
     --money: #b91c1c;
     --danger-muted: #fef2f2;
     --danger-border: #fecaca;
