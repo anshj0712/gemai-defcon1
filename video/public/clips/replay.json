@@ -1,0 +1,19 @@
+{
+ "id": "replay",
+ "trim": 4.603,
+ "duration": 12.73,
+ "width": 1440,
+ "height": 810,
+ "events": [
+  {
+   "t": 5.515,
+   "x": 576,
+   "y": 585.140625,
+   "w": 960,
+   "h": 620,
+   "scale": 1.25,
+   "hold": 3,
+   "click": false
+  }
+ ]
+}

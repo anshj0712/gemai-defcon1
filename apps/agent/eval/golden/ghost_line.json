@@ -1,0 +1,171 @@
+{
+ "v": 1,
+ "id": "ghost_line",
+ "bug": "ghost_line",
+ "evidence": [
+  {
+   "id": "E1",
+   "kind": "issue",
+   "text": "Element issue \"Unresponsive button[data-testid=\"qty-dec\"] on /cart\" on /cart (anchor button[data-testid=\"qty-dec\"]): 42 signals across 13 sessions; symptoms dead_click x34, rage_click x8; first seen 2026-10-17T20:06:12.643Z, last seen 2026-10-17T20:12:49.367Z.",
+   "data": {
+    "kind": "element",
+    "route": "/cart",
+    "anchor": "button[data-testid=\"qty-dec\"]",
+    "signals": 42,
+    "sessions": 13,
+    "symptom_dead_click": 34,
+    "symptom_rage_click": 8
+   }
+  },
+  {
+   "id": "E2",
+   "kind": "signal",
+   "text": "Dead click on button[data-testid=\"qty-dec\"]: no response within 800 ms (route /cart, release demo-shop@local).",
+   "signal_id": "4ae94a84ede6c4078c01486d33038e09",
+   "session_id": "s_wr3hbyaa3lb2uj1tsjzw",
+   "detector": "dead_click",
+   "at": 1792267969367,
+   "data": {
+    "detector": "dead_click",
+    "selector": "button[data-testid=\"qty-dec\"]",
+    "route": "/cart",
+    "detector_version": "1.3.0",
+    "release": "demo-shop@local",
+    "window_ms": 800
+   }
+  },
+  {
+   "id": "E3",
+   "kind": "signal",
+   "text": "Dead click on button[data-testid=\"qty-dec\"]: no response within 800 ms (route /cart, release demo-shop@local).",
+   "signal_id": "f8e7f2fc12eb5ffc968f0469466e6748",
+   "session_id": "s_vo8b3poasyrkjste3cgl",
+   "detector": "dead_click",
+   "at": 1792267920985,
+   "data": {
+    "detector": "dead_click",
+    "selector": "button[data-testid=\"qty-dec\"]",
+    "route": "/cart",
+    "detector_version": "1.3.0",
+    "release": "demo-shop@local",
+    "window_ms": 800
+   }
+  },
+  {
+   "id": "E4",
+   "kind": "signal",
+   "text": "Dead click on button[data-testid=\"qty-dec\"]: no response within 800 ms (route /cart, release demo-shop@local).",
+   "signal_id": "006541ca93c58dae89aad7dd13c7271d",
+   "session_id": "s_n9h23od1k368yormaa6e",
+   "detector": "dead_click",
+   "at": 1792267870987,
+   "data": {
+    "detector": "dead_click",
+    "selector": "button[data-testid=\"qty-dec\"]",
+    "route": "/cart",
+    "detector_version": "1.3.0",
+    "release": "demo-shop@local",
+    "window_ms": 800
+   }
+  },
+  {
+   "id": "E5",
+   "kind": "signal",
+   "text": "Dead click on button[data-testid=\"qty-dec\"]: no response within 800 ms (route /cart, release demo-shop@local).",
+   "signal_id": "b1c3e7fce60efec92febc8eb3f8f0328",
+   "session_id": "s_i2kfptuclhox10lpb3r7",
+   "detector": "dead_click",
+   "at": 1792267847906,
+   "data": {
+    "detector": "dead_click",
+    "selector": "button[data-testid=\"qty-dec\"]",
+    "route": "/cart",
+    "detector_version": "1.3.0",
+    "release": "demo-shop@local",
+    "window_ms": 800
+   }
+  },
+  {
+   "id": "E6",
+   "kind": "signal",
+   "text": "Dead click on button[data-testid=\"qty-dec\"]: no response within 800 ms (route /cart, release demo-shop@local).",
+   "signal_id": "fc724e4d4de753af6afcea6909e200e0",
+   "session_id": "s_i8wo3x4ve9a3ntqvs1rh",
+   "detector": "dead_click",
+   "at": 1792267821278,
+   "data": {
+    "detector": "dead_click",
+    "selector": "button[data-testid=\"qty-dec\"]",
+    "route": "/cart",
+    "detector_version": "1.3.0",
+    "release": "demo-shop@local",
+    "window_ms": 800
+   }
+  },
+  {
+   "id": "E7",
+   "kind": "release",
+   "text": "Signals by release: demo-shop@local (42). The issue first appeared right after this release went out.",
+   "data": {
+    "releases": 1,
+    "regression": true,
+    "release_1": "demo-shop@local:42"
+   }
+  },
+  {
+   "id": "E8",
+   "kind": "impact",
+   "text": "Synthetic demo data. 7 of 11 affected sessions with a cart abandoned (64%) versus 39% of baseline sessions (route baseline); average cart ₹18,460.77; estimated revenue at risk ₹58,439.13.",
+   "data": {
+    "status": "ok",
+    "affected_with_cart": 13,
+    "abandonment_affected": 0.63636,
+    "abandonment_baseline": 0.39286,
+    "avg_cart_value_minor": 1846077,
+    "revenue_at_risk_minor": 5843913,
+    "currency": "INR"
+   }
+  }
+ ],
+ "base_tier": "P2",
+ "base_rule_ids": [
+  "checkout_friction",
+  "browse_friction",
+  "release_regression"
+ ],
+ "revenue": {
+  "currency": "INR",
+  "affected_with_cart": 14,
+  "affected_decided": 14,
+  "affected_abandoned": 10,
+  "abandonment_affected": 0.71429,
+  "baseline_decided": 26,
+  "baseline_abandoned": 7,
+  "abandonment_baseline": 0.26923,
+  "baseline_scope": "route",
+  "avg_cart_value_minor": 1869857,
+  "pending": 0,
+  "revenue_at_risk_minor": 11650647,
+  "status": "ok",
+  "note": null
+ },
+ "affected_sessions": 14,
+ "expect": {
+  "cause": [
+   [
+    "quantity",
+    "decrease",
+    "remove"
+   ]
+  ],
+  "categories": [
+   "broken_control"
+  ],
+  "where": [
+   "quantity",
+   "decrease",
+   "remove",
+   "cart"
+  ]
+ }
+}

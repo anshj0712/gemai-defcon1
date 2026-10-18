@@ -1,0 +1,210 @@
+{
+ "v": 1,
+ "id": "slow_payment",
+ "bug": "slow_payment",
+ "evidence": [
+  {
+   "id": "E1",
+   "kind": "issue",
+   "text": "Data rule issue \"Payment authorization took longer than 3400 ms\" on /checkout (anchor payment_authorize_latency_lte_3400ms): 8 signals across 8 sessions; symptoms invariant_check x8; first seen 2026-10-17T20:10:40.362Z, last seen 2026-10-17T20:15:20.562Z.",
+   "data": {
+    "kind": "invariant",
+    "route": "/checkout",
+    "anchor": "payment_authorize_latency_lte_3400ms",
+    "signals": 8,
+    "sessions": 8,
+    "symptom_invariant_check": 8
+   }
+  },
+  {
+   "id": "E2",
+   "kind": "signal",
+   "text": "Payment authorization took longer than 3400 ms: shows 65.45, expected 34 (route /checkout, release demo-shop@local).",
+   "signal_id": "5823620ec78a4d889e136f8c8f02596a",
+   "session_id": "s_o32q3goyde361kg3f4bb",
+   "detector": "invariant_check",
+   "at": 1792268120562,
+   "data": {
+    "detector": "invariant_check",
+    "selector": null,
+    "route": "/checkout",
+    "detector_version": "1.0.0",
+    "release": "demo-shop@local",
+    "actual": 6545,
+    "delta": 3145,
+    "expected": 3400,
+    "op": "lte",
+    "rule_id": "payment_authorize_latency_lte_3400ms",
+    "rule_title": "Payment authorization took longer than 3400 ms",
+    "rule_version": 1,
+    "tolerance_minor": 0
+   }
+  },
+  {
+   "id": "E3",
+   "kind": "signal",
+   "text": "Payment authorization took longer than 3400 ms: shows 65.42, expected 34 (route /checkout, release demo-shop@local).",
+   "signal_id": "098c1bf762e23152aed704caab538887",
+   "session_id": "s_kk6o0of0qidwcapfwceh",
+   "detector": "invariant_check",
+   "at": 1792268098784,
+   "data": {
+    "detector": "invariant_check",
+    "selector": null,
+    "route": "/checkout",
+    "detector_version": "1.0.0",
+    "release": "demo-shop@local",
+    "actual": 6542,
+    "delta": 3142,
+    "expected": 3400,
+    "op": "lte",
+    "rule_id": "payment_authorize_latency_lte_3400ms",
+    "rule_title": "Payment authorization took longer than 3400 ms",
+    "rule_version": 1,
+    "tolerance_minor": 0
+   }
+  },
+  {
+   "id": "E4",
+   "kind": "signal",
+   "text": "Payment authorization took longer than 3400 ms: shows 65.45, expected 34 (route /checkout, release demo-shop@local).",
+   "signal_id": "93969e79279e5407aa00e194704d1f98",
+   "session_id": "s_zbtm3uccd5ijd5pszxvn",
+   "detector": "invariant_check",
+   "at": 1792268081248,
+   "data": {
+    "detector": "invariant_check",
+    "selector": null,
+    "route": "/checkout",
+    "detector_version": "1.0.0",
+    "release": "demo-shop@local",
+    "actual": 6545,
+    "delta": 3145,
+    "expected": 3400,
+    "op": "lte",
+    "rule_id": "payment_authorize_latency_lte_3400ms",
+    "rule_title": "Payment authorization took longer than 3400 ms",
+    "rule_version": 1,
+    "tolerance_minor": 0
+   }
+  },
+  {
+   "id": "E5",
+   "kind": "signal",
+   "text": "Payment authorization took longer than 3400 ms: shows 65.41, expected 34 (route /checkout, release demo-shop@local).",
+   "signal_id": "848117225c2a180422bf8a40860e1f90",
+   "session_id": "s_yk0q7uce9i9cb0oaydx1",
+   "detector": "invariant_check",
+   "at": 1792267919013,
+   "data": {
+    "detector": "invariant_check",
+    "selector": null,
+    "route": "/checkout",
+    "detector_version": "1.0.0",
+    "release": "demo-shop@local",
+    "actual": 6541,
+    "delta": 3141,
+    "expected": 3400,
+    "op": "lte",
+    "rule_id": "payment_authorize_latency_lte_3400ms",
+    "rule_title": "Payment authorization took longer than 3400 ms",
+    "rule_version": 1,
+    "tolerance_minor": 0
+   }
+  },
+  {
+   "id": "E6",
+   "kind": "signal",
+   "text": "Payment authorization took longer than 3400 ms: shows 65.47, expected 34 (route /checkout, release demo-shop@local).",
+   "signal_id": "8fe3d329d1414a078746f1c39262303e",
+   "session_id": "s_7z5ux068xk0or7i43mtc",
+   "detector": "invariant_check",
+   "at": 1792267907331,
+   "data": {
+    "detector": "invariant_check",
+    "selector": null,
+    "route": "/checkout",
+    "detector_version": "1.0.0",
+    "release": "demo-shop@local",
+    "actual": 6547,
+    "delta": 3147,
+    "expected": 3400,
+    "op": "lte",
+    "rule_id": "payment_authorize_latency_lte_3400ms",
+    "rule_title": "Payment authorization took longer than 3400 ms",
+    "rule_version": 1,
+    "tolerance_minor": 0
+   }
+  },
+  {
+   "id": "E7",
+   "kind": "release",
+   "text": "Signals by release: demo-shop@local (8). The issue first appeared right after this release went out.",
+   "data": {
+    "releases": 1,
+    "regression": true,
+    "release_1": "demo-shop@local:8"
+   }
+  },
+  {
+   "id": "E8",
+   "kind": "impact",
+   "text": "Synthetic demo data. 7 of 8 affected sessions with a cart abandoned (88%) versus 15% of baseline sessions (route baseline); average cart ₹16,180.63; estimated revenue at risk ₹94,087.37.",
+   "data": {
+    "status": "ok",
+    "affected_with_cart": 8,
+    "abandonment_affected": 0.875,
+    "abandonment_baseline": 0.14815,
+    "avg_cart_value_minor": 1618063,
+    "revenue_at_risk_minor": 9408737,
+    "currency": "INR"
+   }
+  }
+ ],
+ "base_tier": "P1",
+ "base_rule_ids": [
+  "pricing_error",
+  "browse_friction",
+  "release_regression"
+ ],
+ "revenue": {
+  "currency": "INR",
+  "affected_with_cart": 12,
+  "affected_decided": 12,
+  "affected_abandoned": 9,
+  "abandonment_affected": 0.75,
+  "baseline_decided": 54,
+  "baseline_abandoned": 8,
+  "abandonment_baseline": 0.14815,
+  "baseline_scope": "route",
+  "avg_cart_value_minor": 1503500,
+  "pending": 0,
+  "revenue_at_risk_minor": 10858611,
+  "status": "ok",
+  "note": null
+ },
+ "affected_sessions": 12,
+ "expect": {
+  "cause": [
+   [
+    "payment",
+    "authoriz"
+   ]
+  ],
+  "categories": [
+   "checkout_blocker",
+   "pricing_error",
+   "broken_control",
+   "error_spike",
+   "other"
+  ],
+  "where": [
+   "payment",
+   "authoriz",
+   "bank",
+   "gateway",
+   "latency",
+   "timeout"
+  ]
+ }
+}

@@ -1,0 +1,214 @@
+{
+ "v": 1,
+ "id": "cart_total",
+ "bug": "cart_total",
+ "evidence": [
+  {
+   "id": "E1",
+   "kind": "issue",
+   "text": "Data rule issue \"Cart total doesn't match its line items\" on /cart (anchor cart_total_matches_lines): 17 signals across 17 sessions; symptoms invariant_check x17; first seen 2026-10-17T20:06:18.387Z, last seen 2026-10-17T20:12:47.216Z.",
+   "data": {
+    "kind": "invariant",
+    "route": "/cart",
+    "anchor": "cart_total_matches_lines",
+    "signals": 17,
+    "sessions": 17,
+    "symptom_invariant_check": 17
+   }
+  },
+  {
+   "id": "E2",
+   "kind": "signal",
+   "text": "Cart total doesn't match its line items: shows ₹15,295.50, expected ₹23,661.00 (route /cart, release demo-shop@local).",
+   "signal_id": "9faf2d243a31cb26842b2c4ef7b1ba94",
+   "session_id": "s_we33twx12oq6dxcpmley",
+   "detector": "invariant_check",
+   "at": 1792267967216,
+   "data": {
+    "detector": "invariant_check",
+    "selector": null,
+    "route": "/cart",
+    "detector_version": "1.0.0",
+    "release": "demo-shop@local",
+    "actual": 1529550,
+    "currency": "INR",
+    "delta": -836550,
+    "expected": 2366100,
+    "op": "eq",
+    "rule_id": "cart_total_matches_lines",
+    "rule_title": "Cart total doesn't match its line items",
+    "rule_version": 1,
+    "tolerance_minor": 1
+   }
+  },
+  {
+   "id": "E3",
+   "kind": "signal",
+   "text": "Cart total doesn't match its line items: shows ₹10,345.50, expected ₹20,691.00 (route /cart, release demo-shop@local).",
+   "signal_id": "e038e7dead0e2846baf3edf04598647d",
+   "session_id": "s_rnad3bpflb4acqqx223p",
+   "detector": "invariant_check",
+   "at": 1792267965475,
+   "data": {
+    "detector": "invariant_check",
+    "selector": null,
+    "route": "/cart",
+    "detector_version": "1.0.0",
+    "release": "demo-shop@local",
+    "actual": 1034550,
+    "currency": "INR",
+    "delta": -1034550,
+    "expected": 2069100,
+    "op": "eq",
+    "rule_id": "cart_total_matches_lines",
+    "rule_title": "Cart total doesn't match its line items",
+    "rule_version": 1,
+    "tolerance_minor": 1
+   }
+  },
+  {
+   "id": "E4",
+   "kind": "signal",
+   "text": "Cart total doesn't match its line items: shows ₹8,365.50, expected ₹18,081.00 (route /cart, release demo-shop@local).",
+   "signal_id": "36e91b1603a93ec7597d0fb04ba780b0",
+   "session_id": "s_77428quccyfec3gculyd",
+   "detector": "invariant_check",
+   "at": 1792267933863,
+   "data": {
+    "detector": "invariant_check",
+    "selector": null,
+    "route": "/cart",
+    "detector_version": "1.0.0",
+    "release": "demo-shop@local",
+    "actual": 836550,
+    "currency": "INR",
+    "delta": -971550,
+    "expected": 1808100,
+    "op": "eq",
+    "rule_id": "cart_total_matches_lines",
+    "rule_title": "Cart total doesn't match its line items",
+    "rule_version": 1,
+    "tolerance_minor": 1
+   }
+  },
+  {
+   "id": "E5",
+   "kind": "signal",
+   "text": "Cart total doesn't match its line items: shows ₹14,931.00, expected ₹22,396.50 (route /cart, release demo-shop@local).",
+   "signal_id": "d3c453c4965f9f11d4c01ce403d55d11",
+   "session_id": "s_onmlugb7c3phv632srta",
+   "detector": "invariant_check",
+   "at": 1792267928988,
+   "data": {
+    "detector": "invariant_check",
+    "selector": null,
+    "route": "/cart",
+    "detector_version": "1.0.0",
+    "release": "demo-shop@local",
+    "actual": 1493100,
+    "currency": "INR",
+    "delta": -746550,
+    "expected": 2239650,
+    "op": "eq",
+    "rule_id": "cart_total_matches_lines",
+    "rule_title": "Cart total doesn't match its line items",
+    "rule_version": 1,
+    "tolerance_minor": 1
+   }
+  },
+  {
+   "id": "E6",
+   "kind": "signal",
+   "text": "Cart total doesn't match its line items: shows ₹30,591.00, expected ₹40,936.50 (route /cart, release demo-shop@local).",
+   "signal_id": "6dac871f01a224b53e2198943e6d4241",
+   "session_id": "s_bcsabztxprmfvkyeg6ci",
+   "detector": "invariant_check",
+   "at": 1792267854098,
+   "data": {
+    "detector": "invariant_check",
+    "selector": null,
+    "route": "/cart",
+    "detector_version": "1.0.0",
+    "release": "demo-shop@local",
+    "actual": 3059100,
+    "currency": "INR",
+    "delta": -1034550,
+    "expected": 4093650,
+    "op": "eq",
+    "rule_id": "cart_total_matches_lines",
+    "rule_title": "Cart total doesn't match its line items",
+    "rule_version": 1,
+    "tolerance_minor": 1
+   }
+  },
+  {
+   "id": "E7",
+   "kind": "release",
+   "text": "Signals by release: demo-shop@local (17). The issue first appeared right after this release went out.",
+   "data": {
+    "releases": 1,
+    "regression": true,
+    "release_1": "demo-shop@local:17"
+   }
+  },
+  {
+   "id": "E8",
+   "kind": "impact",
+   "text": "Synthetic demo data. 6 of 13 affected sessions with a cart abandoned (46%) versus 44% of baseline sessions (route baseline); average cart ₹15,420.85; estimated revenue at risk ₹5,646.40.",
+   "data": {
+    "status": "ok",
+    "affected_with_cart": 17,
+    "abandonment_affected": 0.46154,
+    "abandonment_baseline": 0.44,
+    "avg_cart_value_minor": 1542085,
+    "revenue_at_risk_minor": 564640,
+    "currency": "INR"
+   }
+  }
+ ],
+ "base_tier": "P1",
+ "base_rule_ids": [
+  "pricing_error",
+  "browse_friction",
+  "release_regression"
+ ],
+ "revenue": {
+  "currency": "INR",
+  "affected_with_cart": 17,
+  "affected_decided": 17,
+  "affected_abandoned": 9,
+  "abandonment_affected": 0.5294099999999999,
+  "baseline_decided": 26,
+  "baseline_abandoned": 7,
+  "abandonment_baseline": 0.26923,
+  "baseline_scope": "route",
+  "avg_cart_value_minor": 1542085,
+  "pending": 0,
+  "revenue_at_risk_minor": 6820761,
+  "status": "ok",
+  "note": null
+ },
+ "affected_sessions": 17,
+ "expect": {
+  "cause": [
+   [
+    "total"
+   ],
+   [
+    "line",
+    "item",
+    "subtotal",
+    "sum"
+   ]
+  ],
+  "categories": [
+   "pricing_error"
+  ],
+  "where": [
+   "total",
+   "cart",
+   "calculation",
+   "discount"
+  ]
+ }
+}

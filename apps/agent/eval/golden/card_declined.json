@@ -1,0 +1,170 @@
+{
+ "v": 1,
+ "id": "card_declined",
+ "bug": "card_declined",
+ "evidence": [
+  {
+   "id": "E1",
+   "kind": "issue",
+   "text": "Element issue \"Unresponsive button#retry-card on /checkout\" on /checkout (anchor button#retry-card): 22 signals across 8 sessions; symptoms dead_click x22; first seen 2026-10-17T20:06:20.614Z, last seen 2026-10-17T20:09:59.304Z.",
+   "data": {
+    "kind": "element",
+    "route": "/checkout",
+    "anchor": "button#retry-card",
+    "signals": 22,
+    "sessions": 8,
+    "symptom_dead_click": 22
+   }
+  },
+  {
+   "id": "E2",
+   "kind": "signal",
+   "text": "Dead click on button#retry-card: no response within 800 ms (route /checkout, release demo-shop@local).",
+   "signal_id": "5097967d0f6187002455ba74a2e84b25",
+   "session_id": "s_w5q8u12hx76ud3vomz9z",
+   "detector": "dead_click",
+   "at": 1792267799304,
+   "data": {
+    "detector": "dead_click",
+    "selector": "button#retry-card",
+    "route": "/checkout",
+    "detector_version": "1.3.0",
+    "release": "demo-shop@local",
+    "window_ms": 800
+   }
+  },
+  {
+   "id": "E3",
+   "kind": "signal",
+   "text": "Dead click on button#retry-card: no response within 800 ms (route /checkout, release demo-shop@local).",
+   "signal_id": "3329120f6205f5b8cb4201969cadab3e",
+   "session_id": "s_f99h86l5hppy1e4uz4cm",
+   "detector": "dead_click",
+   "at": 1792267775152,
+   "data": {
+    "detector": "dead_click",
+    "selector": "button#retry-card",
+    "route": "/checkout",
+    "detector_version": "1.3.0",
+    "release": "demo-shop@local",
+    "window_ms": 800
+   }
+  },
+  {
+   "id": "E4",
+   "kind": "signal",
+   "text": "Dead click on button#retry-card: no response within 800 ms (route /checkout, release demo-shop@local).",
+   "signal_id": "9eac99296e93045aac3f7bdbd2e2160d",
+   "session_id": "s_g7q604uteaesi0p3hxxs",
+   "detector": "dead_click",
+   "at": 1792267705811,
+   "data": {
+    "detector": "dead_click",
+    "selector": "button#retry-card",
+    "route": "/checkout",
+    "detector_version": "1.3.0",
+    "release": "demo-shop@local",
+    "window_ms": 800
+   }
+  },
+  {
+   "id": "E5",
+   "kind": "signal",
+   "text": "Dead click on button#retry-card: no response within 800 ms (route /checkout, release demo-shop@local).",
+   "signal_id": "8ab388fb21ad5debcc0dbdfde521fef7",
+   "session_id": "s_qsvdh1cdyx4gpiftfjtb",
+   "detector": "dead_click",
+   "at": 1792267689454,
+   "data": {
+    "detector": "dead_click",
+    "selector": "button#retry-card",
+    "route": "/checkout",
+    "detector_version": "1.3.0",
+    "release": "demo-shop@local",
+    "window_ms": 800
+   }
+  },
+  {
+   "id": "E6",
+   "kind": "signal",
+   "text": "Dead click on button#retry-card: no response within 800 ms (route /checkout, release demo-shop@local).",
+   "signal_id": "36776497fc4481199526f2ee6fec1883",
+   "session_id": "s_bj9p6r6f9vso4lqxn65w",
+   "detector": "dead_click",
+   "at": 1792267682319,
+   "data": {
+    "detector": "dead_click",
+    "selector": "button#retry-card",
+    "route": "/checkout",
+    "detector_version": "1.3.0",
+    "release": "demo-shop@local",
+    "window_ms": 800
+   }
+  },
+  {
+   "id": "E7",
+   "kind": "release",
+   "text": "Signals by release: demo-shop@local (22). The issue first appeared right after this release went out.",
+   "data": {
+    "releases": 1,
+    "regression": true,
+    "release_1": "demo-shop@local:22"
+   }
+  },
+  {
+   "id": "E8",
+   "kind": "impact",
+   "text": "Synthetic demo data. 8 of 8 affected sessions with a cart abandoned (100%) versus 33% of baseline sessions (route baseline); average cart ₹18,091.25; estimated revenue at risk ₹96,486.67.",
+   "data": {
+    "status": "ok",
+    "affected_with_cart": 8,
+    "abandonment_affected": 1,
+    "abandonment_baseline": 0.33332999999999996,
+    "avg_cart_value_minor": 1809125,
+    "revenue_at_risk_minor": 9648667,
+    "currency": "INR"
+   }
+  }
+ ],
+ "base_tier": "P2",
+ "base_rule_ids": [
+  "checkout_friction",
+  "browse_friction",
+  "release_regression"
+ ],
+ "revenue": {
+  "currency": "INR",
+  "affected_with_cart": 12,
+  "affected_decided": 12,
+  "affected_abandoned": 12,
+  "abandonment_affected": 1,
+  "baseline_decided": 54,
+  "baseline_abandoned": 8,
+  "abandonment_baseline": 0.14815,
+  "baseline_scope": "route",
+  "avg_cart_value_minor": 1851625,
+  "pending": 0,
+  "revenue_at_risk_minor": 18927722,
+  "status": "ok",
+  "note": null
+ },
+ "affected_sessions": 12,
+ "expect": {
+  "cause": [
+   [
+    "retry",
+    "another card",
+    "card"
+   ]
+  ],
+  "categories": [
+   "broken_control",
+   "checkout_blocker"
+  ],
+  "where": [
+   "retry",
+   "card",
+   "payment"
+  ]
+ }
+}

@@ -1,0 +1,214 @@
+{
+ "v": 1,
+ "id": "shipping_shock",
+ "bug": "shipping_shock",
+ "evidence": [
+  {
+   "id": "E1",
+   "kind": "issue",
+   "text": "Data rule issue \"Delivery fee exceeds ₹0\" on /checkout (anchor delivery_fee_cannot_exceed_zero): 12 signals across 12 sessions; symptoms invariant_check x12; first seen 2026-10-17T20:05:49.111Z, last seen 2026-10-17T20:13:40.275Z.",
+   "data": {
+    "kind": "invariant",
+    "route": "/checkout",
+    "anchor": "delivery_fee_cannot_exceed_zero",
+    "signals": 12,
+    "sessions": 12,
+    "symptom_invariant_check": 12
+   }
+  },
+  {
+   "id": "E2",
+   "kind": "signal",
+   "text": "Delivery fee exceeds ₹0: shows ₹499.00, expected ₹0.00 (route /checkout, release demo-shop@local).",
+   "signal_id": "6181194591d8259b892cd5acf56378b6",
+   "session_id": "s_6qhqc0o0rc78zi1rypzr",
+   "detector": "invariant_check",
+   "at": 1792268020275,
+   "data": {
+    "detector": "invariant_check",
+    "selector": null,
+    "route": "/checkout",
+    "detector_version": "1.0.0",
+    "release": "demo-shop@local",
+    "actual": 49900,
+    "currency": "INR",
+    "delta": 49900,
+    "expected": 0,
+    "op": "lte",
+    "rule_id": "delivery_fee_cannot_exceed_zero",
+    "rule_title": "Delivery fee exceeds ₹0",
+    "rule_version": 1,
+    "tolerance_minor": 0
+   }
+  },
+  {
+   "id": "E3",
+   "kind": "signal",
+   "text": "Delivery fee exceeds ₹0: shows ₹499.00, expected ₹0.00 (route /checkout, release demo-shop@local).",
+   "signal_id": "4f00cd2f91d862d1ca37334067f74827",
+   "session_id": "s_10gcl4koc21l5vrloyem",
+   "detector": "invariant_check",
+   "at": 1792267955384,
+   "data": {
+    "detector": "invariant_check",
+    "selector": null,
+    "route": "/checkout",
+    "detector_version": "1.0.0",
+    "release": "demo-shop@local",
+    "actual": 49900,
+    "currency": "INR",
+    "delta": 49900,
+    "expected": 0,
+    "op": "lte",
+    "rule_id": "delivery_fee_cannot_exceed_zero",
+    "rule_title": "Delivery fee exceeds ₹0",
+    "rule_version": 1,
+    "tolerance_minor": 0
+   }
+  },
+  {
+   "id": "E4",
+   "kind": "signal",
+   "text": "Delivery fee exceeds ₹0: shows ₹499.00, expected ₹0.00 (route /checkout, release demo-shop@local).",
+   "signal_id": "cd72a8889d493d78a4f22d51a485df14",
+   "session_id": "s_lase9e9af15nbwsyk1gf",
+   "detector": "invariant_check",
+   "at": 1792267928475,
+   "data": {
+    "detector": "invariant_check",
+    "selector": null,
+    "route": "/checkout",
+    "detector_version": "1.0.0",
+    "release": "demo-shop@local",
+    "actual": 49900,
+    "currency": "INR",
+    "delta": 49900,
+    "expected": 0,
+    "op": "lte",
+    "rule_id": "delivery_fee_cannot_exceed_zero",
+    "rule_title": "Delivery fee exceeds ₹0",
+    "rule_version": 1,
+    "tolerance_minor": 0
+   }
+  },
+  {
+   "id": "E5",
+   "kind": "signal",
+   "text": "Delivery fee exceeds ₹0: shows ₹499.00, expected ₹0.00 (route /checkout, release demo-shop@local).",
+   "signal_id": "4a63d8e8777c33d89010614ff5ed00eb",
+   "session_id": "s_ozphoo8vj7ey9eghgghz",
+   "detector": "invariant_check",
+   "at": 1792267888750,
+   "data": {
+    "detector": "invariant_check",
+    "selector": null,
+    "route": "/checkout",
+    "detector_version": "1.0.0",
+    "release": "demo-shop@local",
+    "actual": 49900,
+    "currency": "INR",
+    "delta": 49900,
+    "expected": 0,
+    "op": "lte",
+    "rule_id": "delivery_fee_cannot_exceed_zero",
+    "rule_title": "Delivery fee exceeds ₹0",
+    "rule_version": 1,
+    "tolerance_minor": 0
+   }
+  },
+  {
+   "id": "E6",
+   "kind": "signal",
+   "text": "Delivery fee exceeds ₹0: shows ₹499.00, expected ₹0.00 (route /checkout, release demo-shop@local).",
+   "signal_id": "2a5957c07a1431eacdc22cd977478d60",
+   "session_id": "s_aocgr197mis0m4gyn1bq",
+   "detector": "invariant_check",
+   "at": 1792267727056,
+   "data": {
+    "detector": "invariant_check",
+    "selector": null,
+    "route": "/checkout",
+    "detector_version": "1.0.0",
+    "release": "demo-shop@local",
+    "actual": 49900,
+    "currency": "INR",
+    "delta": 49900,
+    "expected": 0,
+    "op": "lte",
+    "rule_id": "delivery_fee_cannot_exceed_zero",
+    "rule_title": "Delivery fee exceeds ₹0",
+    "rule_version": 1,
+    "tolerance_minor": 0
+   }
+  },
+  {
+   "id": "E7",
+   "kind": "release",
+   "text": "Signals by release: demo-shop@local (12). The issue first appeared right after this release went out.",
+   "data": {
+    "releases": 1,
+    "regression": true,
+    "release_1": "demo-shop@local:12"
+   }
+  },
+  {
+   "id": "E8",
+   "kind": "impact",
+   "text": "Synthetic demo data. 10 of 12 affected sessions with a cart abandoned (83%) versus 15% of baseline sessions (route baseline); average cart ₹14,342.92; estimated revenue at risk ₹1,17,930.68.",
+   "data": {
+    "status": "ok",
+    "affected_with_cart": 12,
+    "abandonment_affected": 0.83333,
+    "abandonment_baseline": 0.14815,
+    "avg_cart_value_minor": 1434292,
+    "revenue_at_risk_minor": 11793068,
+    "currency": "INR"
+   }
+  }
+ ],
+ "base_tier": "P1",
+ "base_rule_ids": [
+  "pricing_error",
+  "browse_friction",
+  "release_regression"
+ ],
+ "revenue": {
+  "currency": "INR",
+  "affected_with_cart": 12,
+  "affected_decided": 12,
+  "affected_abandoned": 10,
+  "abandonment_affected": 0.83333,
+  "baseline_decided": 54,
+  "baseline_abandoned": 8,
+  "abandonment_baseline": 0.14815,
+  "baseline_scope": "route",
+  "avg_cart_value_minor": 1434292,
+  "pending": 0,
+  "revenue_at_risk_minor": 11793068,
+  "status": "ok",
+  "note": null
+ },
+ "affected_sessions": 12,
+ "expect": {
+  "cause": [
+   [
+    "fee",
+    "delivery",
+    "shipping"
+   ]
+  ],
+  "categories": [
+   "checkout_blocker",
+   "pricing_error",
+   "broken_control",
+   "error_spike",
+   "other"
+  ],
+  "where": [
+   "fee",
+   "delivery",
+   "shipping",
+   "checkout"
+  ]
+ }
+}

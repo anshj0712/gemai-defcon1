@@ -1,0 +1,199 @@
+{
+ "v": 1,
+ "id": "support_down",
+ "bug": "support_down",
+ "evidence": [
+  {
+   "id": "E1",
+   "kind": "issue",
+   "text": "Element issue \"Failing button#chat-help on /checkout\" on /checkout (anchor button#chat-help): 14 signals across 10 sessions; symptoms error_correlation x14; first seen 2026-10-17T20:06:32.376Z, last seen 2026-10-17T20:12:37.572Z.",
+   "data": {
+    "kind": "element",
+    "route": "/checkout",
+    "anchor": "button#chat-help",
+    "signals": 14,
+    "sessions": 10,
+    "symptom_error_correlation": 14
+   }
+  },
+  {
+   "id": "E2",
+   "kind": "signal",
+   "text": "HTTP 503 POST /api/support/session right after pressing button#chat-help (route /checkout, release demo-shop@local).",
+   "signal_id": "3ac7f8ed3ae8e4eef051239e5c6f4a1f",
+   "session_id": "s_n5sy363cikyn303fi2ik",
+   "detector": "error_correlation",
+   "at": 1792267957572,
+   "data": {
+    "detector": "error_correlation",
+    "selector": "button#chat-help",
+    "route": "/checkout",
+    "detector_version": "1.1.0",
+    "release": "demo-shop@local",
+    "error_kind": "http",
+    "error_signature": "HTTP 503 POST /api/support/session",
+    "lead_ms": 235,
+    "standalone": true,
+    "status": 503
+   }
+  },
+  {
+   "id": "E3",
+   "kind": "signal",
+   "text": "HTTP 503 POST /api/support/session right after pressing button#chat-help (route /checkout, release demo-shop@local).",
+   "signal_id": "8f99ec2e1bb1ec65a87ffda31fc04020",
+   "session_id": "s_fjhgatu4i31l13gr87zk",
+   "detector": "error_correlation",
+   "at": 1792267953520,
+   "data": {
+    "detector": "error_correlation",
+    "selector": "button#chat-help",
+    "route": "/checkout",
+    "detector_version": "1.1.0",
+    "release": "demo-shop@local",
+    "error_kind": "http",
+    "error_signature": "HTTP 503 POST /api/support/session",
+    "lead_ms": 254,
+    "standalone": true,
+    "status": 503
+   }
+  },
+  {
+   "id": "E4",
+   "kind": "signal",
+   "text": "HTTP 503 POST /api/support/session right after pressing button#chat-help (route /checkout, release demo-shop@local).",
+   "signal_id": "010dce17f9f513480c8426a678428a20",
+   "session_id": "s_djl0guaipryhph3rkvle",
+   "detector": "error_correlation",
+   "at": 1792267935251,
+   "data": {
+    "detector": "error_correlation",
+    "selector": "button#chat-help",
+    "route": "/checkout",
+    "detector_version": "1.1.0",
+    "release": "demo-shop@local",
+    "error_kind": "http",
+    "error_signature": "HTTP 503 POST /api/support/session",
+    "lead_ms": 247,
+    "standalone": true,
+    "status": 503
+   }
+  },
+  {
+   "id": "E5",
+   "kind": "signal",
+   "text": "HTTP 503 POST /api/support/session right after pressing button#chat-help (route /checkout, release demo-shop@local).",
+   "signal_id": "ffb87d1de1cf097644c6838796f21481",
+   "session_id": "s_e0p6kgormjbo899xsqd3",
+   "detector": "error_correlation",
+   "at": 1792267755086,
+   "data": {
+    "detector": "error_correlation",
+    "selector": "button#chat-help",
+    "route": "/checkout",
+    "detector_version": "1.1.0",
+    "release": "demo-shop@local",
+    "error_kind": "http",
+    "error_signature": "HTTP 503 POST /api/support/session",
+    "lead_ms": 245,
+    "standalone": true,
+    "status": 503
+   }
+  },
+  {
+   "id": "E6",
+   "kind": "signal",
+   "text": "HTTP 503 POST /api/support/session right after pressing button#chat-help (route /checkout, release demo-shop@local).",
+   "signal_id": "e5a1eb6a657b41c6fed0c4af511b4afa",
+   "session_id": "s_ex8b2kvgj3z0i0gmfncl",
+   "detector": "error_correlation",
+   "at": 1792267751230,
+   "data": {
+    "detector": "error_correlation",
+    "selector": "button#chat-help",
+    "route": "/checkout",
+    "detector_version": "1.1.0",
+    "release": "demo-shop@local",
+    "error_kind": "http",
+    "error_signature": "HTTP 503 POST /api/support/session",
+    "lead_ms": 244,
+    "standalone": true,
+    "status": 503
+   }
+  },
+  {
+   "id": "E7",
+   "kind": "error",
+   "text": "Error \"HTTP 503 POST /api/support/session\" was seen within 2 s before a symptom, 14 times.",
+   "data": {
+    "signature": "HTTP 503 POST /api/support/session",
+    "count": 14
+   }
+  },
+  {
+   "id": "E8",
+   "kind": "release",
+   "text": "Signals by release: demo-shop@local (14). The issue first appeared right after this release went out.",
+   "data": {
+    "releases": 1,
+    "regression": true,
+    "release_1": "demo-shop@local:14"
+   }
+  },
+  {
+   "id": "E9",
+   "kind": "impact",
+   "text": "Synthetic demo data. 8 of 9 affected sessions with a cart abandoned (89%) versus 26% of baseline sessions (route baseline); average cart ₹15,192.50; estimated revenue at risk ₹95,753.50.",
+   "data": {
+    "status": "ok",
+    "affected_with_cart": 10,
+    "abandonment_affected": 0.88889,
+    "abandonment_baseline": 0.25862,
+    "avg_cart_value_minor": 1519250,
+    "revenue_at_risk_minor": 9575350,
+    "currency": "INR"
+   }
+  }
+ ],
+ "base_tier": "P0",
+ "base_rule_ids": [
+  "checkout_blocker",
+  "checkout_friction",
+  "browse_friction",
+  "release_regression"
+ ],
+ "revenue": {
+  "currency": "INR",
+  "affected_with_cart": 12,
+  "affected_decided": 12,
+  "affected_abandoned": 11,
+  "abandonment_affected": 0.91667,
+  "baseline_decided": 54,
+  "baseline_abandoned": 8,
+  "abandonment_baseline": 0.14815,
+  "baseline_scope": "route",
+  "avg_cart_value_minor": 1583417,
+  "pending": 0,
+  "revenue_at_risk_minor": 14602623,
+  "status": "ok",
+  "note": null
+ },
+ "affected_sessions": 12,
+ "expect": {
+  "cause": [
+   [
+    "chat",
+    "support"
+   ]
+  ],
+  "categories": [
+   "broken_control",
+   "error_spike",
+   "checkout_blocker"
+  ],
+  "where": [
+   "chat",
+   "support"
+  ]
+ }
+}

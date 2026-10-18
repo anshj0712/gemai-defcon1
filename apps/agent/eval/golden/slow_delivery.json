@@ -1,0 +1,209 @@
+{
+ "v": 1,
+ "id": "slow_delivery",
+ "bug": "slow_delivery",
+ "evidence": [
+  {
+   "id": "E1",
+   "kind": "issue",
+   "text": "Data rule issue \"Delivery ETA exceeds 5\" on /product/:id (anchor delivery_eta_max_5): 12 signals across 12 sessions; symptoms invariant_check x12; first seen 2026-10-17T20:07:00.731Z, last seen 2026-10-17T20:14:15.106Z.",
+   "data": {
+    "kind": "invariant",
+    "route": "/product/:id",
+    "anchor": "delivery_eta_max_5",
+    "signals": 12,
+    "sessions": 12,
+    "symptom_invariant_check": 12
+   }
+  },
+  {
+   "id": "E2",
+   "kind": "signal",
+   "text": "Delivery ETA exceeds 5: shows 0.09, expected 0.05 (route /product/:id, release demo-shop@local).",
+   "signal_id": "be5283ad54e47cae5370cae8ebbb6aeb",
+   "session_id": "s_mpw3fqln3b954jg7pvr6",
+   "detector": "invariant_check",
+   "at": 1792268055106,
+   "data": {
+    "detector": "invariant_check",
+    "selector": null,
+    "route": "/product/:id",
+    "detector_version": "1.0.0",
+    "release": "demo-shop@local",
+    "actual": 9,
+    "delta": 4,
+    "expected": 5,
+    "op": "lte",
+    "rule_id": "delivery_eta_max_5",
+    "rule_title": "Delivery ETA exceeds 5",
+    "rule_version": 1,
+    "tolerance_minor": 0
+   }
+  },
+  {
+   "id": "E3",
+   "kind": "signal",
+   "text": "Delivery ETA exceeds 5: shows 0.09, expected 0.05 (route /product/:id, release demo-shop@local).",
+   "signal_id": "98c951b48e5a4f92a959ca3ce7eb4bfe",
+   "session_id": "s_v8slm3dzfny0btnon8hc",
+   "detector": "invariant_check",
+   "at": 1792268018498,
+   "data": {
+    "detector": "invariant_check",
+    "selector": null,
+    "route": "/product/:id",
+    "detector_version": "1.0.0",
+    "release": "demo-shop@local",
+    "actual": 9,
+    "delta": 4,
+    "expected": 5,
+    "op": "lte",
+    "rule_id": "delivery_eta_max_5",
+    "rule_title": "Delivery ETA exceeds 5",
+    "rule_version": 1,
+    "tolerance_minor": 0
+   }
+  },
+  {
+   "id": "E4",
+   "kind": "signal",
+   "text": "Delivery ETA exceeds 5: shows 0.09, expected 0.05 (route /product/:id, release demo-shop@local).",
+   "signal_id": "533e89cb3eff466f3462d0c9d8497304",
+   "session_id": "s_01ku4e7s8lr53gz828jx",
+   "detector": "invariant_check",
+   "at": 1792267991265,
+   "data": {
+    "detector": "invariant_check",
+    "selector": null,
+    "route": "/product/:id",
+    "detector_version": "1.0.0",
+    "release": "demo-shop@local",
+    "actual": 9,
+    "delta": 4,
+    "expected": 5,
+    "op": "lte",
+    "rule_id": "delivery_eta_max_5",
+    "rule_title": "Delivery ETA exceeds 5",
+    "rule_version": 1,
+    "tolerance_minor": 0
+   }
+  },
+  {
+   "id": "E5",
+   "kind": "signal",
+   "text": "Delivery ETA exceeds 5: shows 0.09, expected 0.05 (route /product/:id, release demo-shop@local).",
+   "signal_id": "ae22645c278c692eb153a85014239415",
+   "session_id": "s_c20fcgm427i5taqrvnq6",
+   "detector": "invariant_check",
+   "at": 1792267912445,
+   "data": {
+    "detector": "invariant_check",
+    "selector": null,
+    "route": "/product/:id",
+    "detector_version": "1.0.0",
+    "release": "demo-shop@local",
+    "actual": 9,
+    "delta": 4,
+    "expected": 5,
+    "op": "lte",
+    "rule_id": "delivery_eta_max_5",
+    "rule_title": "Delivery ETA exceeds 5",
+    "rule_version": 1,
+    "tolerance_minor": 0
+   }
+  },
+  {
+   "id": "E6",
+   "kind": "signal",
+   "text": "Delivery ETA exceeds 5: shows 0.09, expected 0.05 (route /product/:id, release demo-shop@local).",
+   "signal_id": "1854ea02e0d61a043c07a268d04ba2d0",
+   "session_id": "s_k3nivgkiipsc7d4k4w5y",
+   "detector": "invariant_check",
+   "at": 1792267911984,
+   "data": {
+    "detector": "invariant_check",
+    "selector": null,
+    "route": "/product/:id",
+    "detector_version": "1.0.0",
+    "release": "demo-shop@local",
+    "actual": 9,
+    "delta": 4,
+    "expected": 5,
+    "op": "lte",
+    "rule_id": "delivery_eta_max_5",
+    "rule_title": "Delivery ETA exceeds 5",
+    "rule_version": 1,
+    "tolerance_minor": 0
+   }
+  },
+  {
+   "id": "E7",
+   "kind": "release",
+   "text": "Signals by release: demo-shop@local (12). The issue first appeared right after this release went out.",
+   "data": {
+    "releases": 1,
+    "regression": true,
+    "release_1": "demo-shop@local:12"
+   }
+  },
+  {
+   "id": "E8",
+   "kind": "impact",
+   "text": "Synthetic demo data. 11 of 12 affected sessions with a cart abandoned (92%) versus 28% of baseline sessions (route baseline); average cart ₹18,458.75; estimated revenue at risk ₹1,41,024.85.",
+   "data": {
+    "status": "ok",
+    "affected_with_cart": 12,
+    "abandonment_affected": 0.91667,
+    "abandonment_baseline": 0.28,
+    "avg_cart_value_minor": 1845875,
+    "revenue_at_risk_minor": 14102485,
+    "currency": "INR"
+   }
+  }
+ ],
+ "base_tier": "P1",
+ "base_rule_ids": [
+  "pricing_error",
+  "browse_friction",
+  "release_regression"
+ ],
+ "revenue": {
+  "currency": "INR",
+  "affected_with_cart": 12,
+  "affected_decided": 12,
+  "affected_abandoned": 11,
+  "abandonment_affected": 0.91667,
+  "baseline_decided": 25,
+  "baseline_abandoned": 7,
+  "abandonment_baseline": 0.28,
+  "baseline_scope": "route",
+  "avg_cart_value_minor": 1845875,
+  "pending": 0,
+  "revenue_at_risk_minor": 14102485,
+  "status": "ok",
+  "note": null
+ },
+ "affected_sessions": 12,
+ "expect": {
+  "cause": [
+   [
+    "delivery",
+    "eta",
+    "estimate"
+   ]
+  ],
+  "categories": [
+   "checkout_blocker",
+   "pricing_error",
+   "broken_control",
+   "error_spike",
+   "other"
+  ],
+  "where": [
+   "delivery",
+   "eta",
+   "estimate",
+   "product"
+  ]
+ }
+}

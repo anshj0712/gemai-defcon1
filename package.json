@@ -32,6 +32,8 @@
     "sim:rescan": "tsx --conditions=source sim/src/rescan-check.ts",
     "sim:watch": "tsx --conditions=source sim/src/watch-check.ts",
     "sim:suggest": "tsx --conditions=source sim/src/suggest-check.ts",
+    "eval:capture": "tsx --conditions=source apps/agent/src/eval/capture.ts",
+    "eval:agents": "tsx --conditions=source apps/agent/src/eval/run.ts",
     "deploy:agent": "tsx --conditions=source scripts/deploy.ts agent",
     "deploy:api": "tsx --conditions=source scripts/deploy.ts api",
     "deploy:shop": "tsx --conditions=source scripts/deploy.ts shop",
