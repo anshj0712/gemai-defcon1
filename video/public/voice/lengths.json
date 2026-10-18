@@ -1,0 +1,23 @@
+{
+  "intro": 5.4,
+  "act1": 2.3,
+  "arrive": 6.8,
+  "browse": 4.3,
+  "bag": 6.4,
+  "checkout": 8.4,
+  "leave": 6.8,
+  "act2": 2.4,
+  "agent": 9.9,
+  "dashboard": 9.3,
+  "issue": 12.8,
+  "replay": 9.9,
+  "rules": 4.8,
+  "rescan": 7.6,
+  "history": 6.7,
+  "act3": 2.8,
+  "fix": 7,
+  "retained": 7.8,
+  "arch": 14,
+  "results": 19.9,
+  "cta": 6.1
+}

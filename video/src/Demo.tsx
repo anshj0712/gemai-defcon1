@@ -1,5 +1,6 @@
 import React from 'react';
-import { AbsoluteFill, Sequence } from 'remotion';
+import { Audio } from '@remotion/media';
+import { AbsoluteFill, Sequence, staticFile } from 'remotion';
 import arriveClip from '../public/clips/arrive.json';
 import bagClip from '../public/clips/bag.json';
 import browseClip from '../public/clips/browse.json';
@@ -10,6 +11,7 @@ import historyClip from '../public/clips/history.json';
 import issueClip from '../public/clips/issue.json';
 import replayClip from '../public/clips/replay.json';
 import retainedClip from '../public/clips/retained.json';
+import lengths from '../public/voice/lengths.json';
 import rulesClip from '../public/clips/rules.json';
 import { Beat, ClipMeta, ScreenScene } from './Footage';
 import { Arch } from './scenes/Arch';
@@ -31,10 +33,13 @@ function at(clip: ClipMeta, secs: number) {
 }
 
 /**
- * Seconds per scene. Ids are stable: addvoiceover.md maps one voice file per id. A screen scene must stay within its
- * recording at 0.7x (see the safe-length table in addvoiceover.md).
+ * Seconds per scene: the base length, or the voice line plus breathing room, whichever is longer. Ids are stable: one
+ * voice file per id in public/voice (scripts/voice.cjs). A screen scene must stay within its recording at 0.7x, so it is
+ * capped at MAX (see the safe-length table in addvoiceover.md).
  */
-const S = {
+const LEAD = 0.6;
+const TAIL = 0.6;
+const BASE = {
   intro: 7,
   act1: 4,
   arrive: 13,
@@ -57,6 +62,23 @@ const S = {
   results: 20.5,
   cta: 8,
 };
+const MAX: Partial<Record<keyof typeof BASE, number>> = {
+  arrive: 16.3,
+  browse: 13,
+  bag: 10,
+  checkout: 16.3,
+  dashboard: 12.8,
+  issue: 19.5,
+  replay: 11.3,
+  rules: 7.2,
+  history: 9.8,
+  fix: 10.6,
+  retained: 14.5,
+};
+const voice = lengths as Record<keyof typeof BASE, number>;
+const S = Object.fromEntries(
+  (Object.keys(BASE) as (keyof typeof BASE)[]).map((id) => [id, Math.min(MAX[id] ?? Infinity, Math.max(BASE[id], 0.5 + LEAD + voice[id] + TAIL))]),
+) as typeof BASE;
 
 const SHOPPER = '01 / 03';
 const MERCHANT = '02 / 03';
@@ -278,7 +300,7 @@ const SCENES: { id: keyof typeof S; el: React.ReactNode }[] = [
 const frames = (secs: number) => Math.round(secs * FPS);
 export const TOTAL_FRAMES = SCENES.reduce((n, s) => n + frames(S[s.id]), 0) - OVERLAP * (SCENES.length - 1);
 
-/** Silent cut: the voice-over is added later (addvoiceover.md). */
+/** The full cut: each scene plays its voice line after its fade-in. */
 export const Demo: React.FC = () => {
   let from = 0;
   return (
@@ -290,6 +312,9 @@ export const Demo: React.FC = () => {
         return (
           <Sequence key={s.id} from={start} durationInFrames={dur} name={s.id}>
             {i === 0 ? s.el : <FadeIn frames={OVERLAP}>{s.el}</FadeIn>}
+            <Sequence from={(i === 0 ? 0 : OVERLAP) + Math.round(LEAD * FPS)} name={`${s.id}-voice`}>
+              <Audio src={staticFile(`voice/${s.id}.mp3`)} />
+            </Sequence>
           </Sequence>
         );
       })}
