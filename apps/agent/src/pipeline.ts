@@ -307,7 +307,9 @@ async function reviewReport(
   log: Logger,
 ): Promise<FindingVerdict | undefined> {
   if (!deps.jury || !enr.triage) return undefined;
-  const key = juryKey(llmKeyValue, { models: deps.models, params: deps.jury });
+  const agentsOk = enr.runs.every((r) => r.ok);
+  const reviewed = sha(JSON.stringify([enr.runs.map((r) => `${r.agent}:${r.prompt_hash}:${r.ok}`), visualOk, tier, enr.triage.title]));
+  const key = juryKey(llmKeyValue, { models: deps.models, params: deps.jury }, reviewed);
   if (previous?.verdict && previous.verdict.key === key && previous.verdict.outcome !== 'unavailable') return previous.verdict;
   try {
     const verdict = await convene(
@@ -323,7 +325,7 @@ async function reviewReport(
           ranker: enr.ranker,
         },
         evidence: enr.evidence,
-        checks: { agents_ok: enr.runs.every((r) => r.ok), visual_ok: visualOk },
+        checks: { agents_ok: agentsOk, visual_ok: visualOk },
         key,
       },
     );

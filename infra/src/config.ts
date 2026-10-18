@@ -11,13 +11,13 @@ export interface InfraConfig {
   subscriptions: { eventsRaw: string; eventsRawDlq: string; signals: string; signalsDlq: string };
   retentionDays: number;
   artifactRepo: string;
-  services: { collector: string; processor: string; clusterer: string; agent: string };
-  serviceAccounts: { collector: string; processor: string; clusterer: string; agent: string; pubsubPush: string };
-  secrets: { siteKeys: string; geminiApiKey: string };
+  services: { collector: string; processor: string; clusterer: string; agent: string; api: string; shop: string };
+  serviceAccounts: { collector: string; processor: string; clusterer: string; agent: string; api: string; shop: string; pubsubPush: string };
+  secrets: { siteKeys: string; geminiApiKey: string; dashboardPassword: string };
   apis: string[];
 }
 
-export const SERVICE_NAMES = ['collector', 'processor', 'clusterer', 'agent'] as const;
+export const SERVICE_NAMES = ['collector', 'processor', 'clusterer', 'agent', 'api', 'shop'] as const;
 export type ServiceName = (typeof SERVICE_NAMES)[number];
 
 export function loadInfraConfig(env: NodeJS.ProcessEnv = process.env): InfraConfig {
@@ -45,9 +45,9 @@ export function loadInfraConfig(env: NodeJS.ProcessEnv = process.env): InfraConf
     },
     retentionDays: Number.isFinite(retention) && retention > 0 ? retention : 30,
     artifactRepo: 'cp',
-    services: { collector: 'cp-collector', processor: 'cp-processor', clusterer: 'cp-clusterer', agent: 'cp-agent' },
-    serviceAccounts: { collector: sa('cp-collector'), processor: sa('cp-processor'), clusterer: sa('cp-clusterer'), agent: sa('cp-agent'), pubsubPush: sa('cp-pubsub-push') },
-    secrets: { siteKeys: 'site-keys', geminiApiKey: 'gemini-api-key' },
+    services: { collector: 'cp-collector', processor: 'cp-processor', clusterer: 'cp-clusterer', agent: 'cp-agent', api: 'cp-api', shop: 'cp-shop' },
+    serviceAccounts: { collector: sa('cp-collector'), processor: sa('cp-processor'), clusterer: sa('cp-clusterer'), agent: sa('cp-agent'), api: sa('cp-api'), shop: sa('cp-shop'), pubsubPush: sa('cp-pubsub-push') },
+    secrets: { siteKeys: 'site-keys', geminiApiKey: 'gemini-api-key', dashboardPassword: 'dashboard-password' },
     apis: [
       'run.googleapis.com',
       'pubsub.googleapis.com',

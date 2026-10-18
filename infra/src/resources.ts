@@ -83,7 +83,7 @@ export function viewSpecs(cfg: InfraConfig): { name: string; query: string }[] {
 }
 
 /** Least-privilege bindings on individual resources (gcloud arguments after the resource name). */
-export function resourceBindings(cfg: InfraConfig, pubsubAgent: string, opts: { geminiSecret?: boolean } = {}) {
+export function resourceBindings(cfg: InfraConfig, pubsubAgent: string, opts: { geminiSecret?: boolean; dashboardSecret?: boolean } = {}) {
   const sa = (email: string) => `serviceAccount:${email}`;
   const agent = sa(cfg.serviceAccounts.agent);
   return [
@@ -106,6 +106,9 @@ export function resourceBindings(cfg: InfraConfig, pubsubAgent: string, opts: { 
     // The agent reads raw chunks to render the flagged moment (and to dry-run and re-scan rules) and writes the screenshot next to them.
     { kind: 'bucket', resource: `gs://${cfg.bucket}`, member: agent, role: 'roles/storage.objectViewer' },
     { kind: 'bucket', resource: `gs://${cfg.bucket}`, member: agent, role: 'roles/storage.objectCreator' },
+    // The API reads raw chunks to serve replays (read only).
+    { kind: 'bucket', resource: `gs://${cfg.bucket}`, member: sa(cfg.serviceAccounts.api), role: 'roles/storage.objectViewer' },
+    ...(opts.dashboardSecret ? [{ kind: 'secret' as const, resource: cfg.secrets.dashboardPassword, member: sa(cfg.serviceAccounts.api), role: 'roles/secretmanager.secretAccessor' as const }] : []),
     // Only once the Gemini key exists (it is optional until Phase 3 runs against Gemini).
     ...(opts.geminiSecret ? [{ kind: 'secret' as const, resource: cfg.secrets.geminiApiKey, member: agent, role: 'roles/secretmanager.secretAccessor' as const }] : []),
   ] as const;
@@ -123,6 +126,11 @@ export function projectBindings(cfg: InfraConfig) {
     { member: sa(cfg.serviceAccounts.agent), role: 'roles/logging.logWriter' },
     { member: sa(cfg.serviceAccounts.agent), role: 'roles/bigquery.jobUser' },
     { member: sa(cfg.serviceAccounts.agent), role: 'roles/datastore.user' },
+    { member: sa(cfg.serviceAccounts.api), role: 'roles/logging.logWriter' },
+    { member: sa(cfg.serviceAccounts.api), role: 'roles/bigquery.jobUser' },
+    { member: sa(cfg.serviceAccounts.api), role: 'roles/datastore.user' },
+    // The demo shop holds no data: it only writes its own logs.
+    { member: sa(cfg.serviceAccounts.shop), role: 'roles/logging.logWriter' },
   ];
 }
 

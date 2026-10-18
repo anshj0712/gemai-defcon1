@@ -89,6 +89,8 @@ function serviceAccounts(): void {
     [cfg.serviceAccounts.processor, 'Churn Preventer processor'],
     [cfg.serviceAccounts.clusterer, 'Churn Preventer clusterer'],
     [cfg.serviceAccounts.agent, 'Churn Preventer agent service'],
+    [cfg.serviceAccounts.api, 'Churn Preventer API and dashboard'],
+    [cfg.serviceAccounts.shop, 'Churn Preventer synthetic demo shop'],
     [cfg.serviceAccounts.pubsubPush, 'Pub/Sub push to the processor and clusterer'],
   ];
   for (const [email, display] of accounts) {
@@ -246,13 +248,19 @@ async function bigquery(): Promise<void> {
   }
 
   // The processor writes signals; the agent reads outcomes and signals and writes findings and rules.
-  for (const email of [cfg.serviceAccounts.processor, cfg.serviceAccounts.agent]) {
+  // The API only reads (findings, signals, history for the dashboard).
+  const grants: [string, 'WRITER' | 'READER'][] = [
+    [cfg.serviceAccounts.processor, 'WRITER'],
+    [cfg.serviceAccounts.agent, 'WRITER'],
+    [cfg.serviceAccounts.api, 'READER'],
+  ];
+  for (const [email, role] of grants) {
     const [dsMeta] = await ds.getMetadata();
     const access: { role?: string; userByEmail?: string }[] = dsMeta.access ?? [];
-    if (access.some((a) => a.role === 'WRITER' && a.userByEmail === email)) skip(`${email.split('@')[0]} can write to ${cfg.dataset}`);
+    if (access.some((a) => a.role === role && a.userByEmail === email)) skip(`${email.split('@')[0]} has ${role} on ${cfg.dataset}`);
     else {
-      await ds.setMetadata({ access: [...access, { role: 'WRITER', userByEmail: email }] });
-      ok(`WRITER on ${cfg.dataset} for ${email}`);
+      await ds.setMetadata({ access: [...access, { role, userByEmail: email }] });
+      ok(`${role} on ${cfg.dataset} for ${email}`);
     }
   }
 }
@@ -282,6 +290,9 @@ function secrets(): void {
   const gemini = process.env.GOOGLE_API_KEY;
   if (gemini) upsertSecret(cfg.secrets.geminiApiKey, gemini);
   else skip(`${cfg.secrets.geminiApiKey}: GOOGLE_API_KEY not set (the agent falls back to its offline stand-in)`);
+  const password = process.env.DASHBOARD_PASSWORD;
+  if (password) upsertSecret(cfg.secrets.dashboardPassword, password);
+  else skip(`${cfg.secrets.dashboardPassword}: DASHBOARD_PASSWORD not set (the API cannot be deployed without it)`);
 }
 
 function iam(projectNumber: string): void {
@@ -292,7 +303,8 @@ function iam(projectNumber: string): void {
   }
   const agent = `service-${projectNumber}@gcp-sa-pubsub.iam.gserviceaccount.com`;
   const geminiSecret = Boolean(process.env.GOOGLE_API_KEY) || exists(['secrets', 'describe', cfg.secrets.geminiApiKey]);
-  for (const b of resourceBindings(cfg, agent, { geminiSecret })) {
+  const dashboardSecret = Boolean(process.env.DASHBOARD_PASSWORD) || exists(['secrets', 'describe', cfg.secrets.dashboardPassword]);
+  for (const b of resourceBindings(cfg, agent, { geminiSecret, dashboardSecret })) {
     gcloud([...bindingArgs(b), '--format=none']);
     ok(`${b.role} on ${b.resource} -> ${b.member.split(':')[1]}`);
   }
@@ -313,7 +325,7 @@ async function main(): Promise<void> {
   iam(projectNumber);
 
   step(dryRun ? 'Dry run complete' : 'Done');
-  out(`  Next: pnpm deploy:collector && pnpm deploy:processor && pnpm deploy:clusterer && pnpm deploy:agent`);
+  out(`  Next: pnpm deploy:collector && pnpm deploy:processor && pnpm deploy:clusterer && pnpm deploy:agent && pnpm deploy:api`);
   out(`  Or run locally against GCP: set CP_MODE=gcp, PROCESSOR_PULL=true and CLUSTERER_PULL=true in .env, then pnpm dev`);
   out(`  Logs: ${logsExplorerUrl(cfg.projectId, serviceLogFilter(cfg.projectId))}`);
 }

@@ -73,10 +73,14 @@ export interface JuryInput {
   key: string;
 }
 
-/** The key under which a verdict is reused: the finding's own key plus everything about the jury. */
-export function juryKey(llmKey: string, deps: Pick<JuryDeps, 'models' | 'params'>): string {
+/**
+ * The key under which a verdict is reused: the finding's own key, the exact report that was reviewed (which AI
+ * steps ran and answered, the screenshot check), and everything about the jury. The report part matters: a pass
+ * where one step failed must not leave its verdict behind once a later pass produces a good report.
+ */
+export function juryKey(llmKey: string, deps: Pick<JuryDeps, 'models' | 'params'>, report: string): string {
   return createHash('sha256')
-    .update(JSON.stringify([llmKey, JURY_PROMPT_VERSION, deps.params, deps.models.bulk.model, deps.models.offline]))
+    .update(JSON.stringify([llmKey, report, JURY_PROMPT_VERSION, deps.params, deps.models.bulk.model, deps.models.offline]))
     .digest('hex')
     .slice(0, 20);
 }

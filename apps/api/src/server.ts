@@ -5,6 +5,7 @@ import type { Logger } from '@cp/logger';
 import { loadReplay, SessionTooLongError, type BlobStore, type ReplayPayload, type StateStore, type WarehouseReader } from '@cp/platform';
 import { CHURN_REASONS, DEMO_BUGS, isDemoBug, type DemoBugStore } from './demo-bugs.js';
 import { registerDemoStore, type DemoStoreOptions } from './demo-store.js';
+import { registerPasswordGate, registerStatic, type GateOptions } from './gate.js';
 import { registerHistoryRoute } from './history.js';
 import { DEFAULT_AGENT_URL, registerRuleRoutes, type RuleRouteDeps } from './rules.js';
 import { compareFindings, SAFE_ID, TENANT_ID, type Finding, type FindingSummary } from '@cp/schema';
@@ -24,6 +25,8 @@ export interface ApiDeps {
   demoStore?: DemoStoreOptions;
   /** Where rule actions are forwarded (the agent service); the local agent when absent. */
   rules?: Omit<RuleRouteDeps, 'state' | 'defaultTenant'>;
+  /** Deployed: a shared password for everything, and the dashboard build served from the same service. */
+  gate?: GateOptions;
   signalsLookbackMs: number;
   replayLookbackMs: number;
   maxReplayChunks: number;
@@ -72,6 +75,8 @@ export function buildApi(deps: ApiDeps): FastifyInstance {
     loggerInstance: deps.logger as FastifyBaseLogger,
     logController: new LogController({ disableRequestLogging: true }),
   });
+
+  if (deps.gate?.password) registerPasswordGate(app, deps.gate.password);
 
   app.addHook('onResponse', (req, reply, done) => {
     const fields = { method: req.method, path: req.url.split('?')[0], status: reply.statusCode, ms: Math.round(reply.elapsedTime) };
@@ -219,5 +224,6 @@ export function buildApi(deps: ApiDeps): FastifyInstance {
     return reply.header('cache-control', 'no-store').send(payload);
   });
 
+  if (deps.gate?.staticDir) registerStatic(app, deps.gate.staticDir);
   return app;
 }

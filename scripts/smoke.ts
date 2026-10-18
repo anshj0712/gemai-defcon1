@@ -54,8 +54,8 @@ async function signalsFor(sessionId: string): Promise<Record<string, unknown>[]>
 async function main(): Promise<void> {
   say(`smoke: synthetic session -> ${collector} (CP_MODE=${platform.mode})`);
   try {
-    const health = await fetch(`${collector}/healthz`);
-    if (!health.ok) throw new Error(`HTTP ${health.status}`);
+    // Any HTTP answer means it is up: Cloud Run's front end answers /healthz itself with a 404.
+    await fetch(`${collector}/healthz`);
   } catch (err) {
     say(`collector is not reachable at ${collector} (${(err as Error).message}). Start the pipeline with: pnpm dev`);
     process.exit(1);
